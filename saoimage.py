@@ -118,7 +118,7 @@ class Region(object):
 				if k in ['x','y']:
 					par[-1] += 1
 		propstr = ''
-		for k in self.specs.keys():
+		for k in list(self.specs.keys()):
 			propstr = propstr+' '+k+'='+str(self.specs[k])
 		propstr = '#'+propstr
 		ds9.set('regions', 'image; '+self.shape+' '+' '.join(str(par)[1:-1].split(','))+propstr)
@@ -152,7 +152,7 @@ class AnnulusRegion(Region):
 	size = ('r_out', 'r_out')
 
 
-import ds9
+import pyds9 as ds9
 class DS9(ds9.ds9):
 	'''Extended ds9.ds9 class.'''
 
@@ -207,19 +207,19 @@ class DS9(ds9.ds9):
 			elif xpa.startswith('get'):
 				cmd = xpa[xpa.find(' ')+1:]
 				try:
-					print self.get(cmd)
+					print(self.get(cmd))
 				except:
-					print 'Invalid XPA command'
+					print('Invalid XPA command')
 			elif xpa.startswith('set'):
 				cmd = xpa[xpa.find(' ')+1:]
 				try:
 					r = self.set(cmd)
 				except:
-					print 'Invalid XPA command'
+					print('Invalid XPA command')
 				if r != 1:
-					print 'Error in executing XPA command "'+xpa+'"'
+					print('Error in executing XPA command "'+xpa+'"')
 			else:
-				print 'Invalid XPA command'
+				print('Invalid XPA command')
 
 	def _collect_pars(self):
 		fno0 = self.get('frame')
@@ -373,17 +373,17 @@ class DS9(ds9.ds9):
 					if ext >= len(fitsimg):
 						st.append(-1)
 						if verbose:
-							print
-							print 'Error: Extension '+`ext`+' does not exist!'
-							print fitsimg.info()
+							print()
+							print('Error: Extension '+repr(ext)+' does not exist!')
+							print(fitsimg.info())
 					elif fitsimg[ext].data is None:
 						if verbose:
-							print
-							print 'Error: Extension '+`ext`+' contains no image!'
-							print
-							print fitsimg.info()
+							print()
+							print('Error: Extension '+repr(ext)+' contains no image!')
+							print()
+							print(fitsimg.info())
 					else:
-						tmp = self.set('file '+im+'['+`ext`+']')
+						tmp = self.set('file '+im+'['+repr(ext)+']')
 				elif im.lower().endswith('.img'):
 					from .PDS import readpds
 					self.set_np2arr(np.asarray(readpds(im)).astype('f4'))
@@ -474,10 +474,10 @@ class DS9(ds9.ds9):
 		aperture = []
 		i = 0
 		while i<nr:
-			print
-			print 'Press q to exit'
-			print 'Left click in the image to define aperture center'
-			print
+			print()
+			print('Press q to exit')
+			print('Left click in the image to define aperture center')
+			print()
 			key = self.get('imexam any coordinate image').split()
 			if key[0] == 'q':
 				break
@@ -489,8 +489,8 @@ class DS9(ds9.ds9):
 				aperture.append(P.CircularAperture((x,y), radius[i%nr]))
 				self.set('regions','image; circle('+','.join([str(x),str(y),str(radius[i%nr])])+')')
 				i += 1
-				print 'Aperture 1: ({0}, {1})'.format(x, y)
-				print
+				print('Aperture 1: ({0}, {1})'.format(x, y))
+				print()
 		return aperture
 
 	def apphot(self, **kwargs):
@@ -592,7 +592,7 @@ class DS9(ds9.ds9):
 		if all:
 			nfm = len(self.n_actives)
 			tmp = outfile.split('.')
-			fmtstr = '.'.join(tmp[:-1])+'_%0'+`int(np.ceil(np.log10(nfm)))`+'d'+'.'+tmp[-1]
+			fmtstr = '.'.join(tmp[:-1])+'_%0'+repr(int(np.ceil(np.log10(nfm))))+'d'+'.'+tmp[-1]
 			for i in range(nfm):
 				self.set('saveimage '+fmtstr % i)
 				self.set('frame next')

@@ -81,7 +81,7 @@ class CaseInsensitiveMapping(collections.MutableMapping):
 		del self._store[key.lower()]
 
 	def __iter__(self):
-		return (casedkey for casedkey, mappedvalue in self._store.values())
+		return (casedkey for casedkey, mappedvalue in list(self._store.values()))
 
 	def __len__(self):
 		return len(self._store)
@@ -91,7 +91,7 @@ class CaseInsensitiveMapping(collections.MutableMapping):
 		return (
 			(lowerkey, keyval[1])
 			for (lowerkey, keyval)
-			in self._store.items()
+			in list(self._store.items())
 		)
 
 	def __eq__(self, other):
@@ -104,10 +104,10 @@ class CaseInsensitiveMapping(collections.MutableMapping):
 
 	# Copy is required
 	def copy(self):
-		return type(self)(self._store.values())
+		return type(self)(list(self._store.values()))
 
 	def __repr__(self):
-		return '%s(%r)' % (self.__class__.__name__, type(self._store)(self.items()))
+		return '%s(%r)' % (self.__class__.__name__, type(self._store)(list(self.items())))
 
 
 class CaseInsensitiveDict(CaseInsensitiveMapping):
@@ -206,10 +206,10 @@ class CCDData(ccdproc.CCDData):
 class Image(CCDData):
 	'''Image class'''
 
- 	def __init__(self, *args, **kwargs):
- 		super(Image, self).__init__(*args, **kwargs)
- 		if self.data.ndim != 2:
- 			raise TypeError('Image can only be 2-dimensional, {0} dimensional data received'.format(self.data.ndim))
+	def __init__(self, *args, **kwargs):
+		super(Image, self).__init__(*args, **kwargs)
+		if self.data.ndim != 2:
+			raise TypeError('Image can only be 2-dimensional, {0} dimensional data received'.format(self.data.ndim))
 
 
 def aperture_photometry(data, apertures, **kwargs):
@@ -1568,9 +1568,9 @@ def rebin(arr, bin, axis=0, mean=False, median=False, weight=None):
 		for b, a in zip(bi[0:arr.ndim], ax[0:arr.ndim]):
 			if b != 1:
 				sh = np.asarray(inarr.shape)
-				i0s = range(0,sh[a],b)
+				i0s = list(range(0,sh[a],b))
 				sh[a] = len(i0s)
-				i1s = range(sh[a])
+				i1s = list(range(sh[a]))
 				newarr = np.empty(sh,dtype=inarr.dtype).view(type(inarr))
 				arr_v, new_v = np.rollaxis(inarr,a), np.rollaxis(newarr,a)
 
@@ -1712,7 +1712,7 @@ def rot(im, ang, mag=1.0, center=None, missing=0., pivot=False, order=3, method=
 		return interpn(points, im, xi, method=method, bounds_error=False, fill_value=np.asarray(missing).astype(im.dtype)).reshape(sz)
 
 
-def xy2rt(im, (yc, xc), rastep=1., ramax=None, azstep=1., order=3, missing=0., method='linear', version='1.1'):
+def xy2rt(im, xxx_todo_changeme2, rastep=1., ramax=None, azstep=1., order=3, missing=0., method='linear', version='1.1'):
 	'''
  Reproject the input image from rectangular coordinates to polar
  coordinates (theta, r)
@@ -1757,7 +1757,7 @@ def xy2rt(im, (yc, xc), rastep=1., ramax=None, azstep=1., order=3, missing=0., m
  v1.1.1 : JYL @PSI, 5/6/2016
    Removed keywords `rabin' and `azbin', replace by `rastep' and `azstep'.
 	'''
-
+	(yc, xc) = xxx_todo_changeme2
 	im0 = np.asarray(im)
 	sz = im0.shape
 
@@ -1768,7 +1768,9 @@ def xy2rt(im, (yc, xc), rastep=1., ramax=None, azstep=1., order=3, missing=0., m
 	rabin = int(round(ramax/rastep+1))
 	azbin = int(round(360./azstep))
 
-	def xy2rt_xform((ra, az), (yc, xc), rastep, azstep):
+	def xy2rt_xform(xxx_todo_changeme, xxx_todo_changeme1, rastep, azstep):
+		(ra, az) = xxx_todo_changeme
+		(yc, xc) = xxx_todo_changeme1
 		return ra*rastep*np.sin(np.deg2rad(az*azstep+90))+yc, ra*rastep*np.cos(np.deg2rad(az*azstep+90))+xc
 
 	if version == '1.0':
@@ -1786,12 +1788,12 @@ def xy2rt(im, (yc, xc), rastep=1., ramax=None, azstep=1., order=3, missing=0., m
 		return interpn(points, im, xi, method=method, bounds_error=False, fill_value=np.asarray(missing).astype(im.dtype)).reshape((rabin,azbin))
 
 
-def feature_pa(im, (yc, xc), pa0, r_lim=[5,100], r_step=1, pa_res=1., pa_lim=50., **kwargs):
+def feature_pa(im, xxx_todo_changeme3, pa0, r_lim=[5,100], r_step=1, pa_res=1., pa_lim=50., **kwargs):
 	'''Measure the position angle of a coma feature from an image of a comet
 
 	v1.0.0 : 5/6/2016, JYL @PSI
 	'''
-
+	(yc, xc) = xxx_todo_changeme3
 	kwargs.pop('azstep', None)
 	kwargs.pop('rastep', None)
 	kwargs['rastep'] = r_step
@@ -2023,22 +2025,22 @@ def readfits(imfile, ext=0, verbose=True, header=False):
 		try:
 			extindex = fitsfile.index_of(ext)
 		except KeyError:
-			print
-			print 'Error: Extension {0} not found'.format(ext)
+			print()
+			print('Error: Extension {0} not found'.format(ext))
 			if header:
 				return None, None
 			else:
 				return None
 
 		if extindex >= len(fitsfile):
-			print
-			print 'Error: Requested extension number {0} does not exist'.format(extindex)
+			print()
+			print('Error: Requested extension number {0} does not exist'.format(extindex))
 			img, hdr = None, None
 		else:
 			hdr = fitsfile[extindex].header
 			if fitsfile[extindex].data is None:
-				print
-				print 'Error: Extension {0} contains no image'.format(ext)
+				print()
+				print('Error: Extension {0} contains no image'.format(ext))
 				img = None
 			else:
 				img = fitsfile[extindex].data
@@ -2088,13 +2090,13 @@ def headfits(imfile, ext=0, verbose=True):
 		fitsfile.info()
 
 	if ext >= len(fitsfile):
-		print
-		print 'Error: Extension '+`ext`+' does not exist!'
+		print()
+		print('Error: Extension '+repr(ext)+' does not exist!')
 		return None
 
 	if fitsfile[ext].data is None:
-		print
-		print 'Error: Extension '+`ext`+' contains no image!'
+		print()
+		print('Error: Extension '+repr(ext)+' contains no image!')
 		return None
 
 	return fitsfile[ext].header
@@ -2262,8 +2264,8 @@ def dist(y1, y2, ny, x1, x2, nx, rot=None):
  v1.0.0 : JYL @PSI, November 5, 2014
  	'''
 
- 	xy = makenxy(y1, y2, ny, x1, x2, nx, rot=rot)
- 	return np.sqrt(xy[0]*xy[0]+xy[1]*xy[1])
+	xy = makenxy(y1, y2, ny, x1, x2, nx, rot=rot)
+	return np.sqrt(xy[0]*xy[0]+xy[1]*xy[1])
 
 
 def makenrt(shape, center=None):
@@ -2351,24 +2353,24 @@ def centroiding(im, ext=0, ds9=None, newframe=True, coord='image', refine=False,
 	# Loop through all images
 	nimgs = len(ims)
 	if verbose:
-		print 'Centroiding %i images from input' % nimgs
-		print
+		print('Centroiding %i images from input' % nimgs)
+		print()
 	cts = [None]*nimgs
 	i, j = 0, 0
 	retry = False
 	while i < nimgs:
 		if isinstance(ims[i], str):
 			if verbose:
-				print 'Image %i in the list: %s.' % (i, ims[i])
+				print('Image %i in the list: %s.' % (i, ims[i]))
 		else:
 			if verbose:
-				print 'Image %i in the list.' % i
+				print('Image %i in the list.' % i)
 		if not retry:
 			pass
 			d = imdisp(ims[i], ext=ext, ds9=ds9, newframe=newframe, verbose=verbose)
 		else:
 			if verbose:
-				print 'Retry clicking near the center.'
+				print('Retry clicking near the center.')
 		retry = False
 		ct = d.get('imexam coordinate '+coord).split()
 		if len(ct) != 0:
@@ -2382,11 +2384,11 @@ def centroiding(im, ext=0, ds9=None, newframe=True, coord='image', refine=False,
 			else:
 				cts[i] = ct
 			if verbose:
-				print 'Centroid at (%.6f, %.6f)' % (cts[i][0], cts[i][1])
+				print('Centroid at (%.6f, %.6f)' % (cts[i][0], cts[i][1]))
 			j += 1
 		else:
 			# Enter interactive session
-			key = raw_input('Center not measured.  Try again? (y/n/q) ')
+			key = input('Center not measured.  Try again? (y/n/q) ')
 			if key.lower() in ['y', 'yes']:
 				retry = True
 				continue
@@ -2395,13 +2397,13 @@ def centroiding(im, ext=0, ds9=None, newframe=True, coord='image', refine=False,
 				continue
 			elif key.lower() in ['q', 'quit']:
 				break
-		print
+		print()
 		i += 1
 
 	if len(cts) == 1:
 		cts = cts[0]
 	if verbose:
-		print '%i images measured out of a total of %i' % (j, nimgs)
+		print('%i images measured out of a total of %i' % (j, nimgs))
 
 	return cts
 
@@ -2462,14 +2464,14 @@ def centroid(im, center=None, error=None, mask=None, method=0, box=6, niter=5, t
 	if (method in [2, 'geom', 'geometric']) and (threshold is None):
 		raise ValueError('threshold is not specified')
 	if verbose:
-		print 'Image provided as a '+str(type(im))+', shape = ', im.shape
-		print 'Centroiding image in {0}x{0} box around ({1},{2})'.format(box,center[0],center[1])
-		print 'Error array '+condition(error is None, 'not ', ' ')+'provided'
-		print 'Mask array '+condition(mask is None, 'not ', ' ')+'provided'
+		print('Image provided as a '+str(type(im))+', shape = ', im.shape)
+		print('Centroiding image in {0}x{0} box around ({1},{2})'.format(box,center[0],center[1]))
+		print('Error array '+condition(error is None, 'not ', ' ')+'provided')
+		print('Mask array '+condition(mask is None, 'not ', ' ')+'provided')
 	i = 0
 	while i < niter:
 		if verbose:
-			print '  iteration {0}, center = ({1},{2})'.format(i, center[0], center[1])
+			print('  iteration {0}, center = ({1},{2})'.format(i, center[0], center[1]))
 		p1, p2 = np.floor(center-b2).astype('int'), np.ceil(center+b2).astype('int')
 		subim = np.asarray(im[p1[0]:p2[0],p1[1]:p2[1]])
 		if error is None:
@@ -2492,7 +2494,7 @@ def centroid(im, center=None, error=None, mask=None, method=0, box=6, niter=5, t
 		i += 1
 
 	if verbose:
-		print 'centroid = ({0},{1})'.format(center[0],center[1])
+		print('centroid = ({0},{1})'.format(center[0],center[1]))
 	return center
 
 
@@ -3344,7 +3346,7 @@ def write_fitstable(filename, *args, **kwargs):
 	if colnames == None:
 		colnames = []
 		for i in range(ncol):
-			colnames.append('COL'+`i+1`)
+			colnames.append('COL'+repr(i+1))
 
 	cols = []
 	for c, n, f, u in zip(args, colnames, format, units):
@@ -3741,7 +3743,7 @@ class Measurement(np.ndarray):
 				dtype = [('data', np.asarray(data).dtype)]
 				if err is not None:
 					dtype.append(('error', np.asarray(err).dtype))
-				for n in kwargs.keys():
+				for n in list(kwargs.keys()):
 					if kwargs[n] is not None:
 						if hasattr(kwargs[n], '__iter__'):
 							dt = np.asanyarray(kwargs[n]).dtype
@@ -3754,7 +3756,7 @@ class Measurement(np.ndarray):
 		obj.view(np.ndarray)['data'] = data
 		if err is not None:
 			obj.view(np.ndarray)['error'] = err
-		for n in kwargs.keys():
+		for n in list(kwargs.keys()):
 			obj.view(np.ndarray)[n] = condition(kwargs[n] is None, None, kwargs[n])
 
 		return obj
@@ -4150,16 +4152,16 @@ def iter_exec(func, indata, outdata=None, verbose=True, ext=None, **kwargs):
 				outdata = [join(outdata, basename(x)) for x in indata]
 			for fi, fo in zip(indata, outdata):
 				iter_exec(func, fi, fo, verbose, ext, **kwargs)
-			print
+			print()
 		else:
 			for fi in indata:
 				iter_exec(func, fi, None, verbose, ext, **kwargs)
-			print
+			print()
 	else:
 	# If `indata` is a single string
 		if isfile(indata):
 			if verbose:
-				print 'Processing file: ', basename(indata)
+				print('Processing file: ', basename(indata))
 			if outdata is not None:
 				outpath = dirname(outdata)
 				outfile = basename(outdata)
@@ -4173,7 +4175,7 @@ def iter_exec(func, indata, outdata=None, verbose=True, ext=None, **kwargs):
 			insidefile = findfile(indata, name=ext)
 			if len(insidefile) > 0:
 				if verbose:
-					print 'Directory {0}: {1} files found'.format(basename(indata), len(insidefile))
+					print('Directory {0}: {1} files found'.format(basename(indata), len(insidefile)))
 				if outdata is not None:
 					od = [join(outdata, basename(x)) for x in insidefile]
 				else:
@@ -4181,7 +4183,7 @@ def iter_exec(func, indata, outdata=None, verbose=True, ext=None, **kwargs):
 				iter_exec(func, insidefile, od, verbose, ext, **kwargs)
 			if len(insidedir) > 0:
 				if verbose:
-					print 'Directory {0}: {1} subdirectories found'.format(basename(indata), len(insidedir))
+					print('Directory {0}: {1} subdirectories found'.format(basename(indata), len(insidedir)))
 				if outdata is not None:
 					od = [join(outdata, basename(x)) for x in insidedir]
 				else:

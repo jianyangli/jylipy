@@ -70,8 +70,8 @@ def getsboscelt(name, recno=None, spice=False, disp=True):
 	import astropy.units as u
 
 	if disp:
-		print 'Initializing telnet ...'
-		print
+		print('Initializing telnet ...')
+		print()
 	import telnetlib
 	tn = JPLHorizons()
 	tn.read_until('Horizons>')
@@ -80,16 +80,16 @@ def getsboscelt(name, recno=None, spice=False, disp=True):
 	ret = ret[ret.find('**'):ret.rfind('**')]
 	if ret[:160].lower().find(name.lower()) < 0:  # not find
 		if ret.find('No matches found') > 0:  # not found
-			print name+': Object not found.'
+			print(name+': Object not found.')
 			tn.write('exit\n')
 			return
 		else:  # multiple matches found
 			if recno is None:   # record number not specified
-				print 'Multiple records found.  Please specify record number.'
-				print '  get_oscelt(name, recno=#)'
-				print
+				print('Multiple records found.  Please specify record number.')
+				print('  get_oscelt(name, recno=#)')
+				print()
 				for s in ret.split('\r\n'):
-					print s
+					print(s)
 				tn.write('exit\n')
 				return
 			else:  # use record number
@@ -97,18 +97,18 @@ def getsboscelt(name, recno=None, spice=False, disp=True):
 				ret = tn.read_until('<cr>:')
 				ret = ret[ret.find('**'):ret.rfind('**')]
 				if ret[:160].lower().find(name.lower()) < 0:
-					print name+': Object not found.'
+					print(name+': Object not found.')
 					tn.write('exit\n')
 					return
 	tn.write('exit\n')
 	if disp:
 		for s in ret.split('\r\n'):
-			print s
+			print(s)
 
 	# extract parameters
 	if disp:
-		print
-		print 'Extracting osculation elements ...'
+		print()
+		print('Extracting osculation elements ...')
 	keys = [' '+s for s in 'EPOCH= ! EC= QR= TP= OM= W= IN= A= MA= ADIST= PER= N= ANGMOM= DAN= DDN= L= B= MOID= TP='.split()]
 	offset = [len(k)-1 for k in keys]
 	ind = [ret.find(s)+1 for s in keys]
@@ -119,8 +119,8 @@ def getsboscelt(name, recno=None, spice=False, disp=True):
 
 	# return results
 	if disp:
-		print
-		print 'Done.'
+		print()
+		print('Done.')
 	if spice:
 		import spice
 		ep = spice.str2et('JD '+str(elm[0])) - spice.str2et('2000-01-01.0')
@@ -171,7 +171,7 @@ def getsbspk(name, start, stop, outfile, recno=None, clobber=False, verbose=True
 		if clobber:
 			os.remove(outfile)
 		else:
-			print 'Output file exist.'
+			print('Output file exist.')
 			return
 
 	if not hasattr(name,'__iter__'):
@@ -185,7 +185,7 @@ def getsbspk(name, start, stop, outfile, recno=None, clobber=False, verbose=True
 
 	# init telnet
 	if verbose:
-		print 'Initializing telnet://horizons.jpl.nasa.gov:6775/ ...'
+		print('Initializing telnet://horizons.jpl.nasa.gov:6775/ ...')
 	import telnetlib
 	tn = JPLHorizons()
 	tn.read_until('Horizons>')
@@ -194,13 +194,13 @@ def getsbspk(name, start, stop, outfile, recno=None, clobber=False, verbose=True
 	n = 0
 	while True:
 		if verbose:
-			print 'Adding '+nms[n]+' ...'
+			print('Adding '+nms[n]+' ...')
 		tn.write(nms[n]+'\n\n')
 		ret = tn.read_until('<cr>:')
 		ret = ret[ret.find('**'):ret.rfind('**')]
 		if ret[:160].lower().find(nms[n].lower()) < 0:
 			if ret.find('No matches found') > 0:
-				print nms[n]+': Object not found.  Skipped.'
+				print(nms[n]+': Object not found.  Skipped.')
 				n += 1
 				if n == len(nms):
 					tn.write('f\n')
@@ -208,7 +208,7 @@ def getsbspk(name, start, stop, outfile, recno=None, clobber=False, verbose=True
 				continue
 			else:  # multiple record found
 				if recno is None:
-					print nms[n]+': Multiple records found, no record number specified.  Skipped.'
+					print(nms[n]+': Multiple records found, no record number specified.  Skipped.')
 					n += 1
 					if n == len(nms):
 						tn.write('f\n')
@@ -219,7 +219,7 @@ def getsbspk(name, start, stop, outfile, recno=None, clobber=False, verbose=True
 					ret = tn.read_until('<cr>:')
 					ret = ret[ret.find('**'):ret.rfind('**')]
 					if ret[:160].lower().find(nms[n].lower()) < 0:
-						print nms[n]+': Error: Object not found.  Skipped.'
+						print(nms[n]+': Error: Object not found.  Skipped.')
 						n += 1
 						if n == len(nms):
 							tn.write('f\n')
@@ -246,7 +246,7 @@ def getsbspk(name, start, stop, outfile, recno=None, clobber=False, verbose=True
 
 	# download output file
 	if verbose:
-		print 'Downloading SPK file from '+outstr.split()[3]+' ...'
+		print('Downloading SPK file from '+outstr.split()[3]+' ...')
 	import os
 	if os.path.isfile('getspk.tmp'):
 		os.remove('getspk.tmp')
@@ -265,7 +265,7 @@ def getsbspk(name, start, stop, outfile, recno=None, clobber=False, verbose=True
 
 	# convert to binary spk
 	if verbose:
-		print 'Converting to binary SPK ...'
+		print('Converting to binary SPK ...')
 	import subprocess
 	if not verbose:
 		fout = open(os.devnull,'w')
@@ -276,7 +276,7 @@ def getsbspk(name, start, stop, outfile, recno=None, clobber=False, verbose=True
 	os.remove('getspk.tmp')
 
 	if verbose:
-		print 'Done.'
+		print('Done.')
 
 
 class HorizonsError(Exception):

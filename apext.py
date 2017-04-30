@@ -70,7 +70,7 @@ class Table(table.Table):
 		'''Return a copy of the table as a dictionary'''
 		from collections import OrderedDict
 		out = OrderedDict()
-		for k in self.keys():
+		for k in list(self.keys()):
 			out[k] = self[k].data
 			if self[k].unit is not None:
 				out[k] *= self[k].unit
@@ -155,7 +155,7 @@ class Table(table.Table):
 			raise TypeError('a Table instance is expected, {0} received'.format(type(tbl)))
 		from .core import isinteger
 		if isinteger(col):
-			col = self.keys()[col]
+			col = list(self.keys())[col]
 		elif isinstance(col, str):
 			pass
 		else:
@@ -164,25 +164,25 @@ class Table(table.Table):
 		# search and add new columns
 		from collections import OrderedDict
 		nn = 0
-		for k in tbl.keys():
-			if k not in self.keys():
+		for k in list(tbl.keys()):
+			if k not in list(self.keys()):
 				self.add_column(Column(np.zeros(len(self)),dtype=tbl[k].dtype,name=k))
 				nn += 1
 
 		# go through all rows in new table
-		selfkeys = self.keys()
+		selfkeys = list(self.keys())
 		if self.mask is None:
-			selfmask = np.zeros((len(self), len(self.keys())),dtype=bool)
+			selfmask = np.zeros((len(self), len(list(self.keys()))),dtype=bool)
 		else:
-			selfmask = np.asarray(self.mask).view(bool).reshape(len(self),len(self.keys()))
+			selfmask = np.asarray(self.mask).view(bool).reshape(len(self),len(list(self.keys())))
 		if nn >0 :
 			selfmask[:,-nn:] = True
 		if tbl.mask is None:
-			tblmask = np.zeros((len(tbl), len(tbl.keys())),dtype=bool)
+			tblmask = np.zeros((len(tbl), len(list(tbl.keys()))),dtype=bool)
 		else:
-			tblmask = np.asarray(tbl.mask).view(bool).reshape(len(tbl),len(tbl.keys()))
-		newkeys = tbl.keys()
-		oldkeys = self.keys()
+			tblmask = np.asarray(tbl.mask).view(bool).reshape(len(tbl),len(list(tbl.keys())))
+		newkeys = list(tbl.keys())
+		oldkeys = list(self.keys())
 		for c in tbl:
 			if c[col] in self[col]:  # update the row
 				idx = self.index(col, c[col])[0][0]
@@ -193,7 +193,7 @@ class Table(table.Table):
 				from copy import deepcopy
 				r = deepcopy(self[0])
 				m = [True]*len(selfkeys)
-				for k in tbl.keys():
+				for k in list(tbl.keys()):
 					r[k] = c[k]
 					m[selfkeys.index(k)] = False
 				self.add_row(r)
@@ -201,7 +201,7 @@ class Table(table.Table):
 
 		if selfmask.any():
 			if self.mask is None:
-				super(Table, self).__init__([self[x] for x in self.keys()], masked=True)
+				super(Table, self).__init__([self[x] for x in list(self.keys())], masked=True)
 			self.mask[:] = selfmask.T
 
 		if sort is not None:
@@ -235,7 +235,7 @@ def show_table_in_browser(table_file, ext=1, **kwargs):
 	the FITS extension if input file is a FITS file.'''
 	# separate show table keywards from table reading keywords
 	show_kwargs = {}
-	for k, d in [('css', u'table,th,td,tr,tbody {border: 1px solid black; border-collapse: collapse;}'), ('max_lines', 5000), ('jsviewer', True), ('jskwargs', {u'use_local_files': True}), ('tableid', None), ('browser', u'default')]:
+	for k, d in [('css', 'table,th,td,tr,tbody {border: 1px solid black; border-collapse: collapse;}'), ('max_lines', 5000), ('jsviewer', True), ('jskwargs', {'use_local_files': True}), ('tableid', None), ('browser', 'default')]:
 		show_kwargs[k] = kwargs.pop(k, d)
 	# read in table and display it
 	if table_file.split('.')[-1].lower() in ['fit','fits']:
@@ -327,10 +327,10 @@ class Time(time.Time):
 	'''
 
 	def __init__(self, *args, **kwargs):
-		self.FORMATS[u'et'] = TimeET
-		self.FORMATS[u'epoch'] = EpochTimeFormat
-		self.FORMATS[u'y_day'] = TimeYDay
-		self.FORMATS[u'y_dayt'] = TimeYDayT
+		self.FORMATS['et'] = TimeET
+		self.FORMATS['epoch'] = EpochTimeFormat
+		self.FORMATS['y_day'] = TimeYDay
+		self.FORMATS['y_dayt'] = TimeYDayT
 		super(Time, self).__init__(*args, **kwargs)
 
 
@@ -455,7 +455,7 @@ class MPFitter(object):
 		model = model.copy()
 		model.parameters = fps
 		var = []
-		for i in range(len(args.keys())):
+		for i in range(len(list(args.keys()))):
 			x = args.pop('x'+str(i), None)
 			if x is None:
 				raise ValueError('input coordinates must be provided in keywords `x#`')
@@ -574,8 +574,8 @@ class MPFitter(object):
 
 		if verbose:
 			if m.status > 0:
-				print 'Success with code {0}: '.format(m.status)
-				print self.code[m.status]
+				print('Success with code {0}: '.format(m.status))
+				print(self.code[m.status])
 
 		model_copy.parameters = m.params
 		return model_copy
