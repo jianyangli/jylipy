@@ -80,7 +80,7 @@ def getsboscelt(name, recno=None, spice=False, disp=True):
 	ret = ret[ret.find('**'):ret.rfind('**')]
 	if ret[:160].lower().find(name.lower()) < 0:  # not find
 		if ret.find('No matches found') > 0:  # not found
-			print(name+': Object not found.')
+			print((name+': Object not found.'))
 			tn.write('exit\n')
 			return
 		else:  # multiple matches found
@@ -97,7 +97,7 @@ def getsboscelt(name, recno=None, spice=False, disp=True):
 				ret = tn.read_until('<cr>:')
 				ret = ret[ret.find('**'):ret.rfind('**')]
 				if ret[:160].lower().find(name.lower()) < 0:
-					print(name+': Object not found.')
+					print((name+': Object not found.'))
 					tn.write('exit\n')
 					return
 	tn.write('exit\n')
@@ -194,13 +194,13 @@ def getsbspk(name, start, stop, outfile, recno=None, clobber=False, verbose=True
 	n = 0
 	while True:
 		if verbose:
-			print('Adding '+nms[n]+' ...')
+			print(('Adding '+nms[n]+' ...'))
 		tn.write(nms[n]+'\n\n')
 		ret = tn.read_until('<cr>:')
 		ret = ret[ret.find('**'):ret.rfind('**')]
 		if ret[:160].lower().find(nms[n].lower()) < 0:
 			if ret.find('No matches found') > 0:
-				print(nms[n]+': Object not found.  Skipped.')
+				print((nms[n]+': Object not found.  Skipped.'))
 				n += 1
 				if n == len(nms):
 					tn.write('f\n')
@@ -208,7 +208,7 @@ def getsbspk(name, start, stop, outfile, recno=None, clobber=False, verbose=True
 				continue
 			else:  # multiple record found
 				if recno is None:
-					print(nms[n]+': Multiple records found, no record number specified.  Skipped.')
+					print((nms[n]+': Multiple records found, no record number specified.  Skipped.'))
 					n += 1
 					if n == len(nms):
 						tn.write('f\n')
@@ -219,7 +219,7 @@ def getsbspk(name, start, stop, outfile, recno=None, clobber=False, verbose=True
 					ret = tn.read_until('<cr>:')
 					ret = ret[ret.find('**'):ret.rfind('**')]
 					if ret[:160].lower().find(nms[n].lower()) < 0:
-						print(nms[n]+': Error: Object not found.  Skipped.')
+						print((nms[n]+': Error: Object not found.  Skipped.'))
 						n += 1
 						if n == len(nms):
 							tn.write('f\n')
@@ -246,7 +246,7 @@ def getsbspk(name, start, stop, outfile, recno=None, clobber=False, verbose=True
 
 	# download output file
 	if verbose:
-		print('Downloading SPK file from '+outstr.split()[3]+' ...')
+		print(('Downloading SPK file from '+outstr.split()[3]+' ...'))
 	import os
 	if os.path.isfile('getspk.tmp'):
 		os.remove('getspk.tmp')

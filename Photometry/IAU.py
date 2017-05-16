@@ -565,7 +565,7 @@ def fitHG(alpha, measure, model=0, error=None, par=None, maxiter=1000, verbose=F
 
 	if fit_info['ierr'] > 0:
 		if verbose:
-			print 'Fit successful.\n'+fit_info['message']
+			print('Fit successful.\n'+fit_info['message'])
 		if weights is None:
 			fit_info['red_chisq'] = np.sum((m(alpha)-measure)**2)/(len(alpha)-2)
 		else:
@@ -573,6 +573,6 @@ def fitHG(alpha, measure, model=0, error=None, par=None, maxiter=1000, verbose=F
 		return m, np.sqrt(np.diag(fit_info['param_cov'])), fit_info
 	else:
 		if verbose:
-			print 'Fit may not be successful!\n'+fit_info['message']
+			print('Fit may not be successful!\n'+fit_info['message'])
 		return m, None, fit_info
 

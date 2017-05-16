@@ -41,7 +41,7 @@ class CaseInsensitiveMapping(collections.MutableMapping):
 		del self._store[key.lower()]
 
 	def __iter__(self):
-		return (casedkey for casedkey, mappedvalue in self._store.values())
+		return (casedkey for casedkey, mappedvalue in list(self._store.values()))
 
 	def __len__(self):
 		return len(self._store)
@@ -51,7 +51,7 @@ class CaseInsensitiveMapping(collections.MutableMapping):
 		return (
 			(lowerkey, keyval[1])
 			for (lowerkey, keyval)
-			in self._store.items()
+			in list(self._store.items())
 		)
 
 	def __eq__(self, other):
@@ -64,10 +64,10 @@ class CaseInsensitiveMapping(collections.MutableMapping):
 
 	# Copy is required
 	def copy(self):
-		return type(self)(self._store.values())
+		return type(self)(list(self._store.values()))
 
 	def __repr__(self):
-		return '%s(%r)' % (self.__class__.__name__, type(self._store)(self.items()))
+		return '%s(%r)' % (self.__class__.__name__, type(self._store)(list(self.items())))
 
 
 class CaseInsensitiveDict(CaseInsensitiveMapping):

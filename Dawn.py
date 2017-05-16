@@ -7,7 +7,7 @@ import numpy as np, string, spice
 from copy import copy
 import ccdproc
 from .core import *
-from vector import xyz2sph #Image, readfits, condition, xyz2sph, Time, num, findfile, writefits, CCDData, ImageMeasurement, CaseInsensitiveOrderedDict, findfile, ascii_read
+from .vector import xyz2sph #Image, readfits, condition, xyz2sph, Time, num, findfile, writefits, CCDData, ImageMeasurement, CaseInsensitiveOrderedDict, findfile, ascii_read
 from .geometry import subcoord
 from .apext import Table, Column, units, fits
 from . import convenience as conv, PDS
@@ -147,12 +147,12 @@ class Data(object):
 		lclpath = self.local_path()
 		tags = self.tags()
 
-		print 'Fetching data from DSDb'
-		print 'Level:', self.level
-		print 'Instrument:', self.instrument
-		print 'Phase:', self.phase
-		print 'Total number of dataset:', len(tags)
-		print
+		print('Fetching data from DSDb')
+		print('Level:', self.level)
+		print('Instrument:', self.instrument)
+		print('Phase:', self.phase)
+		print('Total number of dataset:', len(tags))
+		print()
 
 		for tg, rp, lp in zip(tags, rmtpath, lclpath):
 			datasets = self.index.query('Level',tg[0]).query('Instrument',tg[1]).query('Phase',tg[2])
@@ -164,13 +164,13 @@ class Data(object):
 					cmd.append('--delete-after')
 				# FC data
 				if tg[1] == 'fc':
-					print
-					print 'Dataset:', d['Sequence']
-					print
+					print()
+					print('Dataset:', d['Sequence'])
+					print()
 					# Quicklook
 					if self.quicklook:
 						if d['Quicklook_dir'] is np.ma.masked:
-							print 'Data directory not specified on DSDb.  Skipped.'
+							print('Data directory not specified on DSDb.  Skipped.')
 							continue
 						cmd.append('--exclude=FITS')
 						cmd.append('--exclude=*zip')
@@ -181,17 +181,17 @@ class Data(object):
 					# Normal
 					else:
 						if d['DSDb_dir'] is np.ma.masked:
-							print 'Data directory not specified on DSDb.  Skipped.'
+							print('Data directory not specified on DSDb.  Skipped.')
 							continue
 						remdir = '/'.join([rp, d['DSDb_dir'], fmt])+'/'
 						locdir = '/'.join([lp, d['local_dir']])+'/'
 				# VIR data
 				else:
-					print
-					print 'Dataset:', d['Sequence'], ', ', d['Band']
-					print
+					print()
+					print('Dataset:', d['Sequence'], ', ', d['Band'])
+					print()
 					if d['DSDb_dir'] is np.ma.masked:
-						print 'Data directory not specified on DSDb.  Skipped.'
+						print('Data directory not specified on DSDb.  Skipped.')
 						continue
 					remdir = '/'.join([rp, d['DSDb_dir']])+'/'
 					locdir = '/'.join([lp, d['local_dir']+'_'+d['Band']])+'/'
@@ -265,7 +265,7 @@ class FCCalibration(object):
 	@staticmethod
 	def flag_saturation(image):
 		FCCalibration._check_fcimage(image)
-		if 'flag_saturation' in image.header.keys():
+		if 'flag_saturation' in list(image.header.keys()):
 			return image
 		sat = image.data >= 16380
 		if image.mask is None:
@@ -284,7 +284,7 @@ class FCCalibration(object):
 	@staticmethod
 	def remove_bias(image):
 		FCCalibration._check_fcimage(image)
-		if 'subtract_bias' in image.header.keys():
+		if 'subtract_bias' in list(image.header.keys()):
 			return image
 		bias = np.asarray(image.frame_2_image).astype(float).mean()
 		image.data -= bias
@@ -293,7 +293,7 @@ class FCCalibration(object):
 
 	def remove_dark(self, image):
 		self._check_fcimage(image)
-		if 'subtract_dark' in image.header.keys():
+		if 'subtract_dark' in list(image.header.keys()):
 			return image
 		temp = image.header['DETECTOR_TEMPERATURE'].value
 		texp = image.header['EXPOSURE_DURATION'].to('s')
@@ -304,7 +304,7 @@ class FCCalibration(object):
 
 	def smear_correct(self, image):
 		self._check_fcimage(image)
-		if 'smear_correct' in image.header.keys():
+		if 'smear_correct' in list(image.header.keys()):
 			return image
 		texp = image.header['EXPOSURE_DURATION'].to('s').value
 		image.data[1] -= image.data[0]*self.linetime/texp
@@ -315,7 +315,7 @@ class FCCalibration(object):
 
 	def flatfield(self, image):
 		self._check_fcimage(image)
-		if 'flat_correct' in image.header.keys():
+		if 'flat_correct' in list(image.header.keys()):
 			return image
 		fno = num(image.header['FILTER_NUMBER'])-1
 		image.data /= self.flat[fno]
@@ -324,7 +324,7 @@ class FCCalibration(object):
 
 	def fluxcal(self, image):
 		self._check_fcimage(image)
-		if 'flux_cal' in image.header.keys():
+		if 'flux_cal' in list(image.header.keys()):
 			return image
 		texp = image.header['EXPOSURE_DURATION']
 		fno = num(image.header['FILTER_NUMBER'])
@@ -332,7 +332,7 @@ class FCCalibration(object):
 			to_unit = 'W m-2 sr-1'
 		else:
 			to_unit = 'W m-2 nm-1 sr-1'
-		if 'iof_cal' in image.header.keys():
+		if 'iof_cal' in list(image.header.keys()):
 			if 'rh' not in image.geometry:
 				image.calcgeom()
 			rh = image.geometry['rh'].value
@@ -348,7 +348,7 @@ class FCCalibration(object):
 
 	def iofcal(self, image):
 		self._check_fcimage(image)
-		if 'iof_cal' in image.header.keys():
+		if 'iof_cal' in list(image.header.keys()):
 			return image
 		if 'rh' not in image.geometry:
 			image.calcgeom()
@@ -357,7 +357,7 @@ class FCCalibration(object):
 		fno = num(image.header['FILTER_NUMBER'])
 		sflx = self.sunflux[fno-1]/rh**2
 		photcal = self.photcal[fno-1]
-		if 'flux_cal' in image.header.keys():
+		if 'flux_cal' in list(image.header.keys()):
  			image.data *= (image.unit*np.pi*units.Unit('sr')/sflx).to('')
 		else:
 			image.data *= (image.unit*np.pi*units.Unit('sr')/(texp*photcal*sflx)).to('')
@@ -480,14 +480,14 @@ class FCImage_old(ImageMeasurement):
 		t2 = spice.scs2e(DAWN_NAIF_CODE, self.header['SPACECRAFT_CLOCK_STOP_COUNT'])
 		t = Time((t1+t2)/2, format='et')
 		geom = subcoord(t.isot, self.header['TARGET_NAME'].split()[1], observer='Dawn')
-		for k in geom.keys():
+		for k in list(geom.keys()):
 			self.geometry[k] = geom[k][0]*condition(geom[k].unit is None, 1, geom[k].unit)
 		self.geometry['Range'] = self.geometry['Range'].to('km')
 		try:
 			m = np.asarray(spice.sxform('j2000','dawn_fc2', t.et))
 			self.geometry['CelN'] = (360+270-xyz2sph(m[:3,:3].dot([0,0,1]))[1]) % 360 *units.deg
 		except spice.SpiceException:
-			print 'CK not available for '+t.isot
+			print('CK not available for '+t.isot)
 		if kernel is not None: self._unload_spice_kernels(kernel)
 
 
@@ -533,7 +533,7 @@ class FCImage(Image):
 		super(FCImage, self).__init__(data, meta=header)
 		if self.unit == 'adu':  # if Level 1a data, add uncertainty plane
 			self.uncertainty = ccdproc.create_deviation(self, gain=FC2.gain, readnoise=FC2.readnoise).uncertainty
-			self.meta['create_deviation'] = u'ccd_data=<FCImage>, readnoise={0}, gain={1}'.format(FC2.readnoise, FC2.gain)
+			self.meta['create_deviation'] = 'ccd_data=<FCImage>, readnoise={0}, gain={1}'.format(FC2.readnoise, FC2.gain)
 		else:  # If level 1b or 1c, add 'flux_cal' key to the header
 			self.header['flux_cal'] = 'MPS'
 		if len(pdsdata.records) > 1:
@@ -571,14 +571,14 @@ class FCImage(Image):
 			t2 = spice.scs2e(DAWN_NAIF_CODE, self.header['SPACECRAFT_CLOCK_STOP_COUNT'])
 			t = Time((t1+t2)/2, format='et')
 			geom = subcoord(t.isot, target, observer='Dawn')
-			for k in geom.keys():
+			for k in list(geom.keys()):
 				self.geometry[k] = geom.getcolumn(k)[0]
 			self.geometry['Range'] = self.geometry['Range'].to('km')
 			try:
 				m = np.asarray(spice.sxform('j2000','dawn_fc2', t.et))
 				self.geometry['celn'] = (360+270-xyz2sph(m[:3,:3].dot([0,0,1]))[1]) % 360 *units.deg
 			except spice.SpiceException:
-				print 'CK not available for '+t.isot
+				print('CK not available for '+t.isot)
 
 
 	def write(self, filename, **kwargs):
@@ -602,7 +602,7 @@ class FCImage(Image):
 		fitsdata = fits.open(filename)
 		data = fitsdata[0].data
 		flag = fitsdata[1].data
-		if 'bunit' in fitsdata[0].header.keys():
+		if 'bunit' in list(fitsdata[0].header.keys()):
 			unit = units.Unit(fitsdata[0].header['bunit'])
 		else:
 			unit = ''
@@ -643,10 +643,10 @@ def aspect(files, saveto=None):
 	texp = units.Quantity(texp)
 	fid = np.array(fid,dtype='int')
 	tbl = Table([name, fid, oid, utc, flt, texp], names='Name FileID ObsID UTC Filter Texp'.split())
-	geomkeys = map(None, 'pxlscl Range rh Phase PolePA PoleInc SunPA SunInc SOLat SOLon SSLat SSLon'.split(), 'PxlScl Range Rh Phase PolePA PoleInc SunPA SunInc SCLat SCLon SSLat SSLon'.split(), '%.2f %.1f %.4f %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f'.split())
+	geomkeys = zip('pxlscl Range rh Phase PolePA PoleInc SunPA SunInc SOLat SOLon SSLat SSLon'.split(), 'PxlScl Range Rh Phase PolePA PoleInc SunPA SunInc SCLat SCLon SSLat SSLon'.split(), '%.2f %.1f %.4f %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f'.split())
 	for k, n, f in geomkeys:
 		tbl.add_column(Column(geom[k],name=n,format=f))
-	if 'celn' in geom.keys():
+	if 'celn' in list(geom.keys()):
 		tbl.add_column(Column(geom['celn'],name='CelN',format='%.2f'), index=10)
 	if saveto is not None:
 		if isfile(saveto):
@@ -682,13 +682,13 @@ def fc2cal(indata, outdata, level='dn', verbose=True, overwrite=False, mask=None
 	iof = condition(level == 'iof', True, False)
 	flux = condition(level == 'flux', True, False)
 	if verbose:
-		print 'Target calibration level: ', level
+		print('Target calibration level: ', level)
 
 	from os.path import isdir, isfile, basename, dirname, join
 	from os import makedirs
 	if isfile(indata):
 		if verbose:
-			print 'calibrating image ', basename(indata)
+			print('calibrating image ', basename(indata))
 		cal = FCCalibration()
 		im = FCImage(indata)
 		if mask is not None:
@@ -715,8 +715,8 @@ def fc2cal(indata, outdata, level='dn', verbose=True, overwrite=False, mask=None
 			flagdir = findfile(flag, dir=True)
 		if len(insidefile) > 0:
 			if verbose:
-				print
-				print 'Directory {0}: {1} files found'.format(basename(indata), len(insidefile))
+				print()
+				print('Directory {0}: {1} files found'.format(basename(indata), len(insidefile)))
 			for fi in insidefile:
 				ext = fi.split('.')[-1]
 				fo = join(outdata, basename(fi).replace('1A0','1B0').replace(ext, 'fits'))
@@ -732,8 +732,8 @@ def fc2cal(indata, outdata, level='dn', verbose=True, overwrite=False, mask=None
 				fc2cal(fi, fo, level=level, verbose=verbose, overwrite=overwrite, mask=msf, flag=flf)
 		if len(insidedir) > 0:
 			if verbose:
-				print
-				print 'Directory {0}: {1} subdirectories found'.format(basename(indata), len(insidedir))
+				print()
+				print('Directory {0}: {1} subdirectories found'.format(basename(indata), len(insidedir)))
 			maskdir_base = []
 			flagdir_base = []
 			if mask is not None:
@@ -741,7 +741,7 @@ def fc2cal(indata, outdata, level='dn', verbose=True, overwrite=False, mask=None
 			if flag is not None:
 				flagdir_base = [x.split('/')[-1] for x in flagdir]
 			for di in insidedir:
-				print 'Processing directory ', basename(di)
+				print('Processing directory ', basename(di))
 				do = join(outdata, basename(di).replace('L1A','L1B'))
 				di_base = di.split('/')[-1]
 				msd = None
@@ -773,14 +773,14 @@ def diskint_phot(asp, indata, outfile=None, threshold=0.003, ext='.fits', colnam
 	from astropy import table
 
 	if isdir(indata):
-		print 'processing directory: ', basename(indata)
+		print('processing directory: ', basename(indata))
 		tbls = []
 		files = findfile(indata, ext)
 		for f in files:
 			fid = int(basename(f)[5:12])
 			if fid not in asp['FileID']:
 				continue
-			print '  image: ', basename(f)
+			print('  image: ', basename(f))
 			phot = diskint_phot(asp, f, outfile=outfile, threshold=threshold, colnames=colnames, dtypes=dtypes)
 			if phot is not None:
 				tbls.append(phot)
@@ -794,7 +794,7 @@ def diskint_phot(asp, indata, outfile=None, threshold=0.003, ext='.fits', colnam
 		im = FCImage(indata)
 		cr = Ceres.r.value/(tbl['Range'][0]*93.7e-6)  # Ceres radius
 		if len(np.where(im.mask.flatten())[0])/(np.pi*cr*cr) > 0.001:
-			print '    saturated, skipped'
+			print('    saturated, skipped')
 			return None
 		yc, xc = geometric_center(im.data, threshold)
 		rad = cr*3
@@ -850,7 +850,7 @@ def fc_fits2cube(infile, outfile, rawdata=DAWN_DIR+'data/fc2/level-1a/', tempdir
 
 	from os.path import isfile, basename, join
 	from os import makedirs, remove
-	from pysis_ext import dawnfc2isis, fits2isis, flip, copylabel, spiceinit
+	from .pysis_ext import dawnfc2isis, fits2isis, flip, copylabel, spiceinit
 
 	if not isfile(infile):
 		raise ValueError('Input file not found: {0}'.format(infile))
@@ -860,27 +860,27 @@ def fc_fits2cube(infile, outfile, rawdata=DAWN_DIR+'data/fc2/level-1a/', tempdir
 	else:
 		log = {}
 
-	print 'Processing image ', basename(infile)
+	print('Processing image ', basename(infile))
 
 	# Find raw data
 	if type(rawdata) == str:
 		rawdata = findfile(rawdata, 'IMG', recursive=True)
 	raw_id = [basename(x)[5:12] for x in rawdata]
 	in_id = basename(infile)[5:12]
-	print in_id, raw_id[0], len(raw_id)
+	print(in_id, raw_id[0], len(raw_id))
 	if in_id not in raw_id:
 		raise ValueError('Corresponding raw data not found.')
 	rawfile = rawdata[raw_id.index(in_id)]
 
 	# Convert Dawn data to ISIS cube
-	print 'Generating cube file from raw data:'
+	print('Generating cube file from raw data:')
 	rawcub = join(tempdir, basename(rawfile).replace('.IMG','.cub'))
 	args = {'from': rawfile, 'to': rawcub}
 	args.update(log)
 	dawnfc2isis(**args)
 
 	# Convert input FITS file to ISIS cube and flip
-	print 'Processing input file:'
+	print('Processing input file:')
 	fitscub = join(tempdir, 'in_fits.cub')
 	args = {'from': infile, 'to': fitscub}
 	args.update(log)
@@ -894,14 +894,14 @@ def fc_fits2cube(infile, outfile, rawdata=DAWN_DIR+'data/fc2/level-1a/', tempdir
 	flip(**args)
 
 	# Copy labels
-	print 'Copying labels:'
+	print('Copying labels:')
 	args = {'from': outfile, 'source': rawcub}
 	args.update(log)
 	copylabel(**args)
 
 	# spiceinit
 	if spice:
-		print 'spiceinit:'
+		print('spiceinit:')
 		args = {'from': outfile}
 		args.update(kwargs)
 		args.update(log)
@@ -954,7 +954,7 @@ def extract_phodata(illfile, ioffile=None, backplanes=['Phase Angle', 'Local Emi
 	illbackplanes = [x.strip('"') for x in illcub.label['IsisCube']['BandBin']['Name']]
 	for b in backplanes:
 		if b not in illbackplanes:
-			print 'Warning: backplane {0} not found in input cube, dropped'.format(b)
+			print('Warning: backplane {0} not found in input cube, dropped'.format(b))
 			backplanes.pop(backplanes.index(b))
 	ill = empty((len(backplanes),)+ill0.shape[1:])
 	for i in range(len(backplanes)):
@@ -975,7 +975,7 @@ def extract_phodata(illfile, ioffile=None, backplanes=['Phase Angle', 'Local Emi
 			else:
 				break
 		if p < 0:
-			print 'I/F data not found.'
+			print('I/F data not found.')
 		im = ill0[0:p+1]
 		imnames = illbackplanes[0:p+1]
 	else:
@@ -996,7 +996,7 @@ def extract_phodata(illfile, ioffile=None, backplanes=['Phase Angle', 'Local Emi
 				im = rebin(im, [1,bin,bin], axis=[0,1,2], mean=True)
 			masked |= (flags != 0)
 		p = im.shape[0]-1
-		imnames = ['Data'+`i` for i in range(im.shape[0])]
+		imnames = ['Data'+repr(i) for i in range(im.shape[0])]
 
 	ww = where(~masked)
 	if len(ww[0])>0:
@@ -1016,7 +1016,7 @@ def extract_phodata(illfile, ioffile=None, backplanes=['Phase Angle', 'Local Emi
 		else:
 			return Table(list(out), names=names)
 	else:
-		print 'No valid data extracted.'
+		print('No valid data extracted.')
 		return None
 
 
@@ -1044,7 +1044,7 @@ def collect_fc_phodata(illfile, outfile, ioffile=None, backplanes=['Phase Angle'
 	flts = array([int(basename(x)[25]) for x in illfile])
 	names0 = ['Data0', 'Phase Angle', 'Local Emission Angle', 'Local Incidence Angle', 'Latitude', 'Longitude']
 	for fno in range(8,0,-1):
-		print 'Processing filter ', fno
+		print('Processing filter ', fno)
 		ww = flts == fno
 		if not ww.any():
 			continue
@@ -1053,19 +1053,19 @@ def collect_fc_phodata(illfile, outfile, ioffile=None, backplanes=['Phase Angle'
 			data[k] = []
 		if ioffile is not None:
 			for illf, ioff in zip(illfile[ww], ioffile[ww]):
-				print '  Extracting from ', basename(illf)
+				print('  Extracting from ', basename(illf))
 				d = extract_phodata(illf, ioff, backplanes, bin=bin)
 				for k in names0:
 					data[k].append(d[k])
 		else:
 			for illf in illfile[ww]:
-				print '  Extracting from ', basename(illf)
+				print('  Extracting from ', basename(illf))
 				d = extract_phodata(illf, backplanes=backplanes, bin=bin)
 				if d is not None:
 					for k in names0:
 						data[k].append(d[k])
 
-		print '  Saving data'
+		print('  Saving data')
 		for k in names0:
 			data[k] = concatenate(data[k])
 		outfilename = outfile.format(fno)
@@ -1148,7 +1148,8 @@ def fc_color_mos(cubefile, order='wavelength', cccafile='CCCA.cub', cccrfile='CC
 		cubs = [join(path, base)+'.band000%1i.cub' % x for x in order]
 		outcube = join(path, base)+'_ordered.cub'
 		pysis_ext.cubeit(cubs, outcube, tempdir=tempdir)
-		map(remove, cubs)
+		for c in cubs:
+			remove(cubs)
 		cubefile_ordered = outcube
 
 	pysis_ext.ratio(denominator=cubefile_ordered+'+4', numerator= cubefile_ordered+'+1',to=join(path,base)+'_440_750.cub')
@@ -1209,20 +1210,20 @@ def fit_grid(datafiles, model, parms=None, fixed=None, ilim=None, elim=None, ali
 		datafiles = [datafiles]
 	for ii in range(len(datafiles)):
 		df = datafiles[ii]
-		print 'Load photometric data {0}'.format(df)
+		print('Load photometric data {0}'.format(df))
 		dg = Photometry.PhotometricDataGrid(datafile=df)
 	#	if trim:
 	#		print 'Trimming data to remove invalid data points'
 	#		dg.trim(ilim=ilim,elim=elim,alim=alim,ioflim=ioflim)
 	#		print 'Saving trimmed data'
 	#		dg.write()
-		print 'Fitting model'
+		print('Fitting model')
 		if parms is None:
 			m0 = model()
 		else:
 			m0 = model(*(parms[ii]))
 		if fixed is not None:
-			print 'set fixed'
+			print('set fixed')
 			for jj in range(len(fixed)):
 				getattr(m0, m0.param_names[jj]).fixed=fixed[jj]
 		f = dg.fit(m0, ilim=ilim, elim=elim, alim=alim,rlim=rlim)
@@ -1242,7 +1243,7 @@ def fit_grid(datafiles, model, parms=None, fixed=None, ilim=None, elim=None, ali
 					info['rms'][i,j] = f.RMS[i,j]
 					for k in 'niter ierr dof'.split():
 						info[k][i,j] = f.fit_info[i,j][k]
-					for k,n in zip(m0.param_names,range(len(m0.param_names))):
+					for k,n in zip(m0.param_names,list(range(len(m0.param_names)))):
 						info[k+'_err'][i,j] = f.fit_info[i,j]['serror'][n]
 		hdus = fits.open(outfile)
 		keys = 'rms niter ierr dof'.split()
@@ -1269,7 +1270,7 @@ def par2cube(modelfiles, sort=False, logfile=None, overwrite=True):
 	outdir = os.path.dirname(modelfiles[0])
 	nf = len(modelfiles)
 	if sort is False:
-		sort = range(nf)
+		sort = list(range(nf))
 	else:
 		sort = [6,0,5,1,4,2,3]
 	m = fits.open(modelfiles[0])
@@ -1279,7 +1280,7 @@ def par2cube(modelfiles, sort=False, logfile=None, overwrite=True):
 	for k in parnames:
 		par[k] = np.zeros((nf,ny,nx))
 	m.close()
-	for i,j in zip(sort,range(nf)):
+	for i,j in zip(sort,list(range(nf))):
 		f = modelfiles[i]
 		m = fits.open(f)
 		for k in parnames:

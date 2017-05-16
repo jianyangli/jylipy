@@ -69,7 +69,7 @@ def iter_isis(func, indata, *args, **kwargs):
 	isiskeys = {}
 	if os.path.isfile(indata):
 		if verbose:
-			print 'processing file ', os.path.basename(indata)
+			print('processing file ', os.path.basename(indata))
 		isiskeys['from'] = indata
 		if outdata is not None:
 			outpath = os.path.dirname(outdata)
@@ -79,7 +79,7 @@ def iter_isis(func, indata, *args, **kwargs):
 			if outdata.split('.')[-1].lower() != 'cub':
 				outdata = '.'.join(outdata.split('.')[:-1]+['cub'])
 			isiskeys['to'] = outdata
-		for k in kwargs.keys():
+		for k in list(kwargs.keys()):
 			isiskeys[k] = kwargs[k]
 		func(**isiskeys)
 	elif os.path.isdir(indata):
@@ -88,7 +88,7 @@ def iter_isis(func, indata, *args, **kwargs):
 		insidefile = [x for x in insidefile if x.lower().endswith('.img') or x.lower().endswith('.pds') or x.lower().endswith('.cub') or x.lower().endswith('.fit') or x.lower().endswith('.fits')]
 		if len(insidefile) > 0:
 			if verbose:
-				print 'directory {0}: {1} files found'.format(os.path.basename(indata), len(insidefile))
+				print('directory {0}: {1} files found'.format(os.path.basename(indata), len(insidefile)))
 			if outdata is not None:
 				if not os.path.isdir(outdata):
 					os.makedirs(outdata)
@@ -99,12 +99,12 @@ def iter_isis(func, indata, *args, **kwargs):
 					iter_isis(func, fi, verbose=verbose, **kwargs)
 		if len(insidedir) > 0:
 			if verbose:
-				print 'directory {0}: {1} subdirectories found'.format(os.path.basename(indata), len(insidedir))
+				print('directory {0}: {1} subdirectories found'.format(os.path.basename(indata), len(insidedir)))
 			if outdata is not None:
 				if not os.path.isdir(outdata):
 					os.makedirs(outdata)
 				for di in insidedir:
-					print 'processing directory ', os.path.basename(di)
+					print('processing directory ', os.path.basename(di))
 					iter_isis(func, di, os.path.join(outdata, os.path.basename(di)), verbose=verbose, **kwargs)
 			else:
 				for di in insidedir:
@@ -221,7 +221,7 @@ class EZWrapper(object):
 
 		if fromlist and (listfile is None):
 			os.remove(lstfile)
-		if (len(parms)>0) & (log is None) and ('-log' in parms.keys()) and os.path.isfile(logfile):
+		if (len(parms)>0) & (log is None) and ('-log' in list(parms.keys())) and os.path.isfile(logfile):
 			os.remove(logfile)
 
 

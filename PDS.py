@@ -63,7 +63,7 @@ class Header(CaseInsensitiveOrderedDict):
 		'''Read PDS headers from a file'''
 		if not (hdrfile.lower().endswith('img') or hdrfile.lower().endswith('lbl') or hdrfile.lower().endswith('pds')):
 			raise ValueError('input file does not have a PDS extension (IMG or LBL)')
-		for k in self.keys():
+		for k in list(self.keys()):
 			self.pop(k)
 		if isinstance(hdrfile, file):
 			f = hdrfile
@@ -103,7 +103,7 @@ class Header(CaseInsensitiveOrderedDict):
 
 	@staticmethod
 	def _check_values(self):
-		for k in self.keys():
+		for k in list(self.keys()):
 			if isinstance(self[k], Object):
 				continue
 			if self[k].startswith('('):
@@ -185,7 +185,7 @@ class PDSData(object):
 		shape = obj['LINES'],obj['LINE_SAMPLES'],obj['BANDS']
 		count = obj['LINES']*obj['LINE_SAMPLES']*obj['BANDS']
 		out = np.fromstring(st, dtype=dtype, count=count)
-		if ('unit' in obj.keys()) or ('UNIT' in obj.keys()):
+		if ('unit' in list(obj.keys())) or ('UNIT' in list(obj.keys())):
 			if obj['unit'].lower() == 'du':
 				unit = units.adu
 			else:

@@ -111,12 +111,12 @@ def aspect(files, keys=None, verbose=False):
 		files = [files]
 
 	if verbose:
-		print '{0} files to be processed'.format(len(files))
-		print 'Keys to be processed: ', ks
+		print('{0} files to be processed'.format(len(files)))
+		print('Keys to be processed: ', ks)
 
 	for f in files:
 		if verbose:
-			print f
+			print(f)
 		im = WFPC2Image(f)
 		for k, v in zip(ks, vs):
 			v.append(im.header[k])
@@ -129,7 +129,7 @@ def aspect(files, keys=None, verbose=False):
 	ks.insert(1,'utc')
 
 	if verbose:
-		print 'Done.'
+		print('Done.')
 
 	return Table(vs, names=ks)
 

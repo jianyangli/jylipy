@@ -1434,12 +1434,12 @@ def mpfit(sca_angle, iof, par0=None, err=None, sppf='hg', mimsa=False, fixed=Non
 		for info in parinfo:
 			if 'parname' not in info:
 				errmsg = 'All parameter names is not specified.'
-				print 'Error: '+errmsg
+				print('Error: '+errmsg)
 				return {'status': -2, 'errmsg': errmsg}
 	else:
 		if par0 == None:
 			errmsg = 'Initial parameter values not specified.'
-			print 'Error: '+errmsg
+			print('Error: '+errmsg)
 			return {'status': -1, 'errmsg': errmsg}
 		else:
 			parinfo = []
@@ -1470,46 +1470,46 @@ def mpfit(sca_angle, iof, par0=None, err=None, sppf='hg', mimsa=False, fixed=Non
 					parinfo.append(info.copy())
 
 	if not quiet:
-		print
-		print 'Fit hapke parameters to input data:'
-		print 'Number of data points: ', `len(iof)`.ljust(10)
-		print 'Incidence angle: from %8.2f to %8.2f' % (sca_angle[0].min(), sca_angle[0].max())
-		print 'Emission angle:  from %8.2f to %8.2f' % (sca_angle[1].min(), sca_angle[1].max())
-		print 'Phase angle:     from %8.2f to %8.2f' % (sca_angle[2].min(), sca_angle[2].max())
-		print
-		print 'Single-scattering phase function: ',
+		print()
+		print('Fit hapke parameters to input data:')
+		print('Number of data points: ', repr(len(iof)).ljust(10))
+		print('Incidence angle: from %8.2f to %8.2f' % (sca_angle[0].min(), sca_angle[0].max()))
+		print('Emission angle:  from %8.2f to %8.2f' % (sca_angle[1].min(), sca_angle[1].max()))
+		print('Phase angle:     from %8.2f to %8.2f' % (sca_angle[2].min(), sca_angle[2].max()))
+		print()
+		print('Single-scattering phase function: ', end=' ')
 		if sppf == 'hg':
-			print 'Henyey-Greenstein'
+			print('Henyey-Greenstein')
 		else:
-			print 'Legendre polynomial'
-		print 'Modified isotropic multiple scattering approximation: ',
+			print('Legendre polynomial')
+		print('Modified isotropic multiple scattering approximation: ', end=' ')
 		if mimsa:
-			print 'yes'
+			print('yes')
 		else:
-			print 'no'
-		print
-		print 'Parameter setting:'
-		print '  name     init      limited?       range      fixed?'
-		print '-------- ------- ------------ --------------- --------'
+			print('no')
+		print()
+		print('Parameter setting:')
+		print('  name     init      limited?       range      fixed?')
+		print('-------- ------- ------------ --------------- --------')
 		for info in parinfo:
-			print '%6s %9.4f' % (info['parname'],info['value']),
+			print('%6s %9.4f' % (info['parname'],info['value']), end=' ')
 			if 'limited' in info:
 				for lim in info['limited']:
 					if lim:
-						print '  yes',
+						print('  yes', end=' ')
 					else:
-						print '   no',
+						print('   no', end=' ')
 			if 'limits' in info:
-				print '[%7.2f, %7.2f]' % (info['limits'][0], info['limits'][1]),
+				print('[%7.2f, %7.2f]' % (info['limits'][0], info['limits'][1]), end=' ')
 			else:
-				print '%14s' % ' '
+				print('%14s' % ' ')
 			if 'fixed' in info and info['fixed']:
-				print '  yes',
+				print('  yes', end=' ')
 			else:
-				print '   no',
-			print
-		print
-		print
+				print('   no', end=' ')
+			print()
+		print()
+		print()
 
 	# populate initial values of parameters
 	p0, parnames = [], []
@@ -1585,25 +1585,25 @@ def mpfit(sca_angle, iof, par0=None, err=None, sppf='hg', mimsa=False, fixed=Non
 		fit = {'par': par, 'status': fitp.status, 'chisq': fitp.fnorm, 'rms': rms, 'relrms': rms/iof.mean(), 'perror': perror, 'serror': serror, 'errmsg': errmsg, 'niter': fitp.niter}
 
 		if not quiet:
-			print
-			print 'Fit successful with a status code: %1d' % fitp.status
-			print '  >>> %s' % errmsg
-			print 'Total number of iterations: %d' % fitp.niter
-			print 'Best-fit Chi-squared: %9.5f' % fitp.fnorm
-			print 'Root mean squared (RMS): %8.4f, %6.2f%%' % (rms, rms/iof.mean()*100)
-			print
-			print 'Final parameters:'
-			print '  name    value     perror    serror'
-			print ' ------ --------- --------- ---------'
+			print()
+			print('Fit successful with a status code: %1d' % fitp.status)
+			print('  >>> %s' % errmsg)
+			print('Total number of iterations: %d' % fitp.niter)
+			print('Best-fit Chi-squared: %9.5f' % fitp.fnorm)
+			print('Root mean squared (RMS): %8.4f, %6.2f%%' % (rms, rms/iof.mean()*100))
+			print()
+			print('Final parameters:')
+			print('  name    value     perror    serror')
+			print(' ------ --------- --------- ---------')
 			for p in par:
 				if hasattr(par[p], '__iter__'):
 					for v, perr, serr in zip(par[p], perror[p], serror[p]):
-						print '%6s %9.4f %9.4f %9.4f' % (p, v, perr, serr)
+						print('%6s %9.4f %9.4f %9.4f' % (p, v, perr, serr))
 				else:
-					print '%6s %9.4f %9.4f %9.4f' % (p, par[p], perror[p], serror[p])
-			print
-			print 'Geometric albedo: %7.4f' % geoalb(par)
-			print 'Bond albedo: %7.4f' % bondalb(par)
+					print('%6s %9.4f %9.4f %9.4f' % (p, par[p], perror[p], serror[p]))
+			print()
+			print('Geometric albedo: %7.4f' % geoalb(par))
+			print('Bond albedo: %7.4f' % bondalb(par))
 
 	else:  # unsuccessful fit
 		if fitp.status == -16:
@@ -1615,10 +1615,10 @@ def mpfit(sca_angle, iof, par0=None, err=None, sppf='hg', mimsa=False, fixed=Non
 		fit = {'status': fitp.status}
 
 		if not quiet:
-			print
-			print 'Fit failed with a status code: %1d' % fitp.status
-			print '  >>> %s' % errmsg
-			print
+			print()
+			print('Fit failed with a status code: %1d' % fitp.status)
+			print('  >>> %s' % errmsg)
+			print()
 
 	if return_mpfit:
 		return (fit, fitp)
@@ -1920,9 +1920,9 @@ def modelfit(inc, emi, pha, iof, ioferr=None, parlist=['w', 'g', 'shoe', 'theta'
 
 		# print information
 		if not quiet:
-			print
-			print '--------------------------------------------------'
-			print 'Trial # %d' % i
+			print()
+			print('--------------------------------------------------')
+			print('Trial # %d' % i)
 
 		# populate initial guess parameters
 		for parname in par0:
@@ -1943,15 +1943,15 @@ def modelfit(inc, emi, pha, iof, ioferr=None, parlist=['w', 'g', 'shoe', 'theta'
 	goodfit = (sta >= 1) & (sta <= 8)
 	ngoodfit = np.size(np.where(goodfit))
 	if not quiet:
-		print
-		print 'All trials finished'
-		print
-		print '>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>'
-		print
-		print 'Total number of trials: %d' % ntrial
-		print 'Total number of successful fit: %d' % ngoodfit
+		print()
+		print('All trials finished')
+		print()
+		print('>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>')
+		print()
+		print('Total number of trials: %d' % ntrial)
+		print('Total number of successful fit: %d' % ngoodfit)
 	if ngoodfit == 0:
-		print 'All attempts failed.  No solution found.'
+		print('All attempts failed.  No solution found.')
 		if not return_all:
 			return {'status': -1}
 		else:
@@ -1969,27 +1969,27 @@ def modelfit(inc, emi, pha, iof, ioferr=None, parlist=['w', 'g', 'shoe', 'theta'
 
 	# print out results
 	if not quiet:
-		print
-		print 'Best fit results:'
-		print 'Status code: %1d' % bestfit['status']
-		print '  >>> %s' % bestfit['errmsg']
-		print 'Total number of iterations: %d' % bestfit['niter']
-		print 'Best-fit Chi-squared: %9.5f' % bestfit['chisq']
-		print 'Root mean squared (RMS): %8.4f, %6.2f%%' % (bestfit['rms'], bestfit['rms']/iof.mean()*100)
-		print
-		print 'Final parameters:'
-		print '  name    value     perror    serror'
-		print ' ------ --------- --------- ---------'
+		print()
+		print('Best fit results:')
+		print('Status code: %1d' % bestfit['status'])
+		print('  >>> %s' % bestfit['errmsg'])
+		print('Total number of iterations: %d' % bestfit['niter'])
+		print('Best-fit Chi-squared: %9.5f' % bestfit['chisq'])
+		print('Root mean squared (RMS): %8.4f, %6.2f%%' % (bestfit['rms'], bestfit['rms']/iof.mean()*100))
+		print()
+		print('Final parameters:')
+		print('  name    value     perror    serror')
+		print(' ------ --------- --------- ---------')
 		for p in bestpar:
 			if hasattr(bestpar[p], '__iter__'):
 				for v, perr, serr in zip(bestpar[p], bestfit['perror'][p], bestfit['serror'][p]):
-					print '%6s %9.4f %9.4f %9.4f' % (p, v, perr, serr)
+					print('%6s %9.4f %9.4f %9.4f' % (p, v, perr, serr))
 			else:
-				print '%6s %9.4f %9.4f %9.4f' % (p, bestpar[p], bestfit['perror'][p], bestfit['serror'][p])
-		print
-		print 'Geometric albedo: %7.4f' % geoalb(bestpar)
-		print 'Bond albedo: %7.4f' % bondalb(bestpar)
-		print
+				print('%6s %9.4f %9.4f %9.4f' % (p, bestpar[p], bestfit['perror'][p], bestfit['serror'][p]))
+		print()
+		print('Geometric albedo: %7.4f' % geoalb(bestpar))
+		print('Bond albedo: %7.4f' % bondalb(bestpar))
+		print()
 
 	# generate graphics to show the statistics of model fit
 	if plot is not False:
@@ -2036,7 +2036,7 @@ def modelfit(inc, emi, pha, iof, ioferr=None, parlist=['w', 'g', 'shoe', 'theta'
 					ax[i].hist(v0, bins=20, facecolor='b')
 					ax[i].hist(v, bins=20, facecolor='g')
 					ax[i].vlines(bestfit['par'][parname][j], 0, ntrial/2,linewidth=3)
-					pplot(ax[i],xlabel=parname+`j+1`)
+					pplot(ax[i],xlabel=parname+repr(j+1))
 					i += 1
 
 		# plot measure/model ratio
@@ -2286,7 +2286,7 @@ def fitDiskInt5(alpha, measure, error=None, w=0.2, g=-0.3, theta=20., B0=1.0, h=
 		fit_info = f.fit_info.copy()
 		fit_info['red_chisq'] = chisq
 		if fit_info['param_cov'] == None:
-			print fit_info['ierr'], fit_info['message']
+			print(fit_info['ierr'], fit_info['message'])
 		return model, fit_info
 
 	return model
@@ -2346,7 +2346,7 @@ def fitDiskInt6(alpha, measure, error=None, w=0.2, b=0.3, c=0.4, theta=20., B0=1
 		fit_info = f.fit_info.copy()
 		fit_info['red_chisq'] = chisq
 		if fit_info['param_cov'] == None:
-			print fit_info['ierr'], fit_info['message']
+			print(fit_info['ierr'], fit_info['message'])
 		return model, fit_info
 
 	return model
@@ -2406,7 +2406,7 @@ def create_pvl(par, outfile, **kwarg):
 	f.write('  Group = Algorithm\n')
 	f.write('    Name = HapkeHen\n')
 	f.write('    ZeroB0Standard = {0}\n'.format(zerob0standard))
-	for k, v in kwarg.items():
+	for k, v in list(kwarg.items()):
 		if isinstance(v, str):
 			line = '    {0} = "{1}"\n'
 		else:

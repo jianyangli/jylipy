@@ -94,7 +94,7 @@ def vec2orb(r, v, t, mu=G*MSun, beta=0.):
 
 	# semi-major axis
 	a = mu*rr/(2*mu-rr*vr*vr)
-	print a
+	print(a)
 	# eccentricity
 	e = sqrt(1-(Lr**2/(mu*a)).simplified.magnitude)
 

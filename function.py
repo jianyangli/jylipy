@@ -89,7 +89,7 @@ def _eval_func(func, *var):
 			return func
 
 
-class Function(object):
+class Function(object, metaclass=abc.ABCMeta):
 	'''Abstract Function class to define a function f(x, y, ...)
 
 	Properties
@@ -115,8 +115,6 @@ class Function(object):
 	-------
 
 	'''
-
-	__metaclass__ = abc.ABCMeta
 
 	# Data
 	@property
@@ -362,7 +360,7 @@ class Function(object):
 			yunit = condition(v.unit == u.dimensionless_unscaled, '', ' ['+str(v.unit)+']')
 			pplot(ax, xlabel=self.xlabel+xunit, ylabel=self.label+yunit)
 		else:
-			print 'plotting 2-D figure'
+			print('plotting 2-D figure')
 
 	def CopyProperties(self, other):
 		assert isinstance(other, type(self)), 'Can only copy properties from the same class or inherited class'
@@ -390,7 +388,7 @@ class AnalyticFunction(Function):
 		else:
 			self.xlabel = []
 			for i in range(self._ndim):
-				self.xlabel.append('x'+`i`)
+				self.xlabel.append('x'+repr(i))
 		if base != None:
 			self.base = base
 
@@ -877,7 +875,7 @@ class Spectrum(object):
 			fb, feb = rebin(self._spfunc.y, bin, mean=True, weight=1/self._ferr**2)
 			fb *= self._unit
 			feb = np.sqrt(1/feb)*self._unit
-		name = `bin`.strip()+'pt_Binned'
+		name = repr(bin).strip()+'pt_Binned'
 		if self.name is not None:
 			name = self.name+'_'+name
 		return Spectrum(xb, fb, xerr=xeb, err=feb, name=name, bounded=self._spfunc.bounds_error, fill_value=self._spfunc.fill_value, kind=self._kind)

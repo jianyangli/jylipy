@@ -2026,7 +2026,7 @@ def readfits(imfile, ext=0, verbose=True, header=False):
 			extindex = fitsfile.index_of(ext)
 		except KeyError:
 			print()
-			print('Error: Extension {0} not found'.format(ext))
+			print(('Error: Extension {0} not found'.format(ext)))
 			if header:
 				return None, None
 			else:
@@ -2034,13 +2034,13 @@ def readfits(imfile, ext=0, verbose=True, header=False):
 
 		if extindex >= len(fitsfile):
 			print()
-			print('Error: Requested extension number {0} does not exist'.format(extindex))
+			print(('Error: Requested extension number {0} does not exist'.format(extindex)))
 			img, hdr = None, None
 		else:
 			hdr = fitsfile[extindex].header
 			if fitsfile[extindex].data is None:
 				print()
-				print('Error: Extension {0} contains no image'.format(ext))
+				print(('Error: Extension {0} contains no image'.format(ext)))
 				img = None
 			else:
 				img = fitsfile[extindex].data
@@ -2091,12 +2091,12 @@ def headfits(imfile, ext=0, verbose=True):
 
 	if ext >= len(fitsfile):
 		print()
-		print('Error: Extension '+repr(ext)+' does not exist!')
+		print(('Error: Extension '+repr(ext)+' does not exist!'))
 		return None
 
 	if fitsfile[ext].data is None:
 		print()
-		print('Error: Extension '+repr(ext)+' contains no image!')
+		print(('Error: Extension '+repr(ext)+' contains no image!'))
 		return None
 
 	return fitsfile[ext].header
@@ -2353,7 +2353,7 @@ def centroiding(im, ext=0, ds9=None, newframe=True, coord='image', refine=False,
 	# Loop through all images
 	nimgs = len(ims)
 	if verbose:
-		print('Centroiding %i images from input' % nimgs)
+		print(('Centroiding %i images from input' % nimgs))
 		print()
 	cts = [None]*nimgs
 	i, j = 0, 0
@@ -2361,10 +2361,10 @@ def centroiding(im, ext=0, ds9=None, newframe=True, coord='image', refine=False,
 	while i < nimgs:
 		if isinstance(ims[i], str):
 			if verbose:
-				print('Image %i in the list: %s.' % (i, ims[i]))
+				print(('Image %i in the list: %s.' % (i, ims[i])))
 		else:
 			if verbose:
-				print('Image %i in the list.' % i)
+				print(('Image %i in the list.' % i))
 		if not retry:
 			pass
 			d = imdisp(ims[i], ext=ext, ds9=ds9, newframe=newframe, verbose=verbose)
@@ -2384,11 +2384,11 @@ def centroiding(im, ext=0, ds9=None, newframe=True, coord='image', refine=False,
 			else:
 				cts[i] = ct
 			if verbose:
-				print('Centroid at (%.6f, %.6f)' % (cts[i][0], cts[i][1]))
+				print(('Centroid at (%.6f, %.6f)' % (cts[i][0], cts[i][1])))
 			j += 1
 		else:
 			# Enter interactive session
-			key = input('Center not measured.  Try again? (y/n/q) ')
+			key = eval(input('Center not measured.  Try again? (y/n/q) '))
 			if key.lower() in ['y', 'yes']:
 				retry = True
 				continue
@@ -2403,7 +2403,7 @@ def centroiding(im, ext=0, ds9=None, newframe=True, coord='image', refine=False,
 	if len(cts) == 1:
 		cts = cts[0]
 	if verbose:
-		print('%i images measured out of a total of %i' % (j, nimgs))
+		print(('%i images measured out of a total of %i' % (j, nimgs)))
 
 	return cts
 
@@ -2464,14 +2464,14 @@ def centroid(im, center=None, error=None, mask=None, method=0, box=6, niter=5, t
 	if (method in [2, 'geom', 'geometric']) and (threshold is None):
 		raise ValueError('threshold is not specified')
 	if verbose:
-		print('Image provided as a '+str(type(im))+', shape = ', im.shape)
-		print('Centroiding image in {0}x{0} box around ({1},{2})'.format(box,center[0],center[1]))
-		print('Error array '+condition(error is None, 'not ', ' ')+'provided')
-		print('Mask array '+condition(mask is None, 'not ', ' ')+'provided')
+		print(('Image provided as a '+str(type(im))+', shape = ', im.shape))
+		print(('Centroiding image in {0}x{0} box around ({1},{2})'.format(box,center[0],center[1])))
+		print(('Error array '+condition(error is None, 'not ', ' ')+'provided'))
+		print(('Mask array '+condition(mask is None, 'not ', ' ')+'provided'))
 	i = 0
 	while i < niter:
 		if verbose:
-			print('  iteration {0}, center = ({1},{2})'.format(i, center[0], center[1]))
+			print(('  iteration {0}, center = ({1},{2})'.format(i, center[0], center[1])))
 		p1, p2 = np.floor(center-b2).astype('int'), np.ceil(center+b2).astype('int')
 		subim = np.asarray(im[p1[0]:p2[0],p1[1]:p2[1]])
 		if error is None:
@@ -2494,7 +2494,7 @@ def centroid(im, center=None, error=None, mask=None, method=0, box=6, niter=5, t
 		i += 1
 
 	if verbose:
-		print('centroid = ({0},{1})'.format(center[0],center[1]))
+		print(('centroid = ({0},{1})'.format(center[0],center[1])))
 	return center
 
 
@@ -4161,7 +4161,7 @@ def iter_exec(func, indata, outdata=None, verbose=True, ext=None, **kwargs):
 	# If `indata` is a single string
 		if isfile(indata):
 			if verbose:
-				print('Processing file: ', basename(indata))
+				print(('Processing file: ', basename(indata)))
 			if outdata is not None:
 				outpath = dirname(outdata)
 				outfile = basename(outdata)
@@ -4175,7 +4175,7 @@ def iter_exec(func, indata, outdata=None, verbose=True, ext=None, **kwargs):
 			insidefile = findfile(indata, name=ext)
 			if len(insidefile) > 0:
 				if verbose:
-					print('Directory {0}: {1} files found'.format(basename(indata), len(insidefile)))
+					print(('Directory {0}: {1} files found'.format(basename(indata), len(insidefile))))
 				if outdata is not None:
 					od = [join(outdata, basename(x)) for x in insidefile]
 				else:
@@ -4183,7 +4183,7 @@ def iter_exec(func, indata, outdata=None, verbose=True, ext=None, **kwargs):
 				iter_exec(func, insidefile, od, verbose, ext, **kwargs)
 			if len(insidedir) > 0:
 				if verbose:
-					print('Directory {0}: {1} subdirectories found'.format(basename(indata), len(insidedir)))
+					print(('Directory {0}: {1} subdirectories found'.format(basename(indata), len(insidedir))))
 				if outdata is not None:
 					od = [join(outdata, basename(x)) for x in insidedir]
 				else:

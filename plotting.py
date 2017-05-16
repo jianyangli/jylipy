@@ -56,7 +56,7 @@ def pplot(ax=None, axfs='large', lfs='x-large', tightlayout=True, xlabel=None, y
 	# for the axes
 	plt.setp(ax.get_ymajorticklabels(), fontsize=axfs)
 	plt.setp(ax.get_xmajorticklabels(), fontsize=axfs)
-	plt.setp(ax.spines.values(), linewidth=spinewidth)
+	plt.setp(list(ax.spines.values()), linewidth=spinewidth)
 	if xticks is not None:
 		ax.set_xticks(xticks)
 	if yticks is not None:
@@ -247,8 +247,8 @@ def density(x, y, log=False, ax=None, **kwargs):
 	ytrans = lambda x: (float(y)-ylim[0])/(ylim[1]-ylim[0])*ybs-0.5
 	xt1 = [xtrans(x) for x in xt0]
 	yt1 = [ytrans(y) for y in yt0]
-	xticklabels = kwargs.pop('xticklabels', map(str, xt0))
-	yticklabels = kwargs.pop('yticklabels', map(str, yt0))
+	xticklabels = kwargs.pop('xticklabels', list(map(str, xt0)))
+	yticklabels = kwargs.pop('yticklabels', list(map(str, yt0)))
 	pplot(xlim=[-0.5,xbs-0.5], ylim=[-0.5,ybs-0.5], xticks=xt1, yticks=yt1, xticklabels=xticklabels, yticklabels=yticklabels, xlabel=xlabel, ylabel=ylabel)
 
 	# Color scale axis
@@ -312,6 +312,6 @@ def imshow(*var, **kwargs):
 	if ylim[0]>ylim[-1]:
 		yt1 = yt1[::-1]
 
-	if xticklabels is None: xticklabels = map(str, xt0)
-	if yticklabels is None: yticklabels = map(str, yt0)
+	if xticklabels is None: xticklabels = list(map(str, xt0))
+	if yticklabels is None: yticklabels = list(map(str, yt0))
 	pplot(ax,xlim=[0, xs], ylim=[0, ys], xticks=xt1, yticks=yt1, xticklabels=xticklabels, yticklabels=yticklabels, xlabel=xlabel, ylabel=ylabel)

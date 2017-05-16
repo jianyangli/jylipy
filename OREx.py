@@ -6,14 +6,14 @@ import numpy as np, string, spice
 from copy import copy
 import ccdproc
 from .core import *
-from vector import xyz2sph, vecsep #Image, readfits, condition, xyz2sph, Time, num, findfile, writefits, CCDData, ImageMeasurement, CaseInsensitiveOrderedDict, findfile, ascii_read
+from .vector import xyz2sph, vecsep #Image, readfits, condition, xyz2sph, Time, num, findfile, writefits, CCDData, ImageMeasurement, CaseInsensitiveOrderedDict, findfile, ascii_read
 from .apext import Table, Column, units, fits
 from jylipy import Photometry, pplot
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 
 
-def spdif_mapping(data, (lon, lat), (longrid, latgrid), method='nearest', reduce=False):
+def spdif_mapping(data, xxx_todo_changeme, xxx_todo_changeme1, method='nearest', reduce=False):
 	'''Project SPDIF data to lon-lat grid
 
 	data : array (n, b), PSDIF data with n spectra of b bands
@@ -23,6 +23,8 @@ def spdif_mapping(data, (lon, lat), (longrid, latgrid), method='nearest', reduce
 
 	v1.0.0 : Jan 5, 2017, JYL @PSI
 	'''
+	(lon, lat) = xxx_todo_changeme
+	(longrid, latgrid) = xxx_todo_changeme1
 	from scipy.interpolate import griddata
 	data = np.asarray(data)
 	lon = np.asarray(lon)
@@ -77,9 +79,10 @@ def load_specdata(datafile, band, iofmin=0, iofmax=1, incmin=0, incmax=90, emimi
 	return pho, asp, ioferr
 
 
-def pick_spectrum(datafile, (lat,lon), radius=2., unit='radf'):
+def pick_spectrum(datafile, xxx_todo_changeme2, radius=2., unit='radf'):
 	'''Pick a spectrum within a circular footprint of radius `radius` and
 	centered at (lat,lon)'''
+	(lat,lon) = xxx_todo_changeme2
 	data = fits.open(datafile)
 	lats = data[3].data['LAT']
 	lons = data[3].data['LON']
@@ -137,7 +140,7 @@ def plot_model_quality(datafile):
 def plot_phomodel(phofile):
 	par = read_phomodel(phofile)
 	pdf = PdfPages(phofile.replace('.fits','.pdf'))
-	for k in par.keys():
+	for k in list(par.keys()):
 		np = par[k]['par'].shape[1]
 		plt.clf()
 		f,ax = plt.subplots(np,1,sharex=True,num=plt.gcf().number)

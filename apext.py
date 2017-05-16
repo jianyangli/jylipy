@@ -574,8 +574,8 @@ class MPFitter(object):
 
 		if verbose:
 			if m.status > 0:
-				print('Success with code {0}: '.format(m.status))
-				print(self.code[m.status])
+				print(('Success with code {0}: '.format(m.status)))
+				print((self.code[m.status]))
 
 		model_copy.parameters = m.params
 		return model_copy

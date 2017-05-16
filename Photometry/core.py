@@ -27,7 +27,7 @@ class GeometryError(Exception):
 
 	def __init__(self, msg, **kwargs):
 		self.msg = msg
-		self.geometry = kwargs.keys()
+		self.geometry = list(kwargs.keys())
 		for k in self.geometry:
 			self.__dict__[k] = kwargs[k]
 
@@ -98,13 +98,13 @@ class ScatteringGeometry(object):
 			par = set(kwargs.keys())
 			if set('inc emi pha'.split()) == par:
 				data = [kwargs['inc'], kwargs['emi'], kwargs['pha']]
-				names = u'inc emi pha'.split()
+				names = 'inc emi pha'.split()
 			elif set('inc emi psi'.split()) == par:
 				data = [kwargs['inc'], kwargs['emi'], kwargs['psi']]
-				names = u'inc emi psi'.split()
+				names = 'inc emi psi'.split()
 			elif set('pha pholat pholon'.split()) == par:
 				data = [kwargs['pha'], kwargs['pholat'], kwargs['pholon']]
-				names = u'pha pholat pholon'.split()
+				names = 'pha pholat pholon'.split()
 			else:
 				raise GeometryError('Scattering geometry combination not recognized.')
 			for i in range(len(data)):
@@ -159,7 +159,7 @@ class ScatteringGeometry(object):
 			raise TypeError('%s can only be initiated with (inc, emi, pha), or (inc, emi, psi), or (pha, lat, lon).' % type(self))
 		if not unit.is_equivalent(units.deg):
 			raise ValueError('Unit "rad" or equivalent is expected, but "%s" received in `unit` keyword.' % str(unit))
-		keys = kwargs.keys()
+		keys = list(kwargs.keys())
 		length = ulen(kwargs[keys[0]])
 		for k in keys:
 			val = kwargs[k]
@@ -185,7 +185,7 @@ class ScatteringGeometry(object):
 
 	@property
 	def angles(self):
-		return self._data.keys()
+		return list(self._data.keys())
 
 	@property
 	def unit(self):
@@ -197,7 +197,7 @@ class ScatteringGeometry(object):
 		if not value.is_equivalent(units.deg):
 			raise ValueError('Unit "rad" or equivalent is expected, but "%s" is received.' % str(value))
 		if not self.cos:
-			for k in self._data.keys():
+			for k in list(self._data.keys()):
 				self._data[k] = self._data.getcolumn(k).to(value)
 		self._unit = value
 
@@ -211,10 +211,10 @@ class ScatteringGeometry(object):
 	def cos(self, value):
 		if value != self.cos:
 			if value == True:
-				for k in self._data.keys():
+				for k in list(self._data.keys()):
 					self._data[k] = np.cos(self._data.getcolumn(k))
 			else:
-				for k in self._data.keys():
+				for k in list(self._data.keys()):
 					self._data[k] = np.arccos(self._data.getcolumn(k)).to(self.unit)
 			self._cos = value
 
@@ -758,7 +758,7 @@ class PhotometricData(object):
 			# Initialize from data passed by keywords
 			self._type = kwargs.pop('type', 'measured')
 			if self._type == 'binned':
-				if 'binparms' not in kwargs.keys():
+				if 'binparms' not in list(kwargs.keys()):
 					raise ValueError('`binparms` keyword is not found while `type` is set to `binned`.')
 				self.binparms = kwargs.pop('binparms')
 			else:
@@ -770,14 +770,14 @@ class PhotometricData(object):
 			# collect scattering geometry data
 			scakey = {}
 			for k in 'inc emi pha psi pholat pholon'.split():
-				if k in kwargs.keys():
+				if k in list(kwargs.keys()):
 					scakey[k] = kwargs.pop(k)
 			scakey['cos'] = kwargs.pop('cos', False)
 			scakey['unit'] = kwargs.pop('unit', units.deg)
 			self.sca = ScatteringGeometry(**scakey)
 
 			# collect reflectance data
-			keys = kwargs.keys()
+			keys = list(kwargs.keys())
 			if 'bdr' in keys:
 				self._data = Table([kwargs['bdr']], names=['BDR'])
 			elif 'r' in keys:
@@ -873,7 +873,7 @@ class PhotometricData(object):
 
 	@property
 	def refkey(self):
-		return self._data.keys()
+		return list(self._data.keys())
 
 	@property
 	def BDR(self):
@@ -1120,7 +1120,7 @@ class PhotometricData(object):
 			else:
 				f, ax = plt.subplots(3,1,num=plt.gcf().number)
 				xs = ['pha','inc','emi']
-				for x,i in zip(xs,range(3)):
+				for x,i in zip(xs,list(range(3))):
 					xx = getattr(self, x).to(unit).value
 					xlabel = '{0} ({1})'.format(xlbl[x], str(unit))
 					ax[i].plot(xx, yy, 'o')
@@ -1197,10 +1197,10 @@ class PhotometricData(object):
 		elif (self.type == 'binned') and (pho.type == 'measured'):
 			# bin pho first, then merge
 			boundary = self.binparms['boundary']
-			print '    binning data'
+			print('    binning data')
 			binner = Binner(boundary=boundary)
 			pho_binned = binner(pho)
-			print '    merging data'
+			print('    merging data')
 			self._binned_merge(pho_binned)
 		else:
 			# check boundaries of both binned data, then merge
@@ -1332,7 +1332,7 @@ class PhotometricData(object):
 							w2 = pho.binparms['count'][pho_indx2]
 							ww = w1+w2
 							ang = {}
-							for p,i in zip(self.binparms['dims'],range(3)):
+							for p,i in zip(self.binparms['dims'],list(range(3))):
 								ang[p] = (self_ang[i][self_indx2]*w1+pho_ang[i][pho_indx2]*w2)/ww
 							col = {}
 							for k in pho.refkey:
@@ -1446,7 +1446,7 @@ class PhotometricData(object):
 			ioffile = np.asarray(ioffile)
 
 		for illf, ioff in zip(illfile, ioffile):
-			print '  Extracting from ', basename(illf)
+			print('  Extracting from ', basename(illf))
 			self.extract(illf, ioff, **kwargs)
 
 	def bin(self, **kwargs):
@@ -1501,9 +1501,9 @@ class PhotometricDataGroup(OrderedDict):
 				ndata = len(data)
 				if len(kwargs) == 0:
 					self.keyname = 'index'
-					keys = range(ndata)
+					keys = list(range(ndata))
 				else:
-					self.keyname = kwargs.keys()[0]
+					self.keyname = list(kwargs.keys())[0]
 					keys = kwargs.pop(self.keyname)
 				if ndata != len(keys):
 					raise ValueError('length of data must be the same as length of keys, {0} {1} received'.format(ndata, len(keys)))
@@ -1536,7 +1536,7 @@ class PhotometricDataGrid(object):
 	_lon, _lat, _data, _count, _list
 	'''
 
-	_version = u'1.0.0'
+	_version = '1.0.0'
 
 	def __init__(self, lon=None, lat=None, datafile=None, maxmem=1.5):
 		'''PhotometricDataGrid class initialization
@@ -1594,7 +1594,7 @@ class PhotometricDataGrid(object):
 			self._info['count'] = np.zeros((nlat,nlon))
 			self._info['masked'] = np.ones((nlat,nlon), dtype=bool)
 			self._info['loaded'] = np.zeros((nlat,nlon), dtype=bool)
-			for k in self._info.keys():
+			for k in list(self._info.keys()):
 				self._info1d[k] = self._info[k].reshape(-1)
 			self._flushed = np.zeros((nlat,nlon), dtype=bool)
 			self._flushed1d = self._flushed.reshape(-1)
@@ -1612,7 +1612,7 @@ class PhotometricDataGrid(object):
 				return False
 		# free memory by deleting all PhotometricData instances
 		if verbose:
-			print 'Cleaning memory...'
+			print('Cleaning memory...')
 		for i in range(self.size):
 			if self._info1d['loaded'][i]:
 				self._save_data(i)
@@ -1658,13 +1658,13 @@ class PhotometricDataGrid(object):
 			i, j = key
 			if isinstance(i, slice):
 				ii = i.indices(len(self.lat)-1)
-				i = range(ii[0],ii[1],ii[2])
+				i = list(range(ii[0],ii[1],ii[2]))
 			if isinstance(j, slice):
 				jj = j.indices(len(self.lon)-1)
-				j = range(jj[0],jj[1],jj[2])
+				j = list(range(jj[0],jj[1],jj[2]))
 		else:
 			i = key
-			j = range(len(self.lon)-1)
+			j = list(range(len(self.lon)-1))
 		y, x = np.meshgrid(i, j)
 		# check whether the data to be loaded are too large
 		if _memory_size(self._info['count'][y,x].sum())>self.max_mem:
@@ -1832,7 +1832,7 @@ class PhotometricDataGrid(object):
 		self._info1d['loaded'][:] = False
 		nlat = len(self.lat)-1
 		nlon = len(self.lon)-1
-		for k in self._info1d.keys():
+		for k in list(self._info1d.keys()):
 			self._info[k] = self._info1d[k].reshape((nlat,nlon))
 		self._data = np.zeros((nlat,nlon), dtype=PhotometricData)
 		self._data1d = self._data.reshape(-1)
@@ -1847,7 +1847,7 @@ class PhotometricDataGrid(object):
 				if verbose:
 					prog = float(i)/nf*100
 					if prog>tag:
-						print '%3.1f%% completed: %i files read' % (prog, i)
+						print('%3.1f%% completed: %i files read' % (prog, i))
 						tag = prog+1
 				cleaned = self._load_data(i)
 				if cleaned:
@@ -1858,22 +1858,22 @@ class PhotometricDataGrid(object):
 		if (self.lon is None) or (self.lat is None):
 			raise ValueError('the grid parameters (lon, lat) not specified')
 		if verbose:
-			print 'porting data from PhotometricData instance'
+			print('porting data from PhotometricData instance')
 		nlat, nlon = self.shape
 		nf = nlat*nlon
 		lon = indata.geolon
-		for lon1, lon2, i in zip(self.lon[:-1],self.lon[1:],range(nlon)):
+		for lon1, lon2, i in zip(self.lon[:-1],self.lon[1:],list(range(nlon))):
 			ww = np.where((lon>lon1)&(lon<=lon2))
 			if len(ww[0]) == 0:
 				continue
 			d1 = indata[ww]
 			lat = d1.geolat
 			tag = -0.1
-			for lat1, lat2, j in zip(self.lat[:-1],self.lat[1:],range(nlat)):
+			for lat1, lat2, j in zip(self.lat[:-1],self.lat[1:],list(range(nlat))):
 				if verbose:
 					prog = (float(i)*nlat+j)/nf*100
 					if prog>tag:
-						print '%5.1f%% completed:  lon = (%5.1f, %5.1f), lat = (%5.1f, %5.1f)' % (prog,lon1.value,lon2.value,lat1.value,lat2.value)
+						print('%5.1f%% completed:  lon = (%5.1f, %5.1f), lat = (%5.1f, %5.1f)' % (prog,lon1.value,lon2.value,lat1.value,lat2.value))
 						tag = prog+0.999
 				ww = np.where((lat>lat1)&(lat<=lat2))
 				if len(ww[0]) == 0:
@@ -1952,7 +1952,7 @@ class PhotometricDataGrid(object):
 		elif hasattr(indata, '__iter__'):
 			if isinstance(indata[0], str):
 				if verbose:
-					print 'importing data from backplanes and image files'
+					print('importing data from backplanes and image files')
 				illfile = np.asarray(indata)
 				ioffile = kwargs.pop('ioffile',None)
 				if ioffile is None:
@@ -1964,7 +1964,7 @@ class PhotometricDataGrid(object):
 				for illf, ioff in zip(illfile, ioffile):
 					if verbose:
 						from os.path import basename
-						print 'Extracting from ', basename(illf)
+						print('Extracting from ', basename(illf))
 					d.extract(illf, ioff, verbose=verbose, **kwargs)
 					sz = len(d)*6*8/1073741824.
 					if len(d)*6*8/1073741824. > self.max_mem:
@@ -2127,7 +2127,7 @@ class PhotometricGridFitter(object):
 		self.mask = np.ones((nlat,nlon),dtype=bool)
 		for i in range(nlat):
 			for j in range(nlon):
-				print 'data ({0}, {1}) of ({2}, {3})'.format(i,j,nlat,nlon)
+				print('data ({0}, {1}) of ({2}, {3})'.format(i,j,nlat,nlon))
 				if isinstance(data[i,j], PhotometricData):
 					d = data[i,j].copy()
 					d.validate()
@@ -2172,7 +2172,7 @@ class ModelGrid(object):
  v1.0.0 : Jan 18, 2016, JYL @PSI
 	'''
 
-	_version = u'1.0.0'
+	_version = '1.0.0'
 
 	def __init__(self, m0=None, nlon=None, nlat=None, datafile=None):
 		'''Initialization
@@ -2273,18 +2273,18 @@ class ModelGrid(object):
 
 	def update_params(self, lat=None, lon=None, key=None):
 		if lat is None:
-			lat = range(self.nlat)
+			lat = list(range(self.nlat))
 		elif isinstance(lat,slice):
 			n1, n2, n3 = lat.indices(self.nlat)
-			lat = range(n1,n2,n3)
+			lat = list(range(n1,n2,n3))
 		else:
 			if ulen(lat) == 1:
 				lat = [lat]
 		if lon is None:
-			lon = range(self.nlon)
+			lon = list(range(self.nlon))
 		elif isinstance(lon, slice):
 			n1, n2, n3 = lon.indices(self.nlon)
-			lon = range(n1,n2,n3)
+			lon = list(range(n1,n2,n3))
 		else:
 			if ulen(lon) == 1:
 				lon = [lon]
@@ -2994,10 +2994,10 @@ def biniof(inc, emi, pha, iof, di, de, da, binned=None, verbose=False):
 	iof = np.asanyarray(iof).flatten()
 
 	if verbose:
-		print 'Bin photometric data to grid:'
-		print '  i: from {0} to {1} with bin size {2}'.format(inc.min(), inc.max(), di)
-		print '  e: from {0} to {1} with bin size {2}'.format(emi.min(), emi.max(), de)
-		print '  a: from {0} to {1} with bin size {2}'.format(pha.min(), pha.max(), da)
+		print('Bin photometric data to grid:')
+		print('  i: from {0} to {1} with bin size {2}'.format(inc.min(), inc.max(), di))
+		print('  e: from {0} to {1} with bin size {2}'.format(emi.min(), emi.max(), de))
+		print('  a: from {0} to {1} with bin size {2}'.format(pha.min(), pha.max(), da))
 
 	incbin = []
 	emibin = []
@@ -3068,7 +3068,7 @@ class Binner(object):
 
 	def bin(self, pho, verbose=False):
 		if verbose:
-			print
+			print()
 
 		data = []
 		for p in self.dims:
@@ -3083,9 +3083,9 @@ class Binner(object):
 				self.boundary.append(np.arange(d.min(), d.max()+b, b))
 
 		if verbose:
-			print 'Bin {0} photometric data points to grid:'.format(len(data[0]))
+			print('Bin {0} photometric data points to grid:'.format(len(data[0])))
 			for p, d, bn, bd in zip(self.dims, data[:3], self.bins, self.boundary):
-				print '  {0} from {1} to {2} with {3}: {4}'.format(p, d.min(), d.max(), method, condition(method=='bin', bn, bd))
+				print('  {0} from {1} to {2} with {3}: {4}'.format(p, d.min(), d.max(), method, condition(method=='bin', bn, bd)))
 
 		binned = [[], [], [], []]
 		error = [[], [], [], []]
@@ -3175,7 +3175,7 @@ class PhotometricModelFitter(object):
 
 	def plot(self):
 		if self.fitted == False:
-			print 'No model has been fitted.'
+			print('No model has been fitted.')
 			return
 		from matplotlib import pyplot as plt
 		ratio = self.data.BDR/self.fit
@@ -3183,7 +3183,7 @@ class PhotometricModelFitter(object):
 		figs.append(plt.figure(100))
 		plt.clf()
 		f, ax = plt.subplots(3, 1, num=100)
-		for i, v, xlbl in zip(range(3), [self.data.inc.value, self.data.emi.value, self.data.pha.value], ['Incidence', 'Emission', 'Phase']):
+		for i, v, xlbl in zip(list(range(3)), [self.data.inc.value, self.data.emi.value, self.data.pha.value], ['Incidence', 'Emission', 'Phase']):
 			ax[i].plot(v, ratio, 'o')
 			ax[i].hlines(1, v.min(), v.max())
 			pplot(ax[i], xlabel=xlbl+' ('+str(self.data.inc.unit)+')', ylabel='Measured/Modeled')
@@ -3274,7 +3274,7 @@ class Mul(astropy.modeling.mappings.Mapping):
         self._outputs = 'y',
     def __call__(self,*args,**kwarg):
         ys = super(Mul,self).__call__(*args,**kwarg)
-        print ys
+        print(ys)
         y = 1.
         for x in list(ys):
             y *= x
@@ -3328,7 +3328,7 @@ def extract_phodata(illfile, ioffile=None, backplanes=None, bin=1, verbose=True)
 	for b in backplanes:
 		if b not in illbackplanes:
 			if verbose:
-				print 'Warning: backplane {0} not found in input cube, dropped'.format(b)
+				print('Warning: backplane {0} not found in input cube, dropped'.format(b))
 			backplanes.pop(backplanes.index(b))
 	ill = empty((len(backplanes),)+ill0.shape[1:])
 	for i in range(len(backplanes)):
@@ -3350,7 +3350,7 @@ def extract_phodata(illfile, ioffile=None, backplanes=None, bin=1, verbose=True)
 				break
 		if p < 0:
 			if verbose:
-				print 'I/F data not found.'
+				print('I/F data not found.')
 		im = ill0[0:p+1]
 		imnames = illbackplanes[0:p+1]
 	else:
@@ -3371,7 +3371,7 @@ def extract_phodata(illfile, ioffile=None, backplanes=None, bin=1, verbose=True)
 				im = rebin(im, [1,bin,bin], axis=[0,1,2], mean=True)
 			masked |= (flags != 0)
 		p = im.shape[0]-1
-		imnames = ['Data'+`i` for i in range(im.shape[0])]
+		imnames = ['Data'+repr(i) for i in range(im.shape[0])]
 
 	ww = where(~masked)
 	if len(ww[0])>0:
@@ -3391,4 +3391,4 @@ def extract_phodata(illfile, ioffile=None, backplanes=None, bin=1, verbose=True)
 		return PhotometricData(out)
 	else:
 		if verbose:
-			print 'No valid data extracted.'
+			print('No valid data extracted.')

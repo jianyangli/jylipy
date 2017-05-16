@@ -109,7 +109,7 @@ class KeplerOrbit(object):
     else:
       E = numpy.zeros(len(t))
       if self.e < 1:
-        for i in xrange(len(t)):
+        for i in range(len(t)):
           E[i] = self.ks.getE(M[i], self.e)
       if self.e > 1:
       	E[:] = 0.   #### TO BE IMPLEMENTED
@@ -190,7 +190,7 @@ class KeplerOrbit(object):
     else:
       # Assume it is an array
       xyz = numpy.zeros( (len(t), 3) )
-      for i in xrange(len(t)):
+      for i in range(len(t)):
         xyz[i,::] = numpy.array([cos(self._Omega)*cos(wf[i]) - sin(self._Omega)*sin(wf[i])*cos(self._i),
                          sin(self._Omega)*cos(wf[i]) + cos(self._Omega)*sin(wf[i])*cos(self._i),
                          sin(wf[i])*sin(self._i)
@@ -236,7 +236,7 @@ class KeplerOrbit(object):
     else:
       # Assume it is an array
       vel = numpy.zeros( (len(t), 3) )
-      for i in xrange(len(t)):
+      for i in range(len(t)):
         vel[i,::] = nar[i] * numpy.array([b*l2*cos(E[i]) - self.a*l1*sin(E[i]),
                                b*m2*cos(E[i]) - self.a*m1*sin(E[i]),
                                b*n2*cos(E[i]) - self.a*n1*sin(E[i])])
@@ -347,7 +347,7 @@ class KeplerOrbit(object):
     else:
       # Assume it is an array
       psdist = numpy.zeros(len(t))
-      for i in xrange(len(t)):
+      for i in range(len(t)):
         psdist[i] = p/(1.+self.e*cos(f[i]))*sqrt(1.-sin(self._i)**2*sin(wf[i])**2)
 
     return psdist
@@ -490,8 +490,8 @@ def phaseAngle(pos, los='-z'):
     # It is an array of positions
     N = len(pos[::,0])
     result = numpy.zeros(N)
-    for i in xrange(N):
-      print i, numpy.sum((-pos[i,::]) * (-l.los)), pos[i,::]
+    for i in range(N):
+      print(i, numpy.sum((-pos[i,::]) * (-l.los)), pos[i,::])
       result[i] = numpy.arccos( numpy.sum((-pos[i,::]) * (-l.los)) / \
                   numpy.sqrt(numpy.sum(pos[i,::]**2)) )
     return result/numpy.pi*180.

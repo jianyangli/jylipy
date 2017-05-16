@@ -81,12 +81,12 @@ def aspect(files, out=None, target=None, kernel=None, keys=None, verbose=False):
 		try:
 			import spice
 		except ImportError:
-			print 'No SPICE module found.'
+			print('No SPICE module found.')
 			geo = False
 		if kernel is not None:
 			spice.furnsh(kernel)
 			if spice.bodn2c(target) is None:
-				print 'Target name not in SPICE name space.  Geometry keys ignored'
+				print('Target name not in SPICE name space.  Geometry keys ignored')
 				geo = False
 
 	# Set up table columns
@@ -112,13 +112,13 @@ def aspect(files, out=None, target=None, kernel=None, keys=None, verbose=False):
 	rows, masks = [], []
 
 	# Loop through images
-	for f, j in zip(files,range(len(files))):
+	for f, j in zip(files,list(range(len(files)))):
 		if verbose:
-			print 'Processing image '+f+'...'
+			print('Processing image '+f+'...')
 		img = fits.open(f)
 
 		# Collect FITS keywords
-		for k, i in zip(fitskeys+keys, range(nfk)):
+		for k, i in zip(fitskeys+keys, list(range(nfk))):
 			try:
 				row[i] = img[0].header[k]
 			except KeyError:
@@ -129,7 +129,7 @@ def aspect(files, out=None, target=None, kernel=None, keys=None, verbose=False):
 		# Collect geometry information
 		if geo:
 			cjd = (row[3]+row[4])/2
-			et = spice.str2et('JD'+`cjd`)
+			et = spice.str2et('JD'+repr(cjd))
 			az = (360-img[1].header['orientat']) % 360
 			pos1, ltime1 = spice.spkezr(target, et, 'j2000', 'lt+s', 'earth')
 			losxyz = pos1[0:3]
@@ -153,7 +153,7 @@ def aspect(files, out=None, target=None, kernel=None, keys=None, verbose=False):
 
 	# Create table
 	asp = Table(names=fitskeys+keys+spicekeys, rows=rows, masked=True)
-	for k, m in zip(asp.keys(), np.array(masks).T):
+	for k, m in zip(list(asp.keys()), np.array(masks).T):
 		asp[k].mask = m
 
 	# Post-processing for the table
@@ -220,9 +220,9 @@ def solarflux(filters, spec=None):
 				sf.append([sflx,mag])
 
 			except IOError:
-				print flt+': Filter throughput file not found: '+ thfile
+				print(flt+': Filter throughput file not found: '+ thfile)
 		else:
-			print flt+': Filter throughput file not defined.'
+			print(flt+': Filter throughput file not defined.')
 
 	return sf
 
@@ -377,7 +377,7 @@ def read_jit(fn):
 	'''
 
 	jit = Table().read(fn)
-	for k in jit.keys():
+	for k in list(jit.keys()):
 		if jit[k].unit == 'seconds':
 			jit[k].unit = units.s
 		elif jit[k].unit == 'arcsec':

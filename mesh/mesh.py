@@ -11,9 +11,9 @@ def meshRead(fname):
 	f = open(fname, 'r')
 
 	# Skip comment lines and empty lines
-	line = f.next()
+	line = next(f)
 	while line[0] in ['#', '\n']:
-		line = f.next()
+		line = next(f)
 
 	# Number of vertices and triangles
 	nvert, ntri = [int(x) for x in line.split()]
@@ -21,17 +21,17 @@ def meshRead(fname):
 	# Vertices
 	vert = np.empty((nvert,3), dtype=np.float32)
 	for i in range(nvert):
-		line = f.next()
+		line = next(f)
 		while line[0] in ['#', '\n']:
-			line = f.next()
+			line = next(f)
 		vert[i] = [float(x) for x in line.split()]
 
 	# Triangles
 	tri = np.empty((ntri,3), dtype=np.int32)
 	for i in range(ntri):
-		line = f.next()
+		line = next(f)
 		while line[0] in ['#', '\n']:
-			line = f.next()
+			line = next(f)
 		tri[i] = [int(x) for x in line.split()]
 
 	f.close()
@@ -62,7 +62,7 @@ def meshWrite(fname, vert, tri, comment=None):
 		if not hasattr(comment,'__iter__'):
 			comment = [comment]
 		for c in comment:
-			print c
+			print(c)
 			f.write('# '+c+'\n')
 		f.write('\n')
 
@@ -84,11 +84,11 @@ def vrmlRead(fname):
 	f = open(fname, 'r')
 
 	# Read in vertices
-	line = f.next()
+	line = next(f)
 	while line.find('point') < 0:
-		line = f.next()
+		line = next(f)
 	vert = []
-	line = f.next()
+	line = next(f)
 	while True:
 		line = line.strip().split('#')[0]
 		if line != '':
@@ -99,14 +99,14 @@ def vrmlRead(fname):
 				except:
 					break
 				vert.append(v)
-		line = f.next()
+		line = next(f)
 	vert = np.asarray(vert)
 
 	# Read in triangles
 	while line.find('coordIndex') < 0:
-		line = f.next()
+		line = next(f)
 	tri = []
-	line = f.next()
+	line = next(f)
 	while True:
 		line = line.strip().split('#')[0]
 		if line != '':
@@ -117,7 +117,7 @@ def vrmlRead(fname):
 				except:
 					break
 				tri.append(ind[:-1])
-		line = f.next()
+		line = next(f)
 	tri = np.asarray(tri)
 
 	f.close()

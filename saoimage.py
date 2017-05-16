@@ -207,7 +207,7 @@ class DS9(ds9.ds9):
 			elif xpa.startswith('get'):
 				cmd = xpa[xpa.find(' ')+1:]
 				try:
-					print(self.get(cmd))
+					print((self.get(cmd)))
 				except:
 					print('Invalid XPA command')
 			elif xpa.startswith('set'):
@@ -217,7 +217,7 @@ class DS9(ds9.ds9):
 				except:
 					print('Invalid XPA command')
 				if r != 1:
-					print('Error in executing XPA command "'+xpa+'"')
+					print(('Error in executing XPA command "'+xpa+'"'))
 			else:
 				print('Invalid XPA command')
 
@@ -374,14 +374,14 @@ class DS9(ds9.ds9):
 						st.append(-1)
 						if verbose:
 							print()
-							print('Error: Extension '+repr(ext)+' does not exist!')
-							print(fitsimg.info())
+							print(('Error: Extension '+repr(ext)+' does not exist!'))
+							print((fitsimg.info()))
 					elif fitsimg[ext].data is None:
 						if verbose:
 							print()
-							print('Error: Extension '+repr(ext)+' contains no image!')
+							print(('Error: Extension '+repr(ext)+' contains no image!'))
 							print()
-							print(fitsimg.info())
+							print((fitsimg.info()))
 					else:
 						tmp = self.set('file '+im+'['+repr(ext)+']')
 				elif im.lower().endswith('.img'):
@@ -489,7 +489,7 @@ class DS9(ds9.ds9):
 				aperture.append(P.CircularAperture((x,y), radius[i%nr]))
 				self.set('regions','image; circle('+','.join([str(x),str(y),str(radius[i%nr])])+')')
 				i += 1
-				print('Aperture 1: ({0}, {1})'.format(x, y))
+				print(('Aperture 1: ({0}, {1})'.format(x, y)))
 				print()
 		return aperture
 
