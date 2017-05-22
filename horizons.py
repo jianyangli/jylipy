@@ -122,7 +122,7 @@ def getsboscelt(name, recno=None, spice=False, disp=True):
 		print()
 		print('Done.')
 	if spice:
-		import spice
+		import spiceypy as spice
 		ep = spice.str2et('JD '+str(elm[0])) - spice.str2et('2000-01-01.0')
 		return u.au.to(u.km, elm[2]),elm[1],np.deg2rad(elm[6]),np.deg2rad(elm[4]),np.deg2rad(elm[5]),np.deg2rad(elm[8]),ep
 	else:

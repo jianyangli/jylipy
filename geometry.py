@@ -1,7 +1,7 @@
 '''Package containing the calculation of observation geometries for
 solar system objects.
 '''
-import spice
+import spiceypy as spice
 import numpy as np
 from .core import *
 from .apext import Table, Column

@@ -3,7 +3,7 @@
 #
 
 import numpy as np
-import spice
+import spiceypy as spice
 from collections import OrderedDict
 from ..core import Image, ImageMeasurement, readfits, ascii_read, sflux
 from ..apext import Table, nddata, units

@@ -12,7 +12,7 @@ class spice(object):
 
 	@staticmethod
 	def load_generic():
-		import spice
+		import spiceypy as spice
 		kernels = [dir.spice_generic_kernel+x for x in 'lsk/naif0010.tls pck/pck00010.tpc spk/planets/de430.bsp names.ker'.split()]
 		for k in kernels:
 			spice.furnsh(k)
