@@ -21,9 +21,10 @@ v0.0.4 : 5/17/2016, JYL @PSI
 
 import os
 import pysis
+from pysis import isis
 
 #_to_load = ['explode', 'ratio', 'catlab', 'cubeit', 'mosrange', 'fits2isis', 'cam2map', 'dawnfc2isis', 'dawnvir2isis']
-_to_load = pysis.isis.__all__
+_to_load = isis.__all__
 
 class CubeFile(pysis.cubefile.CubeFile):
 	'''Modified CubeFile class that reverse the data in vertical
@@ -135,7 +136,7 @@ class EZWrapper(object):
 	For example:
 
 		Original API:
-		  pysis.isis.cam2map(**{'from': infile, 'to': outfile, 'map': mapfile, ...})
+		  isis.cam2map(**{'from': infile, 'to': outfile, 'map': mapfile, ...})
 
 		New API:
 		  pysis_ext.cam2map()  # Open GUI
@@ -226,7 +227,7 @@ class EZWrapper(object):
 
 
 for c in _to_load:
-	exec(c+' = EZWrapper(pysis.isis.'+c+')')
+	exec(c+' = EZWrapper(isis.'+c+')')
 
 
-automos = EZWrapper(pysis.isis.automos, to='mosaic', priority='average')
+automos = EZWrapper(isis.automos, to='mosaic', priority='average')
