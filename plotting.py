@@ -94,7 +94,7 @@ def pplot(ax=None, axfs='large', lfs='x-large', tightlayout=True, xlabel=None, y
 
 	if not skipline:
 		mew = kwargs.pop('markeredgewidth', kwargs.pop('mew', 1.25))
-		ms = kwargs.pop('markersize', kwargs.pop('ms', 7.0))
+		ms = kwargs.pop('markersize', kwargs.pop('ms', 5.0))
 		lw = kwargs.pop('linewidth', kwargs.pop('lw', 2.0))
 		plt.setp(ax.get_lines(), mew=mew, ms=ms, lw=lw, **kwargs)
 
