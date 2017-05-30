@@ -213,7 +213,7 @@ def obsgeom(time, target, observer='earth', frame=None, saveto=None):
 		tstr = time.utc.isot
 	elif hasattr(time, '__iter__'):
 		time = np.asanyarray(time)
-		if time.dtype.kind == 'S':
+		if time.dtype.kind in ['S','U']:
 			tmp = Time(time)
 			et = tmp.et
 			tstr = tmp.utc.isot

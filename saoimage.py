@@ -152,9 +152,9 @@ class AnnulusRegion(Region):
 	size = ('r_out', 'r_out')
 
 
-import pyds9 as ds9
-class DS9(ds9.ds9):
-	'''Extended ds9.ds9 class.'''
+import pyds9
+class DS9(pyds9.DS9):
+	'''Extended pyds9.DS9 class.'''
 
 	def __init__(self, restore=None, **kwargs):
 		super(DS9, self).__init__(**kwargs)
@@ -184,7 +184,7 @@ class DS9(ds9.ds9):
 			return float(x)-1, float(y)-1
 
 	def get_arr2np(self):
-		'''Replacement of the original ds9.ds9.get_arr2np(), which seems
+		'''Replacement of the original pyds9.DS9.get_arr2np(), which seems
 		to return a float32 array with bytes swapped, and the image size
 		corrected.'''
 		im = super(DS9, self).get_arr2np().byteswap()
@@ -620,7 +620,7 @@ def getds9(ds9=None, new=False, restore=None):
 
 	Parameters
 	----------
-	ds9 : str, ds9.ds9 instance, optional
+	ds9 : str, pyds9.DS9 instance, optional
 	  The ID of DS9 window.
 	new : bool, optional
 	  If True, then a new window is openned unless `ds9` specifies
@@ -649,11 +649,11 @@ def getds9(ds9=None, new=False, restore=None):
 	else:
 		ds9_id = None
 
-	import ds9
-	if isinstance(ds9_id, ds9.ds9):
+	import pyds9
+	if isinstance(ds9_id, pyds9.DS9):
 		return ds9_id
 
-	targs = ds9.ds9_targets()
+	targs = pyds9.ds9_targets()
 	if targs is not None:
 		targs = [x.split()[0].split(':')[1] for x in targs]
 	if ds9_id is None:

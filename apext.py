@@ -28,6 +28,14 @@ __all__ = [
 # Extended Table and related classes and functions
 #---------------------------------------------------------------------
 
+def is_iterable(v):
+	if isinstance(v, str):
+		return False
+	elif hasattr(v, '__iter__'):
+		return True
+	else:
+		return False
+
 class Table(table.Table):
 	'''Extended astropy.table.Table class.
 
@@ -83,16 +91,19 @@ class Table(table.Table):
 		return self[valuecol][index]
 
 	def index(self, keycol, key, logic='and', op='=='):
-		if hasattr(keycol, '__iter__') and hasattr(key, '__iter__'):
+		keycol_iter = is_iterable(keycol)
+		key_iter = is_iterable(key)
+		if keycol_iter and key_iter:
 			if len(keycol) != len(key):
 				raise ValueError('`keycol` and `key` must have the same length')
-		elif hasattr(keycol,'__iter__'):
+		elif keycol_iter:
 			key = [key]*len(keycol)
-		elif hasattr(key,'__iter__'):
+		elif key_iter:
 			keycol = [keycol]*len(key)
 		else:
 			return self._col_index(self[keycol], key, op).nonzero()
-		if hasattr(op, '__iter__'):
+		op_iter = is_iterable(op)
+		if op_iter:
 			if len(op) != len(keycol):
 				raise ValueError('`op` must have the same length as `keycol`')
 		else:

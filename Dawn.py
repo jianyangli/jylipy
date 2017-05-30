@@ -3,7 +3,7 @@
 #
 
 
-import numpy as np, string, spice
+import numpy as np, string, spiceypy as spice
 from copy import copy
 import ccdproc
 from .core import *

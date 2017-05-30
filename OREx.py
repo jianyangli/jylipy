@@ -2,7 +2,7 @@
 #
 # 1/5/2017, JYL @PSI
 
-import numpy as np, string, spice
+import numpy as np, string, spiceypy as spice
 from copy import copy
 import ccdproc
 from .core import *

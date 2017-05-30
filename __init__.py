@@ -24,6 +24,7 @@ from . import PDS
 from . import vector
 from . import pysis_ext
 from . import astrometry
+from . import mpc
 #from . import spiceypy1
 
 # Dawn related
