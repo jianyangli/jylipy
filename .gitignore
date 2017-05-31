@@ -1,7 +1,6 @@
 *.pyc
-__pycache__/
 old/
 *.bak
 build/
 dist/
-*.egg-info/
+*.egg-info*/
