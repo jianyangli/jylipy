@@ -522,8 +522,9 @@ class FCImage(Image):
 
 	def _copy_properties(self, data):
 		self.records = getattr(data, 'records', None)
-		for k in self.records:
-			setattr(self, k, getattr(data, k))
+		if self.records is not None:
+			for k in self.records:
+				setattr(self, k, getattr(data, k))
 
 	def _init_from_pdsdata(self, inputfile):
 		pdsdata = PDS.PDSData(inputfile)

@@ -5,6 +5,7 @@ v0.0.1 : Jan 2015, JYL@PSI
 import numpy as np, numbers
 from .apext import units
 from .core import Image, condition, num, CaseInsensitiveOrderedDict
+from io import IOBase
 
 __all__ = ['Object' , 'Header', 'pds_types', 'PDSData', 'readpds']
 
@@ -20,18 +21,18 @@ class Object(CaseInsensitiveOrderedDict):
 	'''PDS Object class'''
 
 	def __init__(self, obj=None):
-		if isinstance(obj, file):
+		if isinstance(obj, IOBase):
 			super(Object, self).__init__()
 			self.readfile(obj)
 		else:
 			super(Header, self).__init__(obj)
 
 	def readfile(self, f):
-		if not isinstance(f, file):
-			f = f.open(f, 'r')
+		if not isinstance(f, IOBase):
+			f = f.open(f, 'rb')
 		inobj = False
 		while True:
-			s = f.readline()
+			s = f.readline().decode()
 			if not inobj and not s.startswith('OBJECT'):
 				continue
 			if '=' in s:
@@ -65,12 +66,12 @@ class Header(CaseInsensitiveOrderedDict):
 			raise ValueError('input file does not have a PDS extension (IMG or LBL)')
 		for k in list(self.keys()):
 			self.pop(k)
-		if isinstance(hdrfile, file):
+		if isinstance(hdrfile, IOBase):
 			f = hdrfile
 		else:
-			f = open(hdrfile,'r')
+			f = open(hdrfile,'rb')
 		# Check PDS signature and version
-		s = f.readline().split('=')
+		s = f.readline().decode().split('=')
 		if s[0].strip() != 'PDS_VERSION_ID':
 			raise VersionError('No a valid PDS label found.')
 		if s[1].strip() != 'PDS3':
@@ -78,7 +79,7 @@ class Header(CaseInsensitiveOrderedDict):
 		self[s[0].strip()] = s[1].strip()
 		# Processing keys
 		while True:
-			s = f.readline()#.strip('\r\n')
+			s = f.readline().decode()#.strip('\r\n')
 			if s.startswith('/*') or s.strip() == '':
 				continue
 			if '=' in s:
