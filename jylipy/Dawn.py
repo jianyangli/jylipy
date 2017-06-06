@@ -916,7 +916,7 @@ def fc_fits2cube(infile, outfile, rawdata=DAWN_DIR+'data/fc2/level-1a/', tempdir
 
 
 def extract_phodata(illfile, ioffile=None, backplanes=['Phase Angle', 'Local Emission Angle', 'Local Incidence Angle', 'Latitude', 'Longitude'], outfile=None, bin=1, overwrite=False):
-	'''Extract I/F data
+	'''Extract I/F data from a single image/backplane
 
  illdata : str or list of str
    The ISIS cube file that contains the illumination backplanes
@@ -1022,7 +1022,7 @@ def extract_phodata(illfile, ioffile=None, backplanes=['Phase Angle', 'Local Emi
 
 
 def collect_fc_phodata(illfile, outfile, ioffile=None, backplanes=['Phase Angle', 'Local Emission Angle', 'Local Incidence Angle', 'Latitude', 'Longitude'], bin=1, overwrite=False):
-	'''Collect photometric data for FC images
+	'''Collect photometric data from many FC images.  It calls extract_phodata
 
 	illfile : list of str
 	  Names of illumination backplane files
