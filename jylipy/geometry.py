@@ -90,9 +90,12 @@ def subcoord(time, target, observer='earth', bodyframe=None, saveto=None, planet
 	# Determine whether kernel pool for body frame exists
 	if bodyframe is None:
 		bodyframe = target+'_fixed'
-	kp = spice.gipool('FRAME_'+bodyframe.upper(),0,1)
+	try:
+		kp = spice.gipool('FRAME_'+bodyframe.upper(),0,1)
+	except spice.utils.support_types.SpiceyError:
+		kp = None
 	if kp is not None:
-		code = kp[1]
+		code = kp[0]
 		polera = spice.bodvrd(target, 'POLE_RA', 3)[1][0]
 		poledec = spice.bodvrd(target, 'POLE_DEC', 3)[1][0]
 		r_a, r_b, r_c = spice.bodvrd(target, 'RADII', 3)[1]
@@ -100,11 +103,13 @@ def subcoord(time, target, observer='earth', bodyframe=None, saveto=None, planet
 		flt = (r_e-r_c)/r_e
 
 	# Process input time
-	if hasattr(time,'__iter__'):
-		et = [spice.str2et(x) for x in time]
-	else:
+	if isinstance(time,str):
 		et = [spice.str2et(time)]
 		time = [time]
+	elif hasattr(time, '__iter__'):
+		et = [spice.str2et(x) for x in time]
+	else:
+		raise TypeError('str or list of str expected, {0} received'.format(type(time)))
 
 	# Prepare for iteration
 	sslat, sslon, solat, solon, rh, delta, phase, polepa, poleinc, sunpa, suninc, tgtra, tgtdec = [], [], [], [], [], [], [], [], [], [], [], [], []

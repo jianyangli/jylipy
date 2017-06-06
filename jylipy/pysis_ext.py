@@ -193,7 +193,9 @@ class EZWrapper(object):
 			parms = {}
 		else:
 			infile = args[0]
-			if hasattr(infile, '__iter__'):
+			if isinstance(infile, str) or isinstance(infile, bytes):
+				parms = {'from': infile}
+			elif hasattr(infile, '__iter__'):
 				fromlist = True
 				listfile = kwargs.pop('listfile', None)
 				if listfile is None:
@@ -203,7 +205,7 @@ class EZWrapper(object):
 				listgen(lstfile, infile)
 				parms = {'fromlist': lstfile}
 			else:
-				parms = {'from': infile}
+				raise TypeError('str/bytes or list of str/bytes expected, {0} received'.formate(type(infile)))
 			if len(args)>1:
 				parms[self.to] = args[1]
 
