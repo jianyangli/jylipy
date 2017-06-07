@@ -2008,16 +2008,7 @@ def readfits(imfile, ext=0, verbose=True, header=False):
    Returned data retains the original data type in fits.
 	'''
 
-	if hasattr(imfile,'__iter__'):
-
-		img = [readfits(f, ext=ext, verbose=verbose) for f in imfile]
-		if header:
-			return img, headfits(imfile, ext=ext, verbose=verbose)
-		else:
-			return img
-
-	else:
-
+	if isinstance(imfile, str):
 		fitsfile = fits.open(imfile)
 		if verbose:
 			fitsfile.info()
@@ -2049,6 +2040,16 @@ def readfits(imfile, ext=0, verbose=True, header=False):
 			return img, hdr
 		else:
 			return img
+	elif hasattr(imfile,'__iter__'):
+
+		img = [readfits(f, ext=ext, verbose=verbose) for f in imfile]
+		if header:
+			return img, headfits(imfile, ext=ext, verbose=verbose)
+		else:
+			return img
+
+	else:
+		raise TypeError('str or list of str expected, {0} received'.format(type(imfile)))
 
 
 def writefits(imfile, data=None, header=None, name=None, append=False, clobber=False):
