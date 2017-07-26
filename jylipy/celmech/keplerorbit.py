@@ -5,10 +5,10 @@ from PyAstronomy.pyasl import MarkleyKESolver
 class KeplerOrbit(object):
   '''
     Calculate a Kepler orbit.
-    
+
     The definitions and most of the formulae used in this class
     derive from the book "Orbital Motion" by A.E. Roy.
-    
+
     The orientation of the ellipse:
         For zero inclination the ellipse is located in the x-y plane.
         If the eccentricity is increased, the periastron will lie
@@ -19,7 +19,7 @@ class KeplerOrbit(object):
         Changing `w`, i.e., the longitude of the periastron, will
         not change the plane of the orbit, but rather represent a
         rotation of the orbit in the plane.
-    
+
     Parameters
     ----------
     a : float
@@ -42,7 +42,7 @@ class KeplerOrbit(object):
         method, which takes either a float or array of float
         of mean anomalies and the eccentricity, and returns
         the associated eccentric anomalies.
-    
+
     Attributes
     ----------
     a : float
@@ -66,16 +66,16 @@ class KeplerOrbit(object):
     n : float
         Mean motion (circular frequency).
   '''
-  
+
   def meanAnomaly(self, t):
     '''
       Calculate the mean anomaly.
-      
+
       Parameters
       ----------
       t : float or array
           The time axis.
-      
+
       Returns
       -------
       Mean anomaly : float or array
@@ -87,12 +87,12 @@ class KeplerOrbit(object):
   def _getEccentricAnomaly(self, t):
     '''
       Calculate eccentric anomaly.
-      
+
       Parameters
       ----------
       t : array of float
           The times at which to calculate the eccentric anomaly, E.
-      
+
       Returns
       -------
       E : Array of float
@@ -101,26 +101,26 @@ class KeplerOrbit(object):
     M = self.meanAnomaly(t)
     if not hasattr(t, "__iter__"):
       if self.e < 1:
-      	E = self.ks.getE(M, self.e)
+        E = self.ks.getE(M, self.e)
       if self.e > 1:
-      	E = 0.   #### TO BE IMPLEMENTED
+        E = 0.   #### TO BE IMPLEMENTED
       if self.e == 1:
-      	E = 0.5*(3.*M + np.sqrt(9.*M*M + 4.))  # Eq. 6.2.29 in Collins.  Don't know whether this is indeed eccentric anomaly for parabola
+        E = 0.5*(3.*M + np.sqrt(9.*M*M + 4.))  # Eq. 6.2.29 in Collins.  Don't know whether this is indeed eccentric anomaly for parabola
     else:
       E = numpy.zeros(len(t))
       if self.e < 1:
         for i in range(len(t)):
           E[i] = self.ks.getE(M[i], self.e)
       if self.e > 1:
-      	E[:] = 0.   #### TO BE IMPLEMENTED
+        E[:] = 0.   #### TO BE IMPLEMENTED
       if self.e == 1:
-      	E = 0.5*(3.*M + np.sqrt(9.*M*M + 4.))
+        E = 0.5*(3.*M + np.sqrt(9.*M*M + 4.))
     return E
-  
+
   def radius(self, t, E=None):
     '''
       Calculate the orbit radius.
-      
+
       Parameters
       ----------
       t : float or array
@@ -129,7 +129,7 @@ class KeplerOrbit(object):
           If known, the eccentric anomaly corresponding
           to the time points. If not given, the numbers
           will be calculated.
-      
+
       Returns
       -------
       Radius : float or array
@@ -149,11 +149,11 @@ class KeplerOrbit(object):
       r = self.q*(1. + tan_halfnu*tan_halfnu)
 
     return r
-  
+
   def xyzPos(self, t, getTA=False):
     '''
       Calculate orbit position.
-      
+
       Parameters
       ----------
       t : float or array
@@ -161,7 +161,7 @@ class KeplerOrbit(object):
       getTA : boolean, optional
           If True, returns the "true anomaly" as a function
           of time (default is False).
-      
+
       Returns
       -------
       Position : array
@@ -199,16 +199,16 @@ class KeplerOrbit(object):
       return xyz
     else:
       return xyz, f
-  
+
   def xyzVel(self, t):
     '''
       Calculate orbit velocity.
-      
+
       Parameters
       ----------
       t : float or array
           The time axis.
-      
+
       Returns
       -------
       Velocity : array
@@ -241,24 +241,24 @@ class KeplerOrbit(object):
                                b*m2*cos(E[i]) - self.a*m1*sin(E[i]),
                                b*n2*cos(E[i]) - self.a*n1*sin(E[i])])
     return vel
-  
+
   def xyzPeriastron(self):
     '''
       The position of the periastron.
-      
+
       Returns
       -------
       Periastron : array of float
-          The x, y, and z coordinates of the periastron. 
+          The x, y, and z coordinates of the periastron.
     '''
     return self.xyzPos(self.tau)
-  
+
   def xyzApastron(self):
     '''
       The position of the apastron.
-      
+
       The apastron is the point of greatest distance.
-      
+
       Returns
       -------
       Apastron : array of float
@@ -269,7 +269,7 @@ class KeplerOrbit(object):
   def xyzCenter(self):
     '''
       Center of the ellipse
-      
+
       Returns
       -------
       Center : array of float
@@ -280,7 +280,7 @@ class KeplerOrbit(object):
   def xyzFoci(self):
     '''
       Calculate the foci of the ellipse
-      
+
       Returns
       -------
       Foci : Tuple of array of float
@@ -293,21 +293,21 @@ class KeplerOrbit(object):
     direc = (peri - apas) / numpy.sqrt( ((peri - apas)**2).sum() )
     ae = self.a * self.e
     return (center + ae*direc, center - ae*direc)
-    
+
   def xyzNodes(self):
     '''
       Calculate the nodes of the orbit.
-      
+
       The nodes of the orbit are the points at which
       the orbit cuts the observing plane. In this case,
       these are the points at which the z-coordinate
       vanishes, i.e., the x-y plane is regarded the plane
       of observation.
-      
+
       Returns
       -------
       Nodes : Tuple of two coordinate arrays
-          Returns the xyz coordinates of both nodes. 
+          Returns the xyz coordinates of both nodes.
     '''
     # f = -w
     E = arctan( tan(-self._w/2.0) * sqrt((1.-self.e)/(1.+self.e)) ) * 2.
@@ -320,21 +320,21 @@ class KeplerOrbit(object):
     t = M/self._n + self.tau
     node2 = self.xyzPos(t)
     return (node1, node2)
-  
+
   def projPlaStDist(self, t):
     '''
       Calculate the sky-projected planet-star separation.
-      
+
       Parameters
       ----------
       t : float or array
           The time axis.
-      
+
       Returns
       -------
       Position : array
           The sky-projected planet-star separation at the given time.
-          If the input was an array, the output will be an array, 
+          If the input was an array, the output will be an array,
           holding the separations at the given times.
     '''
     p = self.a * (1.- self.e**2)
@@ -351,16 +351,16 @@ class KeplerOrbit(object):
         psdist[i] = p/(1.+self.e*cos(f[i]))*sqrt(1.-sin(self._i)**2*sin(wf[i])**2)
 
     return psdist
-  
+
   def yzCrossingTime(self):
     '''
       Calculate times of crossing the yz-plane.
-      
+
       This method calculates the times at which
       the yz-plane is crossed by the orbit. This
       is equivalent to finding the times where
       x=0.
-      
+
       Returns
       -------
       Time 1 : float
@@ -380,25 +380,25 @@ class KeplerOrbit(object):
     f += pi
     E = 2.*arctan(sqrt((1-self.e)/(1.+self.e)) * tan(f/2.))
     t2 = (E - self.e*sin(E))/self._n + self.tau
-    
+
     t1 -= self._per * numpy.floor(t1/self._per)
     t2 -= self._per * numpy.floor(t2/self._per)
-    
+
     if p1[1] >= 0.0:
       # y position of p1 is > 0
       return (t1, t2)
     else:
       return (t2, t1)
- 
+
   def xzCrossingTime(self):
     '''
       Calculate times of crossing the xz-plane.
-      
+
       This method calculates the times at which
       the xz-plane is crossed by the orbit. This
       is equivalent to finding the times where
       y=0.
-      
+
       Returns
       -------
       Time 1 : float
@@ -415,34 +415,34 @@ class KeplerOrbit(object):
     f += pi
     E = 2.*arctan(sqrt((1-self.e)/(1.+self.e)) * tan(f/2.))
     t2 = (E - self.e*sin(E))/self._n + self.tau
-    
+
     t1 -= self._per * numpy.floor(t1/self._per)
     t2 -= self._per * numpy.floor(t2/self._per)
-    
+
     if p1[0] >= 0.0:
       # y position of p1 is > 0
       return (t1, t2)
     else:
       return (t2, t1)
-        
+
   def _setPer(self, per):
     self._per = per
     self._n = 2.0*pi/self._per
-  
+
   def _seti(self, i):
     self._i = i/180.*pi
-  
+
   def _setw(self, w):
     self._w = w/180.*pi
-  
+
   def _setOmega(self, omega):
     self._Omega = omega/180.*pi
-  
+
   per = property(lambda self: self._per, _setPer, doc="The orbital period.")
   i = property(lambda self: self._i/pi*180, _seti)
   w = property(lambda self: self._w/pi*180, _setw)
   Omega = property(lambda self: self._Omega/pi*180, _setOmega)
-  
+
   def __init__(self, a, per, e=0, tau=0, Omega=0, w=0, i=0, ks=MarkleyKESolver):
     # i, w, Omega are properties so that the numbers can be given in
     # deg always. The underscored attributes are in rad.
@@ -460,12 +460,12 @@ class KeplerOrbit(object):
 def phaseAngle(pos, los='-z'):
   '''
     Calculate the phase angle.
-    
+
     The phase angle is the angle between the star and the Earth (or Sun)
     as seen from the planet (e.g., Seager et al. 1999, ApJ, 504).
     The range of the phase angle is 0 - 180 degrees. In the calculations,
     it is assumed to be located at the center of the coordinate system.
-    
+
     Parameters
     ----------
     pos : array
@@ -474,18 +474,18 @@ def phaseAngle(pos, los='-z'):
     los : LineOfSight object
         A `LineOfSight` object from the pyasl giving the line of
         sight.
-    
+
     Returns
     -------
     Phase angle : The phase angle in degrees. Depending on the input,
-        it returns a single value or an array. 
+        it returns a single value or an array.
   '''
   from PyAstronomy.pyasl import LineOfSight
   l = LineOfSight(los)
   if pos.shape == (3,):
     # It is a single value
     return numpy.arccos( numpy.sum(-pos * (-l.los)) / \
-            numpy.sqrt(numpy.sum(pos**2)))/numpy.pi*180. 
+            numpy.sqrt(numpy.sum(pos**2)))/numpy.pi*180.
   else:
     # It is an array of positions
     N = len(pos[::,0])

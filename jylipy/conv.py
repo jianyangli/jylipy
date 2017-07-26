@@ -1,8 +1,8 @@
-""" astronomical units conversion tools. 
+""" astronomical units conversion tools.
 """
 
-## Copyright (C) 2008 APC CNRS Universite Paris Diderot <betoule@apc.univ-paris7.fr>  
-## 
+## Copyright (C) 2008 APC CNRS Universite Paris Diderot <betoule@apc.univ-paris7.fr>
+##
 ## This program is free software; you can redistribute it and/or modify
 ## it under the terms of the GNU General Public License as published by
 ## the Free Software Foundation; either version 3 of the License, or
@@ -39,32 +39,32 @@ def Jy(freq):
 
     Parameters
     ----------
-    freq : scalar. Frequency value. 
+    freq : scalar. Frequency value.
 
     Returns
     -------
-    scalar, conversion factor value. 
+    scalar, conversion factor value.
     """
     return Jansky2SI
 
 
 def K_CMB(freq):
     """ Return conversion factor from Kelvin CMB to SI at a given frequency.
-    
+
     Parameters
     ----------
-    freq : scalar. Frequency value. 
+    freq : scalar. Frequency value.
 
     Returns
     -------
-    scalar, conversion factor value. 
+    scalar, conversion factor value.
     """
     x = (hPlanck *freq)/ (kBoltzmann * tcmb)
     ex = exp(x)
     den = ex-1
     den *= den
     den = 1/den
-    fc = freq /speedOfLight 
+    fc = freq /speedOfLight
     return 2*kBoltzmann * fc *fc * x * x * ex * den
 
 def K_RJ(freq):
@@ -72,11 +72,11 @@ def K_RJ(freq):
 
     Parameters
     ----------
-    freq : scalar. Frequency value. 
+    freq : scalar. Frequency value.
 
     Returns
     -------
-    scalar, conversion factor value. 
+    scalar, conversion factor value.
     """
     return 2*kBoltzmann*freq*freq/(speedOfLight*speedOfLight)
 
@@ -85,13 +85,13 @@ def K_KCMB(freq):
 
     Parameters
     ----------
-    freq : scalar. Frequency value. 
+    freq : scalar. Frequency value.
 
     Returns
     -------
-    scalar, conversion factor value. 
+    scalar, conversion factor value.
     """
-    
+
     return tcmb*K_CMB(freq)
 
 def y_sz(freq):
@@ -99,11 +99,11 @@ def y_sz(freq):
 
     Parameters
     ----------
-    freq : scalar. Frequency value. 
+    freq : scalar. Frequency value.
 
     Returns
     -------
-    scalar, conversion factor value. 
+    scalar, conversion factor value.
     """
     x = (hPlanck *freq)/ (kBoltzmann * tcmb)
     ex = exp(x)
@@ -118,11 +118,11 @@ def si(freq):
 
     Parameters
     ----------
-    freq : scalar. Frequency value. 
+    freq : scalar. Frequency value.
 
     Returns
     -------
-    scalar, conversion factor value. 
+    scalar, conversion factor value.
     """
     return 1.0
 
@@ -131,11 +131,11 @@ def taubeta2(freq):
 
     Parameters
     ----------
-    freq : scalar. Frequency value. 
+    freq : scalar. Frequency value.
 
     Returns
     -------
-    scalar, conversion factor value. 
+    scalar, conversion factor value.
     """
 
     return 1.0
@@ -147,14 +147,14 @@ def convfact(freq=1.0e10, fr=r'mK_CMB',to=r'mK_CMB'):
 
     Parameters
     ----------
-    freq : scalar. Frequency value. 
+    freq : scalar. Frequency value.
     fr : string as prefixunit. unit can be either 'Jy/sr', 'K_CMB', 'K_RJ', 'K/KCMB', 'y_sz', 'si', 'taubeta'
-    with optionnal prefix 'n', 'u', 'm', 'k', 'M', 'G' 
-    to : string as prefixunit. 
+    with optionnal prefix 'n', 'u', 'm', 'k', 'M', 'G'
+    to : string as prefixunit.
 
     Returns
     -------
-    scalar, conversion factor value. 
+    scalar, conversion factor value.
     """
 
     frpre, fru =  re.match(r'(n|u|m|k|M|G)?(Jy/sr|K_CMB|K_RJ|K/KCMB|y_sz|si|taubeta2)', fr).groups()
@@ -168,7 +168,7 @@ def convfact(freq=1.0e10, fr=r'mK_CMB',to=r'mK_CMB'):
         fac = 1.0
     else:
         fac = eval(fru+'(freq)/'+tou+'(freq)')
-    
+
     if not frpre is None:
         fac *= prefixes[frpre]
     if not topre is None:
