@@ -2384,7 +2384,7 @@ def create_pvl(par, outfile, **kwarg):
     f = open(outfile,'w')
     f.write('# Created by create_pvl at {0}\n'.format(Time.now().isot))
     if comment is not None:
-        if hasattr(comment, '__iter__'):
+        if (not isinstance(comment, (str,bytes))) and hasattr(comment, '__iter__'):
             for c in comment:
                 f.write('# {0}\n'.format(c))
         else:

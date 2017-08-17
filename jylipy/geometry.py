@@ -106,7 +106,7 @@ def subcoord(time, target, observer='earth', bodyframe=None, saveto=None, planet
     if isinstance(time,str):
         et = [spice.str2et(time)]
         time = [time]
-    elif hasattr(time, '__iter__'):
+    elif (not isinstance(time, (str,bytes))) and hasattr(time, '__iter__'):
         et = [spice.str2et(x) for x in time]
     else:
         raise TypeError('str or list of str expected, {0} received'.format(type(time)))
@@ -216,7 +216,7 @@ def obsgeom(time, target, observer='earth', frame=None, saveto=None):
     if isinstance(time, Time):
         et = time.et
         tstr = time.utc.isot
-    elif hasattr(time, '__iter__'):
+    elif (not isinstance(time, (str,bytes))) and hasattr(time, '__iter__'):
         time = np.asanyarray(time)
         if time.dtype.kind in ['S','U']:
             tmp = Time(time)

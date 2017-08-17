@@ -93,7 +93,7 @@ def aspect(files, out=None, target=None, kernel=None, keys=None, verbose=False):
     fitskeys = 'RootName Date-Obs Time-Obs ExpStart ExpEnd Filter ExpTime Orientat'.split()
     fitsfmt = '{:s} {:s} {:s} {:.7f} {:.7f} {:s} {:.2f}'.split()
     if keys is not None:
-        if hasattr(keys,'__iter__'):
+        if not isinstance(keys, (str,bytes)):
             keys = list(keys)
         else:
             keys = [keys]
@@ -205,7 +205,7 @@ def solarflux(filters, spec=None):
 
     flist = ascii.read(filter_table)
 
-    if not hasattr(filters, '__iter__'):
+    if isinstance(filters, (str,bytes)):
         filters = [filters]
 
     sf = []
@@ -420,7 +420,7 @@ def obslog(files):
     from astropy.io import fits
     from collections import OrderedDict
 
-    if not hasattr(files,'__iter__'):
+    if isinstance(files, (str,bytes)):
         files = [files]
 
     keys = [[0, 'ROOTNAME', ''],

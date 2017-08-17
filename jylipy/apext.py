@@ -29,7 +29,7 @@ __all__ = [
 #---------------------------------------------------------------------
 
 def is_iterable(v):
-    if isinstance(v, str):
+    if isinstance(v, str) or isinstance(v, bytes):
         return False
     elif hasattr(v, '__iter__'):
         return True

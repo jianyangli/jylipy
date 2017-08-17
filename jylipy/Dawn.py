@@ -64,19 +64,19 @@ class Data(object):
 
     def __init__(self, instrument=allinstruments, level=alllevels, phase=allphases, quicklook=False):
         self.index = ascii_read(self.indexfile)
-        if hasattr(instrument, '__iter__'):
+        if (not isinstance(instrument, (str,bytes))) and hasattr(instrument, '__iter__'):
             self.instrument = list(instrument)
         else:
             self.instrument = [instrument]
         if not set(self.instrument).issubset(set(self.allinstruments)):
             raise ValueError('{0} contains unrecognized instrument'.format(self.instrument))
-        if hasattr(level, '__iter__'):
+        if (not isinstance(level, (str,bytes))) and hasattr(level, '__iter__'):
             self.level = list(level)
         else:
             self.level = [level]
         if not set(self.level).issubset(set(self.alllevels)):
             raise ValueError('{0} contains unrecognized level'.format(self.level))
-        if hasattr(phase, '__iter__'):
+        if (not isinstance(phase, (str,bytes))) and hasattr(phase, '__iter__'):
             self.phase = list(phase)
         else:
             self.phase = [phase]
@@ -455,7 +455,7 @@ class FCImage_old(ImageMeasurement):
 
     def _load_spice_kernels(self, kernel=None):
         if kernel is not None:
-            if hasattr(kernel, '__iter__'):
+            if (not isinstance(kernel, (str,bytes))) and hasattr(kernel, '__iter__'):
                 for k in kernel:
                     spice.furnsh(k)
             else:
@@ -466,7 +466,7 @@ class FCImage_old(ImageMeasurement):
 
     def _unload_spice_kernels(self, kernel=None):
         if kernel is not None:
-            if hasattr(kernel, '__iter__'):
+            if (not isinstance(kernel, (str,bytes))) and hasattr(kernel, '__iter__'):
                 for k in kernel:
                     spice.unload(k)
             else:
@@ -617,7 +617,7 @@ def aspect(files, saveto=None):
     from astropy import table
     name, oid, fid, utc, flt, texp = [], [], [], [], [], []
     geom = {}
-    if not hasattr(files,'__iter__'):
+    if isinstance(files, (str,bytes)):
         if isdir(files):
             files = findfile(files,'IMG')+findfile(files,'LBL')
         else:
@@ -1207,7 +1207,7 @@ def fit_grid(datafiles, model, parms=None, fixed=None, ilim=None, elim=None, ali
 
  v1.0.0 : 1/20/2016, JYL @PSI
     '''
-    if not hasattr(datafiles, '__iter__'):
+    if isinstance(datafiles, (str,bytes)):
         datafiles = [datafiles]
     for ii in range(len(datafiles)):
         df = datafiles[ii]

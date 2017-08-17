@@ -481,7 +481,7 @@ class ScatteringGeometry(object):
 
         See astropy.table.Table.argsort'''
         if keys is not None:
-            if not hasattr(keys, '__iter__'):
+            if isinstance(keys, (str,bytes)):
                 keys = [keys]
             if not set(keys).issubset(set(self._data.keys())):
                 raise ValueError("keys must be in "+str(self.names()))
@@ -516,7 +516,7 @@ class ScatteringGeometry(object):
         'psi', 'lat', 'lon']
 
         See table.Table.sort'''
-        if not hasattr(keys, '__iter__'):
+        if isinstance(keys, (str,bytes)):
             keys = [keys]
         if not set(keys).issubset(set(self._data.keys())):
             raise ValueError("keys must be in "+str(self.names()))
@@ -1949,7 +1949,7 @@ class PhotometricDataGrid(object):
             self.port(indata, verbose=verbose)
             return
 
-        elif hasattr(indata, '__iter__'):
+        elif (not isinstance(indata, (str,bytes))) and hasattr(indata, '__iter__'):
             if isinstance(indata[0], str):
                 if verbose:
                     print('importing data from backplanes and image files')

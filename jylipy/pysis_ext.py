@@ -195,7 +195,7 @@ class EZWrapper(object):
             infile = args[0]
             if isinstance(infile, str) or isinstance(infile, bytes):
                 parms = {'from': infile}
-            elif hasattr(infile, '__iter__'):
+            elif (not isinstance(infile, (str,bytes))) and hasattr(infile, '__iter__'):
                 fromlist = True
                 listfile = kwargs.pop('listfile', None)
                 if listfile is None:

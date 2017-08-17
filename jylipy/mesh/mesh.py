@@ -59,7 +59,7 @@ def meshWrite(fname, vert, tri, comment=None):
 
     # Write comment lines
     if comment is not None:
-        if not hasattr(comment,'__iter__'):
+        if isinstance(comment, (str,bytes)):
             comment = [comment]
         for c in comment:
             print(c)

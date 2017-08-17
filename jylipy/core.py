@@ -20,6 +20,16 @@ from .saoimage import getds9
 from .apext import *
 
 
+def is_iterable(v):
+    """Check whether a variable is iterable"""
+    if isinstance(v, (str, bytes)):
+        return False
+    elif hasattr(v, '__iter__'):
+        return True
+    else:
+        return False
+
+
 def quadeq(a, b, c):
     '''Solving quadratic equation
       a * x**2 + b * x + c = 0
@@ -1111,7 +1121,7 @@ def enhance_1overrho(im, ext=0, center=None, centroid=False, div=True):
     for i in range(nimgs):
 
         # Load image
-        if not hasattr(im[i],'__iter__'):
+        if isinstance(im[i], (str, bytes)):
             img = readfits(im[i],ext=ext[i],verbose=False)
         else:
             img = im[i]
@@ -1193,7 +1203,7 @@ def azavg(im, ext=0, center=None, centroid=False):
     for i in range(nimgs):
 
         # Load image
-        if not hasattr(im[i],'__iter__'):
+        if isinstance(im[i], (str, bytes)):
             img = readfits(im[i], ext=ext[i], verbose=False)
         else:
             img = im[i]
@@ -1277,7 +1287,7 @@ def enhance_azavg(im, ext=0, center=None, centroid=False, div=True):
     for i in range(nimgs):
 
         # Load image
-        if not hasattr(im[i],'__iter__'):
+        if isinstance(im[i],(str,bytes)):
             img = readfits(im[i],ext=ext[i],verbose=False)
         else:
             img = im[i]
@@ -1922,25 +1932,28 @@ def background(im, ext=0, region=None, std=False, method='mean', plot=False):
    Bug fix for method='median'
     '''
 
-    if hasattr(im, '__iter__') and ((type(im[0]) is str) or (np.asarray(im).ndim is 3)):
-        # recursively calculate background for each image
-        if not std:
-            return [background(i, ext=ext, region=region, method=method) for i in im]
-        else:
-            bg, st = [], []
-            for i in im:
-                tmp = background(i, ext=ext, region=region, std=True, method=method)
-                if method is 'median':
-                    bg.append(tmp)
-                else:
-                    bg.append(tmp[0])
-                    st.append(tmp[1])
-            if method is 'median':
-                return bg
+    if not isinstance(im, (str,bytes)):
+        if hasattr(im, '__iter__') and (isinstance(im[0],(str,bytes)) or (np.asarray(im).ndim is 3)):
+            # recursively calculate background for each image
+            if not std:
+                return [background(i, ext=ext, region=region, method=method) for i in im]
             else:
-                return bg, st
+                bg, st = [], []
+                for i in im:
+                    tmp = background(i, ext=ext, region=region, std=True, method=method)
+                    if method is 'median':
+                        bg.append(tmp)
+                    else:
+                        bg.append(tmp[0])
+                        st.append(tmp[1])
+                if method is 'median':
+                    return bg
+                else:
+                    return bg, st
+        else:
+            raise ValueError('string type or string iterable or 3-D array expected, {0} received'.format(type(im)))
 
-    if isinstance(im, str):
+    if isinstance(im, (str,bytes)):
         img = fits.getdata(im,ext).astype(np.float32)
     else:
         img = np.asarray(im)
@@ -2008,7 +2021,7 @@ def readfits(imfile, ext=0, verbose=True, header=False):
    Returned data retains the original data type in fits.
     '''
 
-    if isinstance(imfile, str):
+    if isinstance(imfile, (str,bytes)):
         fitsfile = fits.open(imfile)
         if verbose:
             fitsfile.info()
@@ -2083,8 +2096,10 @@ def headfits(imfile, ext=0, verbose=True):
  v1.0.0 : JYL @PSI, Nov 17, 2013
     '''
 
-    if hasattr(imfile,'__iter__'):
+    if (not isinstance(imfile, (str, bytes))) and hasattr(imfile,'__iter__'):
         return [headfits(f,ext=ext,verbose=verbose) for f in imfile]
+    else:
+        raise ValueError('string types or string iterable expected, {0} received'.format(type(imfile)))
 
     fitsfile = fits.open(imfile)
     if verbose:
@@ -2174,7 +2189,7 @@ def crop(im, sz, ct, ext=0, out=None, padmode='constant', fill_value=0., **kwarg
         return imc
 
     if not hasattr(im, '__iter__'):
-        if isinstance(im, str):
+        if isinstance(im, (str,bytes)):
             img = readfits(im, ext=ext, verbose=False)
         elif hasattr(im, '__array__'):
             img = np.array(im)
@@ -2549,7 +2564,7 @@ def stack(ims, ext=0, size=None, center=None, mode='mean', verbose=False):
         center = [None]*nimgs
 
     if size is None:
-        if not hasattr(ims[0],'__iter__'):
+        if isinstance(ims[0], (str,bytes)):
             sz0 = np.array(fits.open(ims[0])[ext[0]].data.shape)
         else:
             sz0 = np.array(ims[0].shape)
@@ -2568,7 +2583,7 @@ def stack(ims, ext=0, size=None, center=None, mode='mean', verbose=False):
 
     for i in range(nimgs):
         # Load image
-        if not hasattr(ims[i], '__iter__'):
+        if isinstance(ims[i], (str,bytes)):
             img = readfits(ims[i], ext=ext[i], verbose=False)
         else:
             img = ims[i]

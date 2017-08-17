@@ -174,7 +174,7 @@ def getsbspk(name, start, stop, outfile, recno=None, clobber=False, verbose=True
             print('Output file exist.')
             return
 
-    if not hasattr(name,'__iter__'):
+    if isinstance(name, (str,bytes)):
         nms = [name]
         if recno is not None:
             recs = [recno]
@@ -309,7 +309,7 @@ def geteph(*args, **kwargs):
     obj = callhorizons.query(args[0])
     if nargs == 2:
         jds = Time(args[1]).jd
-        if hasattr(args[1],'__iter__'):
+        if (not isinstance(args[1], (str,bytes))) and hasattr(args[1],'__iter__'):
             jds = list(jds)
         else:
             jds = [jds]

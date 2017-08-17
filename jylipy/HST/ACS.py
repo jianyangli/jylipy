@@ -47,13 +47,13 @@ def aspect(files, keys=None, verbose=False):
     ks = 'rootname expstart expend filter1 filter2 exptime aperture orientat'.split()
     nk = len(ks)
     if keys is not None:
-        if hasattr(keys,'__iter__'):
+        if (not isinstance(keys, (str,bytes))) and hasattr(keys,'__iter__'):
             ks = ks+keys
         else:
             ks = ks+[keys]
     vs = [[] for x in ks]
 
-    if not hasattr(files,'__iter__'):
+    if isinstance(files, (str,bytes)):
         files = [files]
 
     if verbose:
