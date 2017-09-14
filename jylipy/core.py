@@ -190,14 +190,16 @@ class CCDData(ccdproc.CCDData):
     '''
 
     def __init__(self, *args, **kwargs):
+        super(CCDData, self).__init__(*args, **kwargs)
+
         if len(args) == 0:
-            raise TypeError('__init__() takes at least 2 arguments ({0} given)'.format(len(args)+1))
-        unit = kwargs.pop('unit', getattr(args[0], 'unit', ''))
-        flags = kwargs.pop('flags', None)
-        if flags is None:
+            flags = None
+        else:
             if isinstance(args[0], CCDData):
                 flags = getattr(args[0], 'flags', None)
-        super(CCDData, self).__init__(*args, unit=unit, **kwargs)
+            else:
+                flags = kwargs.pop('flags', None)
+
         if flags is None:
             self.flags = None
         elif isinstance(flags, np.ndarray):

@@ -182,18 +182,32 @@ class PDSData(object):
     @staticmethod
     def read_image_rec(obj, st):
         '''Read a PDS image data record'''
+        import warnings
         dtype = pds_types[obj['SAMPLE_TYPE']]+str(obj['SAMPLE_BITS'])
         shape = obj['LINES'],obj['LINE_SAMPLES'],obj['BANDS']
         count = obj['LINES']*obj['LINE_SAMPLES']*obj['BANDS']
         out = np.fromstring(st, dtype=dtype, count=count)
-        if ('unit' in list(obj.keys())) or ('UNIT' in list(obj.keys())):
-            if obj['unit'].lower() == 'du':
-                unit = units.adu
-            else:
-                unit = units.Unit(obj['unit'])
+        #if ('unit' in list(obj.keys())) or ('UNIT' in list(obj.keys())):
+        #    if obj['unit'].lower() == 'du':
+        #        unit = units.adu
+        #    else:
+        #        unit = units.Unit(obj['unit'])
+        #else:
+        #    unit = ''
+        unit = ''
+        im = Image(np.squeeze(out.reshape(shape)),meta=obj,unit=unit)
+        if ('LINE_DISPLAY_DIRECTION' not in obj) or ('SAMPLE_DISPLAY_DIRECTION' not in obj):
+            warnings.warn('DISPLAY_DIRECTION not specified')
         else:
-            unit = ''
-        return Image(np.squeeze(out.reshape(shape)),meta=obj,unit=unit)
+            if obj['LINE_DISPLAY_DIRECTION'] not in ['UP', 'DOWN']:
+                warnings.warn('LINE_DISPLAY_DIRECTION invalid')
+            if obj['SAMPLE_DISPLAY_DIRECTION'] not in ['LEFT', 'RIGHT']:
+                warnings.warn('SAMPLE_DISPLAY_DIRECTION invalid')
+            if obj['LINE_DISPLAY_DIRECTION'] == 'DOWN':
+                im = im[::-1,:]
+            if obj['SAMPLE_DISPLAY_DIRECTION'] == 'LEFT':
+                im = im[:,::-1]
+        return im
 
     def readpds(self, infile):
         hdr = Header(infile)

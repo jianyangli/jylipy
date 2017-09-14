@@ -175,7 +175,7 @@ def subcoord(time, target, observer='earth', bodyframe=None, saveto=None, planet
     else:
         tbl = Table((time, rh, delta, phase, tgtra, tgtdec, solat, solon, sslat, sslon, polepa, poleinc, sunpa, suninc), names='Time rh Range Phase RA Dec SOLat SOLon SSLat SSLon PolePA PoleInc SunPA SunInc'.split())
 
-    for c in tbl.colnames:
+    for c in tbl.colnames[1:]:
         tbl[c].format='%.2f'
         tbl[c].unit = units.deg
     tbl['Time'].format='%s'
