@@ -71,12 +71,12 @@ class Header(CaseInsensitiveOrderedDict):
         else:
             f = open(hdrfile,'rb')
         # Check PDS signature and version
-        s = f.readline().decode().split('=')
-        if s[0].strip() != 'PDS_VERSION_ID':
-            raise VersionError('No a valid PDS label found.')
-        if s[1].strip() != 'PDS3':
+        s = f.readline().split(b'=')
+        if s[0].strip() != b'PDS_VERSION_ID':
+            raise VersionError('No valid PDS label found.')
+        if s[1].strip() != b'PDS3':
             raise VersionError('No PDS3 label found.')
-        self[s[0].strip()] = s[1].strip()
+        self[s[0].strip().decode()] = s[1].strip().decode()
         # Processing keys
         while True:
             s = f.readline().decode()#.strip('\r\n')
@@ -141,7 +141,7 @@ class Header(CaseInsensitiveOrderedDict):
                     else:
                         self[k] = v
             elif '"' in self[k]:
-                self[k] = self[k].strip('"')
+                self[k] = self[k].strip('" ')
             elif '<' in self[k]:
                 v, u = self[k].strip().split('<')
                 v = num(v)
