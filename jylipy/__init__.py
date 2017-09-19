@@ -13,6 +13,7 @@ from .saoimage import *
 from .geometry import *
 from .apext import *
 from .plotting import *
+from .multiproc import *
 
 # Modules
 from . import constants
