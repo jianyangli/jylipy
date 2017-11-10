@@ -101,7 +101,7 @@ def read_phomodel(phofile):
     f = fits.open(phofile)
     nm = len(f)
     pars = {}
-    for i in range(1,nm):
+    for i in range(1,nm,2):
         d = f[i].data
         p = {}
         p['wavelength'] = d[0]
@@ -121,7 +121,7 @@ def plot_model_quality(datafile):
     lbl = ['SLOPE','SLOPE_PHA','SLOPE_INC','SLOPE_EMI']
     for j in range(len(lbl)):
         for i in range(nm):
-            ax[j].plot(q[i+1].data['WAV'], q[i+1].data[lbl[j]])
+            ax[j].plot(q[i+1].data['WAV'], q[i+1].data[lbl[j]],'.')
         pplot(ax[j],ylabel=lbl[j])
     pplot(ax[3],xlabel='Wavelength ($\mu$m)')
     ax[0].legend(mnames,loc='lower center',ncol=nm//2)
@@ -131,7 +131,7 @@ def plot_model_quality(datafile):
     lbl = ['CORR','CORR_PHA','CORR_INC','CORR_EMI']
     for j in range(len(lbl)):
         for i in range(nm):
-            ax[j].plot(q[i+1].data['WAV'], q[i+1].data[lbl[j]])
+            ax[j].plot(q[i+1].data['WAV'], q[i+1].data[lbl[j]],'.')
         pplot(ax[j],ylabel=lbl[j])
     pplot(ax[3],xlabel='Wavelength ($\mu$m)')
     ax[0].legend(mnames,loc='lower center',ncol=nm//2)
