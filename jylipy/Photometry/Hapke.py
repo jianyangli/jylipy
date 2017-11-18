@@ -82,7 +82,7 @@ class HapkeK(Fittable1DModel):
         if hasattr(alpha,'__iter__') and (len(alpha) >1):
             k = np.zeros_like(alpha)
             st = alpha.argsort()
-            k[st] = HapkeK.Kmodel(alpha[st], theta)
+            k[st] = np.squeeze(HapkeK.Kmodel(alpha[st], theta))
         else:
             k = HapkeK.Kmodel(alpha, theta)
         if hasattr(k,'__iter__'):
@@ -483,15 +483,10 @@ def shoe(alpha, par, form='bowell'):
     ph_cp, b0_cp, h_cp = nparr(alpha, b0, h)
 
     if form == 'bowell':
-
-        zeroh = h_cp == 0
-        h_cp[zeroh] = 1.
-        oe = b0_cp/(1+np.tan(ph_cp*np.pi/360)/h_cp)
-
-        if len(b0_cp) == 1:
-            oe[zeroh] = b0_cp
+        if h==0:
+            oe = np.ones_like(ph_cp)*b0
         else:
-            oe[zeroh] = b0_cp[zeroh]
+            oe = b0_cp/(1+np.tan(ph_cp*np.pi/360)/h_cp)
 
         return 1+oe
 
@@ -2285,7 +2280,7 @@ def fitDiskInt5(alpha, measure, error=None, w=0.2, g=-0.3, theta=20., B0=1.0, h=
             chisq = np.sum(((model(alpha)-measure)/error)**2)/(len(alpha)-5)
         fit_info = f.fit_info.copy()
         fit_info['red_chisq'] = chisq
-        if fit_info['param_cov'] == None:
+        if fit_info['param_cov'] is None:
             print(fit_info['ierr'], fit_info['message'])
         return model, fit_info
 
@@ -2345,7 +2340,7 @@ def fitDiskInt6(alpha, measure, error=None, w=0.2, b=0.3, c=0.4, theta=20., B0=1
             chisq = np.sum(((model(alpha)-measure)/error)**2)/(len(alpha)-5)
         fit_info = f.fit_info.copy()
         fit_info['red_chisq'] = chisq
-        if fit_info['param_cov'] == None:
+        if fit_info['param_cov'] is None:
             print(fit_info['ierr'], fit_info['message'])
         return model, fit_info
 
