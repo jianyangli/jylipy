@@ -3102,7 +3102,7 @@ class Binner(object):
                             if e_idx.any():
                                 data_in = [data[i][e_idx] for i in range(4)]
                                 [binned[i].append(data_in[i].mean()) for i in range(4)]
-                                count.append(len(data_in[i]))
+                                count.append(len(data_in[0]))
                                 if count[-1] > 1:
                                     [error[i].append(data_in[i].std()) for i in range(4)]
                                 else:
