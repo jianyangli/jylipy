@@ -474,9 +474,9 @@ def calc_psi(i, e, alpha, cos=False):
 
     if cos:
         mu0, mu = i_cp, e_cp
-        i_cp, e_cp = np.arccos(mu0)*180/np.pi, np.arccos(mu)*180/np.pi
+        i_cp, e_cp = np.rad2deg(np.arccos(mu0)), np.rad2deg(np.arccos(mu))
     else:
-        mu0, mu = np.cos(i_cp*np.pi/180), np.cos(e_cp*np.pi/180)
+        mu0, mu = np.cos(np.deg2rad(i_cp)), np.cos(np.deg2rad(e_cp))
     si, se = np.sqrt(1-mu0*mu0), np.sqrt(1-mu*mu)
 
     sise = si*se
@@ -487,9 +487,9 @@ def calc_psi(i, e, alpha, cos=False):
     cospsi = (np.cos(ph_cp*np.pi/180)-mu0*mu)/sise
 
     # When cos(psi) is too close to 1 or -1, set it to 1 or -1
-    ww = np.abs(1-np.abs(cospsi)) < 1e-10
+    ww = np.abs(1-np.abs(cospsi)) < 1e-6
     cospsi[ww] = np.sign(cospsi[ww])
-    psi = np.arccos(cospsi)*180/np.pi
+    psi = np.rad2deg(np.arccos(cospsi))
     psi[zeros] = 0.  # if i or e is 0, set the angle to be 0
 
     # When i or e is 0, i+e must be equal to phase.  Otherwise set it to nan.
