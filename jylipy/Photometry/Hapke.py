@@ -14,16 +14,36 @@ import numpy as np
 from astropy.modeling import Fittable1DModel, Fittable2DModel, FittableModel, Parameter
 
 
+'''Hapke model suite
+
+* All angles are in radiance by default unless otherwise specified.
+* The goal is to support astropy quantity for input, but this is not
+  fully tested
+'''
+
+
+def r0(w,deriv=False):
+    '''
+    Spherical albedo r0 = (1-gamma)/(1+gamma), where gamma = sqrt(1-w)
+
+    v1.0.0 : JYL @PSI, October 30, 2014
+    '''
+    gamma = np.sqrt(1-w)
+    if not deriv:
+        return (1-gamma)/(1+gamma)
+    else:
+        return 1/((1+gamma)*(1+gamma)*gamma)
+
 
 class HapkeK(Fittable1DModel):
     '''
- Hapke roughness correction K for disk-integrated phase function
- Based on Table 12.1, Hapke (2012) book
+    Hapke roughness correction K for disk-integrated phase function
+    Based on Table 12.1, Hapke (2012) book.
 
- v1.0.0 : JYL @PSI, October 29, 2014
+    v1.0.0 : JYL @PSI, October 29, 2014
     '''
 
-    theta = Parameter()
+    theta = Parameter(default=20., description='Roughness', bounds=(0., 60.))
 
     t = np.deg2rad(np.array([0.,10,20,30,40,50,60]))
     a = np.deg2rad(np.array([0.,2,5,10,20,30,40,50,60,70,80,90,100,110,120,130,140,150,160,170,180]))
@@ -82,17 +102,10 @@ class HapkeK(Fittable1DModel):
         if hasattr(alpha,'__iter__') and (len(alpha) >1):
             k = np.zeros_like(alpha)
             st = alpha.argsort()
-            k[st] = HapkeK.Kmodel(alpha[st], theta)
+            k[st] = HapkeK.Kmodel(alpha[st], theta, grid=False)
         else:
             k = HapkeK.Kmodel(alpha, theta)
-        if hasattr(k,'__iter__'):
-            k[k<0] = 0.
-            k[k>1] = 1.
-        else:
-            if k<0:
-                k = 0.
-            if k>1:
-                k = 1.
+        k = np.clip(k, 0., 1.)
         return k
 
     @staticmethod
@@ -100,33 +113,30 @@ class HapkeK(Fittable1DModel):
         if hasattr(alpha, '__iter__') and (len(alpha) > 1):
             dk = np.zeros_like(alpha)
             st = alpha.argsort()
-            dk = HapkeK.dKmodel(alpha[st], theta)
+            dk[st] = HapkeK.dKmodel(alpha[st], theta, grid=False)
         else:
             dk = HapkeK.dKmodel(alpha, theta)
-        if hasattr(dk,'__iter__'):
-            dk[dk>0] = 0.
-        else:
-            if dk>0:
-                dk = 0.
+        k = np.clip(k, 0.)
         return dk
 
 
 class HapkeU(Fittable1DModel):
     '''
- Hapke roughness correction U for disk-integrated phase function
- Based on Eq. 12.60 in Hapke (2012) book
+    Hapke roughness correction U for disk-integrated phase function
+    Based on Eq. 12.60 in Hapke (2012) book.
 
- v1.0.0 : JYL @PSI, October 29, 2014
+    The unit of roughness parameter, theta, is degrees.
+
+    v1.0.0 : JYL @PSI, October 29, 2014
     '''
 
-    w = Parameter(min=0., max=1.0)
-    theta = Parameter(min=0., max=60.)
+    w = Parameter(default=0.1, description='Single Scattering Albedo', bounds=(0., 1.))
+    theta = Parameter(default=20., description='Roughness', bounds=(0., 60.))
 
     @staticmethod
     def evaluate(x, w, theta):
-        gamma = np.sqrt(1-w)
-        r0 = (1-gamma)/(1+gamma)
-        return 1-theta*((0.048+0.0041*theta)*r0+(0.33-0.0049*theta)*r0*r0)
+        r = r0(w)
+        return 1-theta*r*(0.048+0.0041*theta+(0.33-0.0049*theta)*r)
 
     @staticmethod
     def fit_deriv(x, w, theta):
@@ -137,28 +147,35 @@ class HapkeU(Fittable1DModel):
         return [d_w, d_theta]
 
 
-class SHOE(Fittable1DModel):
+class SHOE_Base(Fittable1DModel):
+    '''Base class for SHOE model'''
+
+    Bs0 = Parameter(default=1.0, description='Amplitude of shadow-hiding opposition effect', min=0.)
+    hs = Parameter(default=0.01, description='Width of shadow-hiding opposition effect', min=1e-10)
+
+    @property
+    def hwhm(self):
+        return np.rad2deg(self.hs.value)*2
+
+
+class SHOE(SHOE_Base):
     '''
- Shadow-hiding opposition effect model, the exact expression.
- See Eqs. 9.21 in Hapke (2012) book
+    Shadow-hiding opposition effect model, the exact expression.
+    See Eqs. 9.21 in Hapke (2012) book
 
- SHOE = 1+B0*Bs(alpha, h)
+    SHOE = 1+Bs0*Bs(alpha, hs)
 
- v1.0.0 : JYL @PSI, October 30, 2014
- v1.0.1 : JYL @PSI, January 6, 2015
-   Separate the approximate solution to another class SHOE_approx
+    v1.0.0 : JYL @PSI, October 30, 2014
+    v1.0.1 : JYL @PSI, January 6, 2015
+    Separate the approximate solution to another class SHOE_approx
     '''
-
-    B0 = Parameter(min=0.)
-    h = Parameter(min=0.)
 
     @staticmethod
-    def Bs(alpha, h):
+    def Bs(alpha, hs):
         '''Eq. 9.21b in Hapke (2012) book'''
         from scipy.special import erf
-        alpha = np.asarray(alpha).reshape(-1)
         bs = np.ones_like(alpha)
-        y = np.tan(alpha/2)/h
+        y = np.tan(alpha/2)/hs
         z1 = y >= 0.04  # can be calculated directly
         z2 = ~z1  # has to be calculated with Tylor expansion
         yr = np.ones_like(y)
@@ -167,7 +184,7 @@ class SHOE(Fittable1DModel):
         yr[~z3] = np.inf
         yrsqrt = np.sqrt(yr)
         if z1.any():
-            bs[z1] = 2*np.sqrt(np.pi)*yrsqrt[z1]*np.exp(yr[z1])*(erf(2*rsqrt[z1])-erf(yrsqrt[z1]))+np.exp(-3*yr[z1])-1
+            bs[z1] = 2*np.sqrt(np.pi)*yrsqrt[z1]*np.exp(yr[z1])*(erf(2*yrsqrt[z1])-erf(yrsqrt[z1]))+np.exp(-3*yr[z1])-1
         if z2.any():
             y = y[z2]
             y2 = y*y
@@ -177,16 +194,15 @@ class SHOE(Fittable1DModel):
         return bs
 
     @staticmethod
-    def evaluate(alpha, B0, h):
-        return 1+B0*SHOE.Bs(alpha, h)
+    def evaluate(alpha, Bs0, hs):
+        return 1+Bs0*SHOE.Bs(alpha, hs)
 
     @staticmethod
-    def fit_deriv(alpha, B0, h):
-        dB0 = SHOE.Bs(alpha, h)
+    def fit_deriv(alpha, Bs0, hs):
+        dB0 = SHOE.Bs(alpha, hs)
         from scipy.special import erf
-        alpha = np.asarray(alpha).reshape(-1)
         dh = np.ones_like(alpha)
-        y = np.tan(alpha/2)/h
+        y = np.tan(alpha/2)/hs
         z1 = y >= 0.04  # can be calculated directly
         z2 = ~z1  # has to be calculated with Tylor expansion
         yr = np.ones_like(y)
@@ -195,42 +211,236 @@ class SHOE(Fittable1DModel):
         yr[~z3] = np.inf
         yrsqrt = np.sqrt(yr)
         if z1.any():
-            dh[z1] = B0*(np.sqrt(np.pi)*np.exp(yr[z1])*(1+2*yr[z1])*(erf(2*yrsqrt[z1])-erf(yrsqrt[z1]))+yrsqrt[z1]*(np.exp(-3.*yr[z1])-2))*yrsqrt[z1]/h
+            dh[z1] = Bs0*(np.sqrt(np.pi)*np.exp(yr[z1])*(1+2*yr[z1])*(erf(2*yrsqrt[z1])-erf(yrsqrt[z1]))+yrsqrt[z1]*(np.exp(-3.*yr[z1])-2))*yrsqrt[z1]/hs
         if z2.any():
             y = y[z2]
             y2 = y*y
-            dh[z2] = B0*(y-3.*y2+np.exp(-3.*yr[z2])*(-0.375+1.5625e-2*y+5.859375e-3*y2))/h
+            dh[z2] = Bs0*(y-3.*y2+np.exp(-3.*yr[z2])*(-0.375+1.5625e-2*y+5.859375e-3*y2))/hs
         return [dB0, dh]
 
 
 class SHOE_approx(Fittable1DModel):
     '''
- Shadow-hiding opposition effect model, the approximate solution
- See Eq. 9.22 in Hapke (2012) book
+    Shadow-hiding opposition effect model, the approximate solution
+    See Eq. 9.22 in Hapke (2012) book
 
- SHOE = 1+B0*Bs(alpha, h)
+    SHOE = 1+B0*Bs(alpha, h)
 
- v1.0.0 : JYL @PSI, January 6, 2015
+    v1.0.0 : JYL @PSI, January 6, 2015
     '''
 
-    B0 = Parameter(min=0.)
-    h = Parameter(min=0.)
-
     @staticmethod
-    def Bs(alpha, h):
+    def Bs(alpha, hs):
         '''Eq. 9.22, Hapke (2012) book'''
-        return 1/(1+np.tan(alpha/2)/h)
+        return 1/(1+np.tan(alpha/2)/hs)
 
     @staticmethod
-    def evaluate(alpha, B0, h):
-        return 1+B0*SHOE_approx.Bs(alpha, h)
+    def evaluate(alpha, Bs0, hs):
+        return 1+Bs0*SHOE_approx.Bs(alpha, hs)
 
     @staticmethod
-    def fit_deriv(alpha, B0, h):
-        dB0 = SHOE_approx.Bs(alpha, h)
+    def fit_deriv(alpha, Bs0, hs):
+        dB0 = SHOE_approx.Bs(alpha, hs)
         a = np.tan(alpha/2)
-        dh = B0*a/(a+h)**2
+        dh = Bs0*a/(a+hs)**2
         return [dB0, dh]
+
+
+class CBOE_Base(Fittable1DModel):
+    '''Base class for CBOE model'''
+
+    Bc0 = Parameter(default=1.0, description='Amplitude of coherent backscatter opposition effect', min=0.)
+    hc = Parameter(default=0.01, description='Width of coherent backscatter opposition effect', min=1e-10)
+
+    @property
+    def hwhm(self):
+        return np.rad2deg(self.hc.value)*0.66
+
+
+class CBOE(CBOE_Base):
+    '''
+    Coherent backscatter opposition effect model
+    See Eq. 33 in Hapke (2002) Icarus 157, 523-534.
+    '''
+
+    @staticmethod
+    def Bc(alpha, hc):
+        '''Eq. 9.21b in Hapke (2012) book'''
+        y = np.tan(alpha/2)/hc
+        z1 = y != 0
+        z2 = ~z1
+        bc = np.zeros_like(y)
+        bc[z1] = 0.5*(1.+(1.-np.exp(-y[z1]))/y[z1])/(1+y[z1])**2
+        bc[z2] = 1.
+        return bc
+
+    @staticmethod
+    def evaluate(alpha, Bc0, hc):
+        return 1+Bc0*CBOE.Bc(alpha, hc)
+
+
+class H(Fittable1DModel):
+    '''Chandrasekhar's H function
+
+    Based on the approximate formulae in Hapke (1981) or Hapke (2002,
+    Icarus 157, 523)).  The form of formula is chosen by keyword
+    'version', where the default is '02'.
+    '''
+
+    w = Parameter(default=0.1, description='Single Scattering Albedo', bounds=(0., 1.))
+
+    @staticmethod
+    def evaluate(x, w, version='02'):
+        x = np.asarray(x)
+        assert (x>=0.).all() & (x<=1.).all()
+        if version == '02':
+            r = r0(w)
+            hh = np.zeros_like(x)
+            z1 = x!=0
+            z2 = ~z1
+            hh[z1] = 1./(1-w*x[z1]*(r+(1-2*r*x[z1])*np.log((1+x[z1])/x[z1])/2))
+            hh[z2] = 1.
+            return hh
+        elif version == '81':
+            return (1+2*x)/(1+2*x*np.sqrt(1-w))
+
+
+def hg(alpha, b, deriv=False):
+    '''One-parameter forward-scattering Henyey-Greenstein function.
+            -1 < b < 0: Backscattering
+            b == 0: Isotropic
+            0 < b < 1.: Forward scattering
+
+    If `deriv' is set True, then return the partial derivative w/r to parameter
+
+    Note:
+        If restrict 0<b<1, then this function only represents the forward
+        scatteirng case.  The backscattering case with 0<b<1 can be represented
+        as hg(alpha, -b), and the derivative is -hg(alpha, -b, deriv=True).
+    '''
+    if b==0:
+        hg = np.ones_like(alpha)
+    else:
+        cosa = np.cos(alpha)
+        b2 = b*b
+        dom_base = (1+2*b*cosa+b2)
+        dom = dom_base**1.5
+        hg = (1-b2)/dom
+    if not deriv:
+        return hg
+    else:
+        if b==0:
+            dhg = np.zeros_like(alpha)
+        else:
+            dhg = -2*b/dom - 3*(cosa+b)*hg/dom_base
+        return dhg
+
+
+class HenyeyGreenstein1P(Fittable1DModel):
+    '''One-parameter Henyey-Greenstein model
+
+    The Henyey-Greenstein function can take either a single-term form or
+    double-term form, depending on the parameters passed.
+    The single-term HG function has the form as in Hapke (2012) book, Eq. 6.5:
+                                 (1-g**2)
+        HG_1(alpha) = -----------------------------
+                       (1+2*g*cos(alpha)+g**2) **1.5
+    where -1<g<1.  g=0 means isotripic scattering, g>0 forward scattering,
+    and g<0 backward scattering.
+    '''
+
+    g = Parameter(default=-0.3, description='Henyey-Greenstein Asymmetry Factor', bounds=(-1.,1.))
+
+    @staticmethod
+    def evaluate(x, g):
+        return hg(x, g)
+
+    @staticmethod
+    def fit_deriv(x, g):
+        return hg(x, g, deriv=True)
+
+
+class HenyeyGreenstein2P(Fittable1DModel):
+    '''Two-parameter Henyey-Greenstein model
+
+    The two-parameter HG function has the form as in Hapke (2012), Eq. 6.7a:
+                                    (1-b**2)
+        HG_b(alpha; b) = -----------------------------
+                          (1-2*b*cos(alpha)+b**2) **1.5
+                                    (1-b**2)
+        HG_f(alpha; b) = -----------------------------
+                          (1+2*b*cos(alpha)+b**2) **1.5
+        HG_2(alpha) = (1+c)/2 * HG_b(alpha; b) + (1-c)/2 * HG_f(alpha; b)
+
+    The HG_b describes backward lobe and the HG_f describes forward lobe.
+    '''
+
+    b = Parameter(default=0.2, description='Henyey-Greenstein Asymmetry Factor', bounds=(0.,1.))
+    c = Parameter(default=0., description='Henyey-Greenstein Forward-backward Partition Parameter', bounds=(-1.,1))
+
+    @staticmethod
+    def evaluate(x, b, c):
+        if c==-1.:
+            return hg(x, b)
+        elif c==1.:
+            return hg(x, -b)
+        hgf = hg(x, b)
+        hgb = hg(x, -b)
+        return 0.5 * ((1-c)*hgf + (1+c)*hgb)
+
+    @staticmethod
+    def fit_deriv(x, b, c):
+        hgf = hg(x, b)
+        hgb = hg(x, -b)
+        ddc = (hgb-hgf)*0.5
+        if c==-1:
+            ddb = hg(x, b, deriv=True)
+        elif c==1:
+            ddb = -hg(x, -b, deriv=True)
+        else:
+            ddb = 0.5*((1-c)*hg(x, b, deriv=True)+(1+c)*-hg(x, -b, deriv=True))
+        return [ddb, ddc]
+
+
+class HenyeyGreenstein3P(Fittable1DModel):
+    '''Three-parameter Henyey-Greenstein model
+
+    The three-parameter HG function has the form as in Hapke (2012), Eq.
+    6.7b:
+        HG_3(alpha) = (1+c)/2 * HG_b(alpha; b1) + (1-c)/2 * HG_f(alpha; b2)
+    The range of values of parameters for two-parameter and three-parameter
+    HG functions are: 0<=b, b1, b2<=1, and -1<c<1.
+    '''
+
+    b1 = Parameter(default=0.2, description='Henyey-Greenstein forward scattering parameter', bounds=(0.,1.))
+    b2 = Parameter(default=0.4, description='Henyey-Greenstein backward scattering parameter', bounds=(0.,1.))
+    c = Parameter(default=0., description='Forward-backward partition parameter', bounds=(-1.,1.))
+
+    @staticmethod
+    def evaluate(x, b1, b2, c):
+        if c==-1.:
+            return hg(x, b1)
+        elif c==1.:
+            return hg(x, -b2)
+        hgf = hg(x, b1)
+        hgb = hg(x, -b2)
+        return 0.5 * ((1-c)*hgf + (1+c)*hgb)
+
+    @staticmethod
+    def fit_deriv(x, b1, b2, c):
+        hgf = hg(x, b1)
+        hgb = hg(x, -b2)
+        ddc = (hgb-hgf)*0.5
+        if c==-1:
+            ddb1 = hg(x, b1, deriv=True)
+            ddb2 = np.zeros_like(x)
+        elif c==1:
+            ddb1 = np.zeros_like(x)
+            ddb2 = -hg(x, -b2, deriv=True)
+        else:
+            ddb1 = 0.5*(1-c)*hg(x, b1, deriv=True)
+            ddb2 = 0.5*(1+c)*-hg(x, -b2, deriv=True)
+        return [ddb1, ddb2, ddc]
 
 
 def calc_psi(i, e, alpha, cos=False):
@@ -264,9 +474,9 @@ def calc_psi(i, e, alpha, cos=False):
 
     if cos:
         mu0, mu = i_cp, e_cp
-        i_cp, e_cp = np.arccos(mu0)*180/np.pi, np.arccos(mu)*180/np.pi
+        i_cp, e_cp = np.rad2deg(np.arccos(mu0)), np.rad2deg(np.arccos(mu))
     else:
-        mu0, mu = np.cos(i_cp*np.pi/180), np.cos(e_cp*np.pi/180)
+        mu0, mu = np.cos(np.deg2rad(i_cp)), np.cos(np.deg2rad(e_cp))
     si, se = np.sqrt(1-mu0*mu0), np.sqrt(1-mu*mu)
 
     sise = si*se
@@ -277,9 +487,9 @@ def calc_psi(i, e, alpha, cos=False):
     cospsi = (np.cos(ph_cp*np.pi/180)-mu0*mu)/sise
 
     # When cos(psi) is too close to 1 or -1, set it to 1 or -1
-    ww = np.abs(1-np.abs(cospsi)) < 1e-10
+    ww = np.abs(1-np.abs(cospsi)) < 1e-6
     cospsi[ww] = np.sign(cospsi[ww])
-    psi = np.arccos(cospsi)*180/np.pi
+    psi = np.rad2deg(np.arccos(cospsi))
     psi[zeros] = 0.  # if i or e is 0, set the angle to be 0
 
     # When i or e is 0, i+e must be equal to phase.  Otherwise set it to nan.
@@ -483,15 +693,10 @@ def shoe(alpha, par, form='bowell'):
     ph_cp, b0_cp, h_cp = nparr(alpha, b0, h)
 
     if form == 'bowell':
-
-        zeroh = h_cp == 0
-        h_cp[zeroh] = 1.
-        oe = b0_cp/(1+np.tan(ph_cp*np.pi/360)/h_cp)
-
-        if len(b0_cp) == 1:
-            oe[zeroh] = b0_cp
+        if h==0:
+            oe = np.ones_like(ph_cp)*b0
         else:
-            oe[zeroh] = b0_cp[zeroh]
+            oe = b0_cp/(1+np.tan(ph_cp*np.pi/360)/h_cp)
 
         return 1+oe
 
@@ -1305,7 +1510,7 @@ def mpfit_func(p, sca_angle=None, iof=None, err=None, parnames=None, sppf='hg', 
  10/2/2013, created by JYL @PSI
     '''
 
-    if err == None:
+    if err is None:
         err = np.ones_like(iof)
 
     # choose a model and construct the model parameter variable
@@ -1451,7 +1656,7 @@ def mpfit(sca_angle, iof, par0=None, err=None, sppf='hg', mimsa=False, fixed=Non
                         info = info_temp.copy()
                         info['parname'] = p+str(i+1)
                         info['value'] = v
-                        if fixed != None and p in fixed and fixed[p][i] != None:
+                        if fixed is not None and p in fixed and fixed[p][i] != None:
                             info['fixed'] = fixed[p][i]
                         if limits != None and p in limits:
                             info['limits'] = np.array(limits[p][i])
@@ -1462,9 +1667,9 @@ def mpfit(sca_angle, iof, par0=None, err=None, sppf='hg', mimsa=False, fixed=Non
                     info = info_temp.copy()
                     info['parname'] = p
                     info['value'] = par0[p]
-                    if fixed != None and p in fixed and fixed[p] != None:
+                    if fixed is not None and p in fixed and fixed[p] != None:
                         info['fixed'] = fixed[p]
-                    if limits != None and p in limits:
+                    if limits is not None and p in limits:
                         info['limits'] = np.array(limits[p])
                         info['limited'] = np.array([True]*len(limits[p]))
                     parinfo.append(info.copy())
@@ -2069,17 +2274,6 @@ def modelfit(inc, emi, pha, iof, ioferr=None, parlist=['w', 'g', 'shoe', 'theta'
             return bestfit, tr_fitp, tr_par0
 
 
-def r0(w,deriv=False):
-    '''
- Spherical albedo r0 = (1-gamma)/(1+gamma), where gamma = sqrt(1-w)
-
- v1.0.0 : JYL @PSI, October 30, 2014
-    '''
-    gamma = np.sqrt(1-w)
-    if not deriv:
-        return (1-gamma)/(1+gamma)
-    else:
-        return 1/((1+gamma)*(1+gamma)*gamma)
 
 
 class DiskInt5(Fittable1DModel):
@@ -2285,7 +2479,7 @@ def fitDiskInt5(alpha, measure, error=None, w=0.2, g=-0.3, theta=20., B0=1.0, h=
             chisq = np.sum(((model(alpha)-measure)/error)**2)/(len(alpha)-5)
         fit_info = f.fit_info.copy()
         fit_info['red_chisq'] = chisq
-        if fit_info['param_cov'] == None:
+        if fit_info['param_cov'] is None:
             print(fit_info['ierr'], fit_info['message'])
         return model, fit_info
 
@@ -2345,7 +2539,7 @@ def fitDiskInt6(alpha, measure, error=None, w=0.2, b=0.3, c=0.4, theta=20., B0=1
             chisq = np.sum(((model(alpha)-measure)/error)**2)/(len(alpha)-5)
         fit_info = f.fit_info.copy()
         fit_info['red_chisq'] = chisq
-        if fit_info['param_cov'] == None:
+        if fit_info['param_cov'] is None:
             print(fit_info['ierr'], fit_info['message'])
         return model, fit_info
 

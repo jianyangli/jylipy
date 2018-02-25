@@ -1183,28 +1183,38 @@ class PhotometricData(object):
                 self.geo.append(v.geo)
             self._set_properties()
 
-    def merge(self, pho):
+    def merge(self, pho, type='auto'):
         '''Merge two PhotometricData instances'''
+        import warnings
         assert isinstance(pho, PhotometricData)
         if len(pho) == 0:
             return
 
-        if (self.type == 'measured') and (pho.type == 'measured'):
-            self._simple_merge(pho)
-        elif (self.type == 'measured') and (pho.type == 'binned'):
+        if type == 'auto':
+            if (self.type == 'measured') and (pho.type == 'measured'):
+                type = 'simple'
+#            self._simple_merge(pho)
+            elif (self.type == 'measured') and (pho.type == 'binned'):
             # raise a warning, no merge
-            warnings.warn('Cannot merge a `binned` type into a `measured` type.')
-        elif (self.type == 'binned') and (pho.type == 'measured'):
+                warnings.warn('Merge a "binned" type into a "measured" type, simple mode will be used, a "measured" type will be set to output')
+                type = 'simple'
+            elif (self.type == 'binned') and (pho.type == 'measured'):
+                boundary = self.binparms['boundary']
+                print('    binning data')
+                binner = Binner(boundary=boundary)
+                pho_binned = binner(pho)
+                type = 'binned'
+            else:
+                type = 'binned'
+        if type == 'binned':
             # bin pho first, then merge
-            boundary = self.binparms['boundary']
-            print('    binning data')
-            binner = Binner(boundary=boundary)
-            pho_binned = binner(pho)
-            print('    merging data')
-            self._binned_merge(pho_binned)
+            if 'pho_binned' in locals():
+                self._binned_merge(pho_binned)
+            else:
+                self._binned_merge(pho)
         else:
             # check boundaries of both binned data, then merge
-            self._binned_merge(pho)
+            self._simple_merge(pho)
         self._set_properties()
 
     def _simple_merge(self, pho):
@@ -3105,7 +3115,7 @@ class Binner(object):
                             if e_idx.any():
                                 data_in = [data[i][e_idx] for i in range(4)]
                                 [binned[i].append(data_in[i].mean()) for i in range(4)]
-                                count.append(len(data_in[i]))
+                                count.append(len(data_in[0]))
                                 if count[-1] > 1:
                                     [error[i].append(data_in[i].std()) for i in range(4)]
                                 else:

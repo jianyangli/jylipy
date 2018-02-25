@@ -244,7 +244,7 @@ def density(x, y, log=False, ax=None, **kwargs):
         vmin = np.log10(vmin)
     im = ax.imshow(hist, aspect='auto', cmap=cmap, interpolation=interpolation, alpha=alpha, vmin=vmin, vmax=vmax)
     xtrans = lambda x: (float(x)-xlim[0])/(xlim[1]-xlim[0])*xbs-0.5
-    ytrans = lambda x: (float(y)-ylim[0])/(ylim[1]-ylim[0])*ybs-0.5
+    ytrans = lambda y: (float(y)-ylim[0])/(ylim[1]-ylim[0])*ybs-0.5
     xt1 = [xtrans(x) for x in xt0]
     yt1 = [ytrans(y) for y in yt0]
     xticklabels = kwargs.pop('xticklabels', list(map(str, xt0)))
