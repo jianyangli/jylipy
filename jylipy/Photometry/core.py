@@ -2584,20 +2584,21 @@ class Akimov(PhaseFunction):
  v1.0.0 : JYL @PSI, October 27, 2014
     '''
 
+    A = Parameter(default=0.1, min=0.)
     mu1 = Parameter(default=0.2, min=0.)
     mu2 = Parameter(default=0.05, min=0.)
     m = Parameter(default=0.2, min=0.)
 
     @staticmethod
-    def evaluate(alpha, mu1, mu2, m):
+    def evaluate(alpha, A, mu1, mu2, m):
         alpha = PhaseFunction.check_phase_angle(alpha)
-        return (np.exp(-mu1*alpha) + m*np.exp(-mu2*alpha))/(1+m)
+        return A*(np.exp(-mu1*alpha) + m*np.exp(-mu2*alpha))/(1+m)
 
     @staticmethod
-    def fit_deriv(alpha, mu1, mu2, m):
+    def fit_deriv(alpha, A, mu1, mu2, m):
         alpha = PhaseFunction.check_phase_angle(alpha)
         a, b = np.exp(-mu1*alpha), np.exp(-mu2*alpha)
-        return [-alpha*a/(1+m), -alpha*m*b/(1+m), (b-a)/(1+m)**2]
+        return [(np.exp(-mu1*alpha) + m*np.exp(-mu2*alpha))/(1+m), -alpha*a/(1+m), -alpha*m*b/(1+m), (b-a)/(1+m)**2]
 
 
 class LinExponential(PhaseFunction):
@@ -2694,15 +2695,15 @@ class LunarLambert(DiskFunction):
     @staticmethod
     def evaluate(i, e, A, L):
         i, e = _2rad(i, e)
-        mu0 = cos(i)
-        mu = cos(e)
+        mu0 = np.cos(i)
+        mu = np.cos(e)
         return A*(L*2*mu0/(mu0+mu)+(1-L)*mu0)
 
     @staticmethod
     def fit_deriv(i, e, A, L):
         i, e = _2rad(i, e)
-        mu0 = cos(i)
-        mu = cos(e)
+        mu0 = np.cos(i)
+        mu = np.cos(e)
         lunar = 2*mu0/(mu0+mu)
         dda = L*lunar+(1-L)*mu0
         ddl = A*(lunar-mu0)
@@ -2725,6 +2726,10 @@ class Minnaert(DiskFunction):
 
 class AkimovDisk(FittableModel):
     '''Akimov parameterless disk function
+    Parameters:
+        `alpha`: phase angle
+        `beta`: photometric latitude
+        `gamma`: photometric longitude
 
  v1.0.0 : 1/19/2016, JYL @PSI
     '''
@@ -2737,16 +2742,14 @@ class AkimovDisk(FittableModel):
     @staticmethod
     def D(alpha, beta, gamma):
         alpha, beta, gamma = _2rad(alpha, beta, gamma)
-        return cos(alpha/2)*cos(np.pi/(np.pi-alpha)*(gamma-alpha/2))*cos(beta)**(alpha/(np.pi-alpha))/cos(gamma)
+        return np.cos(alpha/2)*np.cos(np.pi/(np.pi-alpha)*(gamma-alpha/2))*np.cos(beta)**(alpha/(np.pi-alpha))/np.cos(gamma)
 
     @staticmethod
-    def evaluate(A, alpha, beta, gamma):
-        alpha, beta, gamma = _2rad(alpha, beta, gamma)
+    def evaluate(alpha, beta, gamma, A):
         return A*AkimovDisk.D(alpha, beta, gamma)
 
     @staticmethod
     def fit_deriv(A, alpha, beta, gamma):
-        alpha, beta, gamma = _2rad(alpha, beta, gamma)
         return AkimovDisk.D(alpha, beta, gamma)
 
 
