@@ -242,8 +242,8 @@ def aperture_photometry(data, apertures, **kwargs):
         yc = ap['ycenter'].data[0]
         ap.remove_column('xcenter')
         ap.remove_column('ycenter')
-        ap.add_column(Column(xc,name='xcenter'))
-        ap.add_column(Column(yc,name='ycenter'))
+        ap.add_column(Column([xc],name='xcenter'))
+        ap.add_column(Column([yc],name='ycenter'))
     if ap['xcenter'].unit is None:
         ap['xcenter'].unit = units.pix
     if ap['ycenter'].unit is None:
