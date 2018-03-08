@@ -1128,6 +1128,11 @@ def fc_color_mos(cubefile, order='wavelength', cccafile='CCCA.cub', cccrfile='CC
         2: 750
         3: 960/750
 
+    CCCAI (Inversed Ceres color composition albedo) layers:
+        1: 750/440
+        2: 750
+        3: 960/750
+
     CCCR (Ceres color composition ratio) layers:
         1: 440/750
         2: 550/750
@@ -1154,6 +1159,7 @@ def fc_color_mos(cubefile, order='wavelength', cccafile='CCCA.cub', cccrfile='CC
         cubefile_ordered = outcube
 
     pysis_ext.ratio(denominator=cubefile_ordered+'+4', numerator= cubefile_ordered+'+1',to=join(path,base)+'_440_750.cub')
+    pysis_ext.ratio(denominator=cubefile_ordered+'+1', numerator= cubefile_ordered+'+4',to=join(path,base)+'_750_440.cub')
     pysis_ext.ratio(denominator=cubefile_ordered+'+4', numerator= cubefile_ordered+'+6',to=join(path,base)+'_920_750.cub')
     pysis_ext.ratio(denominator=cubefile_ordered+'+4', numerator= cubefile_ordered+'+7',to=join(path,base)+'_960_750.cub')
     pysis_ext.ratio(denominator=cubefile_ordered+'+1', numerator= cubefile_ordered+'+7',to=join(path,base)+'_960_440.cub')
@@ -1169,6 +1175,12 @@ def fc_color_mos(cubefile, order='wavelength', cccafile='CCCA.cub', cccrfile='CC
     strs.insert(1, cubefile+'+4')
     cccafile = join(path,base+'_'+cccafile)
     pysis_ext.cubeit(strs, cccafile, log=log, tempdir=tempdir, **kwargs)
+
+    # CCCAI
+    strs = [join(path, base)+'_'+x+'.cub' for x in ['750_440','960_750']]
+    strs.insert(1, cubefile+'+4')
+    cccaifile = cccafile.replace('.cub','I.cub')
+    pysis_ext.cubeit(strs, cccaifile, log=log, tempdir=tempdir, **kwargs)
 
     # CCCR
     strs = [join(path,base)+'_'+x+'_750.cub' for x in ['440','550','960']]
@@ -1194,7 +1206,7 @@ def fc_cube(infiles, outfile, layer=1, tempdir=tempdir, log=None, **kwargs):
     pysis_ext.cubeit(inputs, outfile, tempdir=tempdir, log=log, **kwargs)
 
 
-def fit_grid(datafiles, model, parms=None, fixed=None, ilim=None, elim=None, alim=None, rlim=None):
+def fit_grid(datafiles, model, parms=None, fixed=None, ilim=None, elim=None, alim=None, rlim=None, outdir=None):
     '''Fit photometric model to data grid
 
  datafiles : str or str list
@@ -1207,10 +1219,13 @@ def fit_grid(datafiles, model, parms=None, fixed=None, ilim=None, elim=None, ali
 
  v1.0.0 : 1/20/2016, JYL @PSI
     '''
+    from os.path import dirname, basename
     if isinstance(datafiles, (str,bytes)):
         datafiles = [datafiles]
     for ii in range(len(datafiles)):
         df = datafiles[ii]
+        if outdir is None:
+            outdir = dirname(df)
         print('Load photometric data {0}'.format(df))
         dg = Photometry.PhotometricDataGrid(datafile=df)
     #   if trim:
@@ -1228,7 +1243,7 @@ def fit_grid(datafiles, model, parms=None, fixed=None, ilim=None, elim=None, ali
             for jj in range(len(fixed)):
                 getattr(m0, m0.param_names[jj]).fixed=fixed[jj]
         f = dg.fit(m0, ilim=ilim, elim=elim, alim=alim,rlim=rlim)
-        outfile = df.replace('.fits','_'+str(f.model.model_class.name)+'.fits')
+        outfile = outdir+'/'+basename(df).replace('.fits','_'+str(f.model.model_class.name)+'.fits')
         f.model.write(outfile,overwrite=True)
         nlat, nlon = dg.shape
         info = {}
@@ -1270,6 +1285,8 @@ def par2cube(modelfiles, sort=False, logfile=None, overwrite=True):
 
     outdir = os.path.dirname(modelfiles[0])
     nf = len(modelfiles)
+    modelfiles = np.asarray(modelfiles)
+    modelfiles.sort()
     if sort is False:
         sort = list(range(nf))
     else:
@@ -1281,7 +1298,7 @@ def par2cube(modelfiles, sort=False, logfile=None, overwrite=True):
     for k in parnames:
         par[k] = np.zeros((nf,ny,nx))
     m.close()
-    for i,j in zip(sort,list(range(nf))):
+    for j,i in enumerate(sort):
         f = modelfiles[i]
         m = fits.open(f)
         for k in parnames:
@@ -1291,4 +1308,3 @@ def par2cube(modelfiles, sort=False, logfile=None, overwrite=True):
         cubfile = outdir+'/model_'+k+'.cub'
         writefits(outfile, par[k], clobber=overwrite)
         pysis_ext.fits2isis(outfile, cubfile)
-
