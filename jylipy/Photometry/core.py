@@ -102,9 +102,9 @@ class ScatteringGeometry(object):
             elif set('inc emi psi'.split()) == par:
                 data = [kwargs['inc'], kwargs['emi'], kwargs['psi']]
                 names = 'inc emi psi'.split()
-            elif set('pha pholat pholon'.split()) == par:
-                data = [kwargs['pha'], kwargs['pholat'], kwargs['pholon']]
-                names = 'pha pholat pholon'.split()
+            elif set('pha lat lon'.split()) == par:
+                data = [kwargs['pha'], kwargs['lat'], kwargs['lon']]
+                names = 'pha lat lon'.split()
             else:
                 raise GeometryError('Scattering geometry combination not recognized.')
             for i in range(len(data)):
@@ -119,9 +119,9 @@ class ScatteringGeometry(object):
                 self._data = args[0]._data.copy()
             elif isinstance(args[0], Table) or isinstance(args[0], table.Row):
                 # initialize from a table
-                angle_keys = 'inc emi pha psi pholat pholon'.split()
+                angle_keys = 'inc emi pha psi lat lon'.split()
                 k = [c for c in args[0].colnames if c in angle_keys]
-                if (not {'inc','emi','pha'}.issubset(set(k))) and (not {'inc','emi','psi'}.issubset(set(k))) and (not {'pha','pholat','pholon'}.issubset(set(k))):
+                if (not {'inc','emi','pha'}.issubset(set(k))) and (not {'inc','emi','psi'}.issubset(set(k))) and (not {'pha','lat','lon'}.issubset(set(k))):
                     raise ValueError('Initializing table is invalid')
                 v = args[0][k]
                 if v[k[0]].unit is None:
@@ -247,11 +247,11 @@ class ScatteringGeometry(object):
         elif key == 'lat':
             if ('inc' not in self.angles) or ('emi' not in self.angles) or (('psi' not in self.angles) and ('pha' not in self.angles)):
                 raise GeometryError('Insufficient information available to calculate latitudes')
-            v = self.calclat(self.inc, self.emi, self.psi, cos=self.cos).to(self.unit)
+            v = self.calclat(self.inc, self.emi, self.pha, cos=self.cos).to(self.unit)
         elif key == 'lon':
             if ('inc' not in self.angles) or ('emi' not in self.angles) or (('psi' not in self.angles) and ('pha' not in self.angles)):
                 raise GeometryError('Insufficient information available to calculate longitudes')
-            v = self.calclon(self.inc, self.emi, self.psi, cos=self.cos).to(self.unit)
+            v = self.calclon(self.inc, self.emi, self.pha, cos=self.cos).to(self.unit)
         else:
             pass
         if not hasattr(v.value,'__iter__'):
@@ -386,44 +386,36 @@ class ScatteringGeometry(object):
         return condition(cos, cospsi, np.arccos(cospsi))
 
     @staticmethod
-    def calclat(inc, emi, psi, cos=False, rejected={}, good={}):
+    def calclat(inc, emi, pha, cos=False, rejected={}, good={}):
         '''Calculate photometric latitude from incidence, emission, and
         scattering plane angles
 
         All angles are in radiance or in astropy Quantity.
 
-        See Shkuratov et al. (2011), Eq. 2.
+        Use Eqs. (10) and (11) in Kreslavsky et al. (2000) JGR 105,
+        20,281-20,295
         '''
-        cosinc, cosemi, cospsi = ScatteringGeometry._setcos(cos, inc, emi, psi)
-        cosinc2 = cosinc*cosinc
-        sininc2 = 1-cosinc2
-        sininc = np.sqrt(sininc2)
-        cosemi2 = cosemi*cosemi
-        sinemi2 = 1-cosemi2
-        sinemi = np.sqrt(sinemi2)
-        sinpsi2 = 1-cospsi*cospsi
-        D = 2*sininc*cosinc*sinemi*cosemi
-        A = sininc2*cosemi2+cosinc2*sinemi2+D
-        B = (cospsi+1)*D
-        C = sinemi2*sininc2*sinpsi2
-        coslat = np.sqrt((A-B)/(A-B+C))
+        cosemi = ScatteringGeometry._setcos(cos, emi)
+        coslon = ScatteringGeometry.calclon(inc, emi, pha, cos=cos)
+        if not cos:
+            coslon = np.cos(coslon)
+        coslat = cosemi/coslon
         return condition(cos, coslat, np.arccos(coslat))
 
     @staticmethod
-    def calclon(inc, emi, psi, cos=False, rejected={}, good={}):
+    def calclon(inc, emi, pha, cos=False, rejected={}, good={}):
         '''Calculate photometric longitude from incidence, emission, and
         scattering plane angles
 
         All angles are in radiance or in astropy Quantity.
 
-        See Shkuratov et al. (2011), Eq. 2.
+        Use Eqs. (10) and (11) in Kreslavsky et al. (2000) JGR 105,
+        20,281-20,295
         '''
-        cosemi = ScatteringGeometry._setcos(cos, emi)
-        coslat = ScatteringGeometry.calclat(inc, emi, psi, cos=cos)
-        if not cos:
-            coslat = np.cos(coslat)
-        coslon = cosemi/coslat
-        return condition(cos, coslon, np.arccos(coslon))
+        cosinc, cosemi, cospha = ScatteringGeometry._setcos(cos, inc, emi, pha)
+        sinpha = np.sqrt(1.-cospha*cospha)
+        lon = np.arctan2(cosinc/cosemi-cospha, sinpha)
+        return condition(cos, np.cos(lon), lon)
 
     @staticmethod
     def calcpha(inc, emi, psi, cos=False, rejected={}, good={}):
@@ -544,6 +536,7 @@ class ScatteringGeometry(object):
         if cos:
             return condition(len(var) == 1, var[0], var)
         else:
+            var = _2rad(*var)
             vout = [np.cos(v) for v in var]
             return condition(len(var)==1, vout[0], tuple(vout))
 
@@ -772,6 +765,12 @@ class PhotometricData(object):
             for k in 'inc emi pha psi pholat pholon'.split():
                 if k in list(kwargs.keys()):
                     scakey[k] = kwargs.pop(k)
+            if 'pholat' in scakey.keys():
+                scakey['lat'] = scakey['pholat']
+                scakey.pop('pholat')
+            if 'pholon' in scakey.keys():
+                scakey['lon'] = scakey['pholon']
+                scakey.pop('pholon')
             scakey['cos'] = kwargs.pop('cos', False)
             scakey['unit'] = kwargs.pop('unit', units.deg)
             self.sca = ScatteringGeometry(**scakey)
@@ -1976,8 +1975,8 @@ class PhotometricDataGrid(object):
                         from os.path import basename
                         print('Extracting from ', basename(illf))
                     d.extract(illf, ioff, verbose=verbose, **kwargs)
-                    sz = len(d)*6*8/1073741824.
-                    if len(d)*6*8/1073741824. > self.max_mem:
+                    sz = _memory_size(len(d))
+                    if _memory_size(len(d)) > self.max_mem:
                         self.port(d, verbose=verbose)
                         d = PhotometricData()
                 if len(d)>0:
@@ -2141,27 +2140,15 @@ class PhotometricGridFitter(object):
                 if isinstance(data[i,j], PhotometricData):
                     d = data[i,j].copy()
                     d.validate()
-                    inc = d.inc.to('deg').value
-                    emi = d.emi.to('deg').value
-                    pha = d.pha.to('deg').value
+                    d.trim(ilim=ilim, elim=elim, alim=alim, rlim=rlim)
+                    inputs = []
+                    for k in model.inputs:
+                        inputs.append(getattr(d.sca,k).to('deg').value)
                     bdr = d.BDR
-                    w = np.ones_like(inc, dtype=bool)
-                    if ilim is not None:
-                        w &= (inc>ilim[0])&(inc<ilim[1])
-                    if elim is not None:
-                        w &= (emi>elim[0])&(emi<elim[1])
-                    if alim is not None:
-                        w &= (pha>alim[0])&(pha<alim[1])
-                    if rlim is not None:
-                        w &= (bdr>rlim[0])&(bdr<rlim[1])
-                    inc = inc[w]
-                    emi = emi[w]
-                    pha = pha[w]
-                    bdr = bdr[w]
-                    if len(inc)>len(model)+3:
-                        self.model[i,j] = f(model, inc, emi, pha, bdr, **kwargs)
+                    if len(inputs[0])>len(model)+3:  # no idea why this line!!!
+                        self.model[i,j] = f(model, inputs[0], inputs[1], inputs[2], bdr, **kwargs)
                         self.fit_info[i,j] = f.fit_info.copy()
-                        self.fit[i,j] = self.model[i,j](inc,emi,pha)
+                        self.fit[i,j] = self.model[i,j](*inputs)
                         self.RMS[i,j] = np.sqrt(((self.fit[i,j]-bdr)**2).mean())/bdr.mean()
                     else:
                         self.mask[i,j] = False
@@ -2741,59 +2728,58 @@ class AkimovDisk(FittableModel):
         `beta`: photometric latitude
         `gamma`: photometric longitude
 
+    Model follows Eq. (19) in Shkuratov et al. 2011, PSS 59, 1326-1371
+
  v1.0.0 : 1/19/2016, JYL @PSI
     '''
 
-    inputs = ('alpha','beta','gamma')
+    inputs = ('pha','lat','lon')
     outputs = ('d',)
 
     A = Parameter(default=1., min=0.)
+    eta = Parameter(default=1., min=0., max=1.)
 
     @staticmethod
-    def D(alpha, beta, gamma):
-        alpha, beta, gamma = _2rad(alpha, beta, gamma)
-        return np.cos(alpha/2)*np.cos(np.pi/(np.pi-alpha)*(gamma-alpha/2))*np.cos(beta)**(alpha/(np.pi-alpha))/np.cos(gamma)
+    def D(pha, lat, lon, eta):
+        pha, lat, lon = _2rad(pha, lat, lon)
+        return np.cos(pha/2)*np.cos(np.pi/(np.pi-pha)*(lon-pha/2))*np.cos(lat)**(eta*pha/(np.pi-pha))/np.cos(lon)*recipi
 
     @staticmethod
-    def evaluate(alpha, beta, gamma, A):
-        return A*AkimovDisk.D(alpha, beta, gamma)
-
-    @staticmethod
-    def fit_deriv(A, alpha, beta, gamma):
-        return AkimovDisk.D(alpha, beta, gamma)
+    def evaluate(pha, lat, lon, A, eta):
+        return A*AkimovDisk.D(pha, lat, lon, eta)
 
 
 class PhotometricModel(FittableModel):
     '''Base class for photometric models'''
 
-    inputs = ('i', 'e', 'a')
+    inputs = ('inc', 'emi', 'pha')
     outputs = ('r',)
 
-    def BDR(self, i, e, a):
+    def BDR(self, inc, emi, pha):
         '''Bidirectional reflectance'''
-        return self(i, e, a)
+        return self(inc, emi, pha)
 
-    def RADF(self, i, e, a):
+    def RADF(self, inc, emi, pha):
         '''Radiance factor'''
-        return self(i, e, a)*np.pi
+        return self(inc, emi, pha)*np.pi
 
     IoF = RADF
 
-    def BRDF(self, i, e, a):
+    def BRDF(self, inc, emi, pha):
         '''Bidirectional reflectance distribution function'''
-        return self(i, e, a)/np.cos(_2rad(i))
+        return self(inc, emi, pha)/np.cos(_2rad(inc))
 
-    def REFF(self, i, e, a):
+    def REFF(self, inc, emi, pha):
         '''Reflectance factor (reflectance coefficient)'''
-        return self(i, e, a)*np.pi/np.cos(_2rad(i))
+        return self(inc, emi, pha)*np.pi/np.cos(_2rad(inc))
 
-    def normref(self, e):
+    def normref(self, emi):
         '''Normal reflectance'''
-        return self(e, e, 0)
+        return self(emi, emi, 0)
 
-    def normalb(self, e):
+    def normalb(self, emi):
         '''Normal albedo'''
-        return self.RADF(e, e, 0)
+        return self.RADF(emi, emi, 0)
 
 
 class MinnaertPoly3(PhotometricModel):
@@ -2819,10 +2805,10 @@ class MinnaertPoly3(PhotometricModel):
     b = Parameter(default=0., min=0.)
 
     @staticmethod
-    def evaluate(i, e, a, A, beta, gamma, delta, k, b):
-        AA = A*10**(-0.4*(beta*a+gamma*a*a+delta*a*a*a))
-        kk = k+b*a
-        return Minnaert(AA, kk)(i,e)
+    def evaluate(inc, emi, pha, A, beta, gamma, delta, k, b):
+        AA = A*10**(-0.4*(beta*pha+gamma*pha*pha+delta*pha*pha*pha))
+        kk = k+b*pha
+        return Minnaert(AA, kk)(inc,emi)
 
 
 class ROLOModel(PhotometricModel):
@@ -2843,12 +2829,12 @@ class ROLOModel(PhotometricModel):
     A4 = Parameter(default=1e-12)
 
     @staticmethod
-    def evaluate(i, e, a, C0, C1, A0, A1, A2, A3, A4):
-        i, e = _2rad(i, e)
-        mu0 = np.cos(i)
-        mu = np.cos(e)
+    def evaluate(inc, emi, pha, C0, C1, A0, A1, A2, A3, A4):
+        i, e = _2rad(inc, emi)
+        mu0 = np.cos(inc)
+        mu = np.cos(emi)
         f = ROLOPhase(C0, C1, A0, A1, A2, A3, A4)
-        return mu0/(mu0+mu)*f(a)
+        return mu0/(mu0+mu)*f(pha)
 
     def geoalb(self):
         return self.normalb(0.)
@@ -2864,10 +2850,10 @@ class LS_Akimov(PhotometricModel):
     m = Parameter(default=0.2)
 
     @staticmethod
-    def evaluate(i, e, a, A, mu1, mu2, m):
+    def evaluate(inc, emi, pha, A, mu1, mu2, m):
         d = LS(A)
         f = Akimov(mu1, mu2, m)
-        return d(i,e)*f(a)
+        return d(inc,emi)*f(pha)
 
 
 class LS_LinMag(PhotometricModel):
@@ -2878,10 +2864,25 @@ class LS_LinMag(PhotometricModel):
     beta = Parameter(default=0.04, min=0.)
 
     @staticmethod
-    def evaluate(i,e,a,A0,beta):
+    def evaluate(inc,emi,pha,A0,beta):
         d = LS(A0)
         f = LinMagnitude(beta)
-        return d(i,e)*f(a)
+        return d(inc,emi)*f(pha)
+
+
+class Akimov_LinMag(PhotometricModel):
+    '''Akimov disk function and linear magnitude phase function
+    '''
+
+    inputs = ('pha', 'lat', 'lon')
+    A0 = Parameter(default=0.1, min=0.)
+    beta = Parameter(default=0.04, min=0.)
+
+    @staticmethod
+    def evaluate(pha,lat,lon,A0,beta):
+        d = AkimovDisk(A0)
+        f = LinMagnitude(beta)
+        return d(pha,lat,lon)*f(pha)
 
 
 class LambertPolyMag(PhotometricModel):
@@ -2893,8 +2894,8 @@ class LambertPolyMag(PhotometricModel):
     delta = Parameter(default=0.)
 
     @staticmethod
-    def evaluate(i, e, a, A, beta, delta, gamma):
-        return Lambert(A)(i, e)*PolyMagnitude(beta, gamma, delta)(a)
+    def evaluate(inc, emi, pha, A, beta, delta, gamma):
+        return Lambert(A)(inc, emi)*PolyMagnitude(beta, gamma, delta)(pha)
 
 
 class CompositePhotometricModel(PhotometricModel):
@@ -2919,10 +2920,10 @@ class CompositePhotometricModel(PhotometricModel):
             setattr(self, p, getattr(phasefunc, p))
         super(CompositePhotometricModel, self).__init__(**kwargs)
 
-    def evaluate(self, i, e, a, *par):
+    def evaluate(self, inc, emi, pha, *par):
         ndp = len(diskfunc.param_names)
-        d = self.diskfunc.evaluate(i, e, a, *par[:ndp])
-        f = self.phasefunc.evaluate(i, e, a, *par[ndp:])
+        d = self.diskfunc.evaluate(inc, emi, pha, *par[:ndp])
+        f = self.phasefunc.evaluate(inc, emi, pha, *par[ndp:])
         return d*f
 
 
@@ -3179,9 +3180,13 @@ class PhotometricModelFitter(object):
         self.data = pho.copy()
         self.data.validate()
         self.data.trim(ilim=ilim, elim=elim, alim=alim, rlim=rlim)
-        self.model = f(model, self.data.inc, self.data.emi, self.data.pha, self.data.BDR, **kwargs)
+        inputs = []
+        for k in model.inputs:
+            inputs.append(getattr(self.data.sca,k).to('deg').value)
+        bdr = self.data.BDR
+        self.model = f(model, inputs[0], inputs[1], inputs[2], bdr, **kwargs)
         self.fit_info = f.fit_info
-        self.fit = self.model(self.data.inc, self.data.emi, self.data.pha)
+        self.fit = self.model(*inputs)
         self.RMS = np.sqrt(((self.fit-self.data.BDR)**2).mean())
         self.fitted = True
         return self.model
