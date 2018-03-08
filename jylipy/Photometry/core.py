@@ -1045,9 +1045,21 @@ class PhotometricData(object):
     def astable(self):
         if self._data is None:
             return None
-        out = table.hstack((self.sca.astable(), self._data))
+        scatbl = self.sca.astable()
+        tblkeys = scatbl.keys()
+        if 'lon' in tblkeys:
+            scatbl.rename_column('lon','pholon')
+        if 'lat' in tblkeys:
+            scatbl.rename_column('lat','pholat')
+        out = table.hstack((scatbl, self._data))
         if self.geo is not None:
-            out = table.hstack((out, self.geo.astable()))
+            geotbl = self.geo.astable()
+            tblkeys = geotbl.keys()
+            if 'lon' in tblkeys:
+                geotbl.rename_column('lon','geolon')
+            if 'lat' in tblkeys:
+                geotbl.rename_column('lat','geolat')
+            out = table.hstack((out, geotbl))
         out.meta['dtype'] = self.type
         if self.lonlim is not None:
             out.meta['maxlon'] = self.lonlim[1]
@@ -1137,10 +1149,9 @@ class PhotometricData(object):
         '''Read photometric data from file'''
         infits = fits.open(filename)[1]
         indata = Table(infits.data)
-        ang_keys = ['inc', 'emi', 'pha', 'psi', 'lat', 'lon']
+        ang_keys = ['inc', 'emi', 'pha', 'psi', 'pholat', 'pholon']
         ref_keys = ['BDR', 'RADF', 'BRDF', 'REFF']
-        geo_keys = ['lat', 'lon']
-
+        geo_keys = ['lat', 'lon', 'geolat', 'geolon']
 
         ak = [x for x in indata.colnames if x in ang_keys]
         at = indata[ak]
@@ -1192,7 +1203,7 @@ class PhotometricData(object):
         if type == 'auto':
             if (self.type == 'measured') and (pho.type == 'measured'):
                 type = 'simple'
-#            self._simple_merge(pho)
+            #self._simple_merge(pho)
             elif (self.type == 'measured') and (pho.type == 'binned'):
             # raise a warning, no merge
                 warnings.warn('Merge a "binned" type into a "measured" type, simple mode will be used, a "measured" type will be set to output')
