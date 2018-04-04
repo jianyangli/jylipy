@@ -74,42 +74,42 @@ def getsboscelt(name, recno=None, spice=False, disp=True):
         print()
     import telnetlib
     tn = JPLHorizons()
-    tn.read_until('Horizons>')
-    tn.write(name+'\n\n')
-    ret = tn.read_until('<cr>:')
-    ret = ret[ret.find('**'):ret.rfind('**')]
-    if ret[:160].lower().find(name.lower()) < 0:  # not find
-        if ret.find('No matches found') > 0:  # not found
+    tn.read_until(b'Horizons>')
+    tn.write((name+'\n\n').encode('ascii'))
+    ret = tn.read_until(b'<cr>:')
+    ret = ret[ret.find(b'**'):ret.rfind(b'**')]
+    if ret[:160].lower().find(name.lower().encode('ascii')) < 0:  # not find
+        if ret.find(b'No matches found') > 0:  # not found
             print((name+': Object not found.'))
-            tn.write('exit\n')
+            tn.write(b'exit\n')
             return
         else:  # multiple matches found
             if recno is None:   # record number not specified
                 print('Multiple records found.  Please specify record number.')
                 print('  get_oscelt(name, recno=#)')
                 print()
-                for s in ret.split('\r\n'):
+                for s in ret.split(b'\r\n'):
                     print(s)
-                tn.write('exit\n')
+                tn.write(b'exit\n')
                 return
             else:  # use record number
-                tn.write(str(recno)+'\n\n')
-                ret = tn.read_until('<cr>:')
-                ret = ret[ret.find('**'):ret.rfind('**')]
+                tn.write((str(recno)+'\n\n').encode('ascii'))
+                ret = tn.read_until(b'<cr>:')
+                ret = ret[ret.find(b'**'):ret.rfind(b'**')]
                 if ret[:160].lower().find(name.lower()) < 0:
                     print((name+': Object not found.'))
-                    tn.write('exit\n')
+                    tn.write(b'exit\n')
                     return
-    tn.write('exit\n')
+    tn.write(b'exit\n')
     if disp:
-        for s in ret.split('\r\n'):
-            print(s)
+        for s in ret.split(b'\r\n'):
+            print(s.decode('utf-8'))
 
     # extract parameters
     if disp:
         print()
         print('Extracting osculation elements ...')
-    keys = [' '+s for s in 'EPOCH= ! EC= QR= TP= OM= W= IN= A= MA= ADIST= PER= N= ANGMOM= DAN= DDN= L= B= MOID= TP='.split()]
+    keys = [b' '+s for s in b'EPOCH= ! EC= QR= TP= OM= W= IN= A= MA= ADIST= PER= N= ANGMOM= DAN= DDN= L= B= MOID= TP='.split()]
     offset = [len(k)-1 for k in keys]
     ind = [ret.find(s)+1 for s in keys]
     ind[-1] = ret.rfind(keys[-1])
@@ -129,7 +129,7 @@ def getsboscelt(name, recno=None, spice=False, disp=True):
         return {'QR':elm[2],'EC':elm[1],'IN':elm[6],'OM':elm[4],'W':elm[5],'MA':elm[8],'EPOCH':elm[0],'TP':elm[3],'A':elm[7],'ADIST':elm[9],'PER':elm[10],'N':elm[11]}
 
 
-def getsbspk(name, start, stop, outfile, recno=None, clobber=False, verbose=True):
+def getsbspk(name, start, stop, outfile, recno=None, overwrite=False, verbose=True):
     '''Retrieve SPK of small bodies from JPL Horizons
 
  Parameters
@@ -146,7 +146,7 @@ def getsbspk(name, start, stop, outfile, recno=None, clobber=False, verbose=True
    keyword contains the record number in JPL Horizons.  It has to have
    the same length as `name`.  The elements that are not needed are
    simply ignored.
- clobber : bool, optional
+ overwrite : bool, optional
    If `True`, then if output file exists, it will be overwritten.  If
    `False`, then if output file exists, an error message will be
    printed out.
@@ -168,7 +168,7 @@ def getsbspk(name, start, stop, outfile, recno=None, clobber=False, verbose=True
 
     import os
     if os.path.isfile(outfile):
-        if clobber:
+        if overwrite:
             os.remove(outfile)
         else:
             print('Output file exist.')
@@ -188,18 +188,18 @@ def getsbspk(name, start, stop, outfile, recno=None, clobber=False, verbose=True
         print('Initializing telnet://horizons.jpl.nasa.gov:6775/ ...')
     import telnetlib
     tn = JPLHorizons()
-    tn.read_until('Horizons>')
+    tn.read_until(b'Horizons>')
 
     # adding objects into spk
     n = 0
     while True:
         if verbose:
             print(('Adding '+nms[n]+' ...'))
-        tn.write(nms[n]+'\n\n')
-        ret = tn.read_until('<cr>:')
-        ret = ret[ret.find('**'):ret.rfind('**')]
-        if ret[:160].lower().find(nms[n].lower()) < 0:
-            if ret.find('No matches found') > 0:
+        tn.write((nms[n]+'\n\n').encode('ascii'))
+        ret = tn.read_until(b'<cr>:')
+        ret = ret[ret.find(b'**'):ret.rfind(b'**')]
+        if ret[:160].lower().find(nms[n].lower().encode('ascii')) < 0:
+            if ret.find(b'No matches found') > 0:
                 print((nms[n]+': Object not found.  Skipped.'))
                 n += 1
                 if n == len(nms):
@@ -211,69 +211,56 @@ def getsbspk(name, start, stop, outfile, recno=None, clobber=False, verbose=True
                     print((nms[n]+': Multiple records found, no record number specified.  Skipped.'))
                     n += 1
                     if n == len(nms):
-                        tn.write('f\n')
+                        tn.write(b'f\n')
                         break
                     continue
                 else:  # use record number
-                    tn.write(str(recs[n])+'\n')
-                    ret = tn.read_until('<cr>:')
-                    ret = ret[ret.find('**'):ret.rfind('**')]
+                    tn.write((str(recs[n])+'\n').encode('ascii'))
+                    ret = tn.read_until(b'<cr>:')
+                    ret = ret[ret.find(b'**'):ret.rfind(b'**')]
                     if ret[:160].lower().find(nms[n].lower()) < 0:
                         print((nms[n]+': Error: Object not found.  Skipped.'))
                         n += 1
                         if n == len(nms):
-                            tn.write('f\n')
+                            tn.write(b'f\n')
                             break
                         continue
 
-        tn.write('s\n')
+        tn.write(b's\n')
         if n == 0:
-            tn.write('jyli@psi.edu\nyes\n\n')
-        tn.write(start+'\n'+stop+'\n')
+            tn.write(b'jyli@psi.edu\nyes\n\n')
+        tn.write(b'B\n')
+        tn.write((start+'\n'+stop+'\n').encode('ascii'))
         n += 1
         if n == len(nms):
-            tn.write('no\n')
+            tn.write(b'no\n')
             break
-        tn.write('yes\n')
-        dmp = tn.read_until('Select ... [E]phemeris, [M]ail, [R]edisplay, ?, <cr>')  # dump output
+        tn.write(b'yes\n')
+        dmp = tn.read_until(b'Select ... [E]phemeris, [M]ail, [R]edisplay, ?, <cr>')  # dump output
 
     # extract output file name
-    tn.write('exit\n')
+    tn.write(b'exit\n')
     ret = tn.read_all()
-    ind = ret.rfind('Full path')
-    outstr = ret[ind:ind+80].split('\r\r\n')[0]
-    out = outstr[outstr.find('ftp'):]
+    ind = ret.rfind(b'Full path')
+    outstr = ret[ind:ind+80].split(b'\r\r\n')[0]
+    out = outstr[outstr.find(b'ftp'):]
 
     # download output file
     if verbose:
-        print(('Downloading SPK file from '+outstr.split()[3]+' ...'))
+        print(('Downloading SPK file from '+outstr.split()[3].decode('utf-8')+' ...'))
     import os
-    if os.path.isfile('getspk.tmp'):
-        os.remove('getspk.tmp')
-    tmpspk = open('getspk.tmp', 'wb')
+    spkfile = open(outfile, 'wb')
     import ftplib
-    outstr = out.split('/')
+    outstr = out.split(b'/')
     ftp = ftplib.FTP(outstr[2])
     ftp.login()
-    ftp.cwd('/'.join(outstr[3:-1]))
+    ftp.cwd(b'/'.join(outstr[3:-1]).decode('utf-8'))
     ftp.set_pasv(True)
     ftp.sendcmd('OPTS UTF8 ON')
     ftp.sendcmd('TYPE I')
-    ftp.retrbinary('RETR '+outstr[-1], tmpspk.write)
+    ftp.retrbinary('RETR '+outstr[-1].decode('utf-8'), spkfile.write)
     ftp.quit()
-    tmpspk.close()
-
-    # convert to binary spk
-    if verbose:
-        print('Converting to binary SPK ...')
-    import subprocess
-    if not verbose:
-        fout = open(os.devnull,'w')
-        subprocess.call(['tobin', 'getspk.tmp', outfile], stdout=fout)
-        fout.close()
-    else:
-        subprocess.call(['tobin', 'getspk.tmp', outfile])
-    os.remove('getspk.tmp')
+    spkfile.close()
 
     if verbose:
         print('Done.')
