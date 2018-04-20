@@ -139,15 +139,22 @@ def plot_model_quality(datafile):
     pdf.close()
 
 
-def plot_phomodel(phofile):
+def plot_phomodel(phofile, model=None,**kwargs):
     par = read_phomodel(phofile)
     pdf = PdfPages(phofile.replace('.fits','.pdf'))
-    for k in par.keys():
+    if model is None:
+        mds = par.keys()
+    else:
+        if isinstance(model,str):
+            mds = [model]
+        elif isinstance(model,list):
+            mds = model
+    for k in mds:
         np = par[k]['par'].shape[1]
         plt.clf()
         f,ax = plt.subplots(np,1,sharex=True,num=plt.gcf().number)
         for i in range(np):
-            ax[i].plot(par[k]['wavelength'],par[k]['par'][:,i])
+            ax[i].plot(par[k]['wavelength'],par[k]['par'][:,i],**kwargs)
             pplot(ax[i])
         pplot(ax[-1],xlabel='Wavelength ($\mu$m)')
         pplot(ax[0],title=k)
