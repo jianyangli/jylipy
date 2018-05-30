@@ -184,7 +184,7 @@ class PDSData(object):
         '''Read a PDS image data record'''
         import warnings
         dtype = pds_types[obj['SAMPLE_TYPE']]+str(obj['SAMPLE_BITS'])
-        shape = obj['LINES'],obj['LINE_SAMPLES'],obj['BANDS']
+        shape = obj['BANDS'],obj['LINES'],obj['LINE_SAMPLES']
         count = obj['LINES']*obj['LINE_SAMPLES']*obj['BANDS']
         out = np.fromstring(st, dtype=dtype, count=count)
         #if ('unit' in list(obj.keys())) or ('UNIT' in list(obj.keys())):
@@ -195,7 +195,8 @@ class PDSData(object):
         #else:
         #    unit = ''
         unit = ''
-        im = Image(np.squeeze(out.reshape(shape)),meta=obj,unit=unit)
+        #im = Image(np.squeeze(out.reshape(shape)),meta=obj,unit=unit)
+        im = np.squeeze(out.reshape(shape))
         if ('LINE_DISPLAY_DIRECTION' not in obj) or ('SAMPLE_DISPLAY_DIRECTION' not in obj):
             warnings.warn('DISPLAY_DIRECTION not specified')
         else:
