@@ -139,9 +139,10 @@ def plot_model_quality(datafile):
     pdf.close()
 
 
-def plot_phomodel(phofile, model=None,**kwargs):
+def plot_phomodel(phofile, model=None,filter=True,savefig=False,overplot=False,**kwargs):
     par = read_phomodel(phofile)
-    pdf = PdfPages(phofile.replace('.fits','.pdf'))
+    if savefig:
+        pdf = PdfPages(phofile.replace('.fits','.pdf'))
     if model is None:
         mds = par.keys()
     else:
@@ -150,16 +151,25 @@ def plot_phomodel(phofile, model=None,**kwargs):
         elif isinstance(model,list):
             mds = model
     for k in mds:
-        np = par[k]['par'].shape[1]
-        plt.clf()
-        f,ax = plt.subplots(np,1,sharex=True,num=plt.gcf().number)
-        for i in range(np):
-            ax[i].plot(par[k]['wavelength'],par[k]['par'][:,i],**kwargs)
+        npar = par[k]['par'].shape[1]
+        if filter:
+            flags = par[k]['par'].sum(axis=1) != 0
+        else:
+            flags = np.ones(par[k]['par'].shape[0],dtype=bool)
+        if overplot:
+            f = plt.gcf()
+            ax = f.axes
+        else:
+            f,ax = plt.subplots(npar,1,sharex=True,num=plt.gcf().number)
+        for i in range(npar):
+            ax[i].plot(par[k]['wavelength'][flags],par[k]['par'][flags,i],**kwargs)
             pplot(ax[i])
         pplot(ax[-1],xlabel='Wavelength ($\mu$m)')
         pplot(ax[0],title=k)
-        pdf.savefig()
-    pdf.close()
+        if savefig:
+            pdf.savefig()
+    if savefig:
+        pdf.close()
 
 
 def load_specdata(datafile):
