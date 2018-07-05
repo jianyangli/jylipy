@@ -57,7 +57,7 @@ class Data(object):
 
     allinstruments = ['fc', 'vir']
     alllevels = ['1a', '1b', '1c']
-    allphases = ['csa', 'csr', 'cts', 'css', 'cth', 'csh', 'ctl', 'csl', 'vsa', 'vss', 'vth', 'vsh', 'vtl', 'vsl', 'vt2', 'vh2', 'vtc']
+    allphases = ['csa', 'csr', 'cts', 'css', 'cth', 'csh', 'ctl', 'csl', 'cxl', 'cxj', 'cxg', 'cto', 'cx2', 'c2i', 'c2e', 'vsa', 'vss', 'vth', 'vsh', 'vtl', 'vsl', 'vt2', 'vh2', 'vtc']
 
     rmtroot = 'dscws.igpp.ucla.edu:/data/DSDb/data'
     localroot = '/Volumes/Dawn_Data'
@@ -139,7 +139,6 @@ class Data(object):
     def fetch(self, fmt='IMG', delete=False):
         '''Fetch Dawn data'''
         from subprocess import call
-        import pysftp
         from os.path import isdir
         from os import mkdir
 
