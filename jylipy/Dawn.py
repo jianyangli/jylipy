@@ -461,7 +461,7 @@ class FCImage_old(ImageMeasurement):
                 spice.furnsh(kernel)
             self.spice = kernel
         else:
-            raise spice.SpiceException('kernel(s) not specified')
+            raise spice.utils.support_types.SpiceyError('kernel(s) not specified')
 
     def _unload_spice_kernels(self, kernel=None):
         if kernel is not None:
@@ -471,7 +471,7 @@ class FCImage_old(ImageMeasurement):
             else:
                 spice.unload(kernel)
         else:
-            raise spice.SpiceException('kernel(s) not specified')
+            raise spice.utils.support_types.SpiceyError('kernel(s) not specified')
 
     def calcgeom(self, kernel=None):
         if kernel is not None: self._load_spice_kernels(kernel)
@@ -485,7 +485,7 @@ class FCImage_old(ImageMeasurement):
         try:
             m = np.asarray(spice.sxform('j2000','dawn_fc2', t.et))
             self.geometry['CelN'] = (360+270-xyz2sph(m[:3,:3].dot([0,0,1]))[1]) % 360 *units.deg
-        except spice.SpiceException:
+        except spice.utils.support_types.SpiceyError:
             print('CK not available for '+t.isot)
         if kernel is not None: self._unload_spice_kernels(kernel)
 
@@ -577,7 +577,7 @@ class FCImage(Image):
             try:
                 m = np.asarray(spice.sxform('j2000','dawn_fc2', t.et))
                 self.geometry['celn'] = (360+270-xyz2sph(m[:3,:3].dot([0,0,1]))[1]) % 360 *units.deg
-            except spice.SpiceException:
+            except spice.utils.support_types.SpiceyError:
                 print('CK not available for '+t.isot)
 
 
