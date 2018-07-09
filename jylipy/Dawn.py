@@ -623,6 +623,7 @@ def aspect(files, saveto=None):
             files = [files]
     load_dawn_kernels()
     for f in files:
+        print(basename(f))
         im = FCImage(f)
         im.calcgeom()
         name.append(basename(f))
