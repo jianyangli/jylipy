@@ -28,12 +28,6 @@ from . import astrometry
 from . import mpc
 #from . import spiceypy1
 
-# Dawn related
-from . import Dawn
-
-# OSIRIS-REx related
-from . import OREx
-
 # In testing
 from . import function
 
