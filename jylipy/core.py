@@ -1064,7 +1064,7 @@ def sflux(wv, th, spec=None):
         wv_value = wv
 
     d_wv = np.gradient(wv_value)
-    result = (fs(wv_value)*th*d_wv).sum()/(th*d_wv).sum()
+    result = (fs(wv_value)*th*d_wv*wv_value).sum()/(th*d_wv*wv_value).sum()
     if type(wv) is units.Quantity:
         result = result*units.Unit('W m-2 um-1')
     return result
