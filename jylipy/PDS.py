@@ -163,6 +163,7 @@ class Header(CaseInsensitiveOrderedDict):
 
 
 pds_types = {'LSB_UNSIGNED_INTEGER': 'uint', \
+             'MSB_UNSIGNED_INTEGER': 'uint', \
              'PC_REAL': 'float'}
 
 class PDSData(object):
@@ -184,8 +185,15 @@ class PDSData(object):
         '''Read a PDS image data record'''
         import warnings
         dtype = pds_types[obj['SAMPLE_TYPE']]+str(obj['SAMPLE_BITS'])
-        shape = obj['BANDS'],obj['LINES'],obj['LINE_SAMPLES']
-        count = obj['LINES']*obj['LINE_SAMPLES']*obj['BANDS']
+        if obj['BANDS'] > 1:
+            if obj['BAND_STORAGE_TYPE'] == 'BAND_SEQUENTIAL':
+                shape = obj['BANDS'],obj['LINES'],obj['LINE_SAMPLES']
+            else:
+                shape = obj['LINES'],obj['LINE_SAMPLES'],obj['BANDS']
+            count = obj['LINES']*obj['LINE_SAMPLES']*obj['BANDS']
+        else:
+            shape = obj['LINES'],obj['LINE_SAMPLES']
+            count = obj['LINES']*obj['LINE_SAMPLES']
         out = np.fromstring(st, dtype=dtype, count=count)
         #if ('unit' in list(obj.keys())) or ('UNIT' in list(obj.keys())):
         #    if obj['unit'].lower() == 'du':
@@ -195,8 +203,10 @@ class PDSData(object):
         #else:
         #    unit = ''
         unit = ''
-        #im = Image(np.squeeze(out.reshape(shape)),meta=obj,unit=unit)
-        im = np.squeeze(out.reshape(shape))
+        if obj['BANDS'] == 1:
+            im = Image(np.squeeze(out.reshape(shape)),meta=obj,unit=unit)
+        else:
+            im = np.squeeze(out.reshape(shape))
         if ('LINE_DISPLAY_DIRECTION' not in obj) or ('SAMPLE_DISPLAY_DIRECTION' not in obj):
             warnings.warn('DISPLAY_DIRECTION not specified')
         else:
@@ -219,8 +229,15 @@ class PDSData(object):
         ims = OrderedDict()
         for objname in hdr.pointers:
             if objname in hdr:
-                pt = (hdr.pointers[objname]-1)*hdr['RECORD_BYTES']
-                ims[objname] = self.read_image_rec(hdr[objname], s[pt:])
+                if isinstance(hdr.pointers[objname], int):
+                    pt = (hdr.pointers[objname]-1)*hdr['RECORD_BYTES']
+                    ims[objname] = self.read_image_rec(hdr[objname], s[pt:])
+                elif isinstance(hdr.pointers[objname], str):
+                    from os.path import dirname
+                    f = open('/'.join([dirname(infile),hdr.pointers[objname]]), 'rb')
+                    s = f.read()
+                    f.close()
+                    ims[objname] = self.read_image_rec(hdr[objname], s)
         return ims
 
 def readpds(datafile):
