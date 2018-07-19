@@ -362,3 +362,34 @@ def orbpole(i, o):
         return Vector([Vector(0,0,1.).eular(x, y, 0) for x, y in b]).reshape(bshape)
     else:
         return Vector(0,0,1.).eular(o, i, 0)
+
+
+
+def proj_cyl2sin(z):
+    from scipy.interpolate import interp2d, RectBivariateSpline
+    zz = np.asarray(z)
+    zz[~np.isfinite(zz)] = 0.
+    sz = np.array(zz.shape)
+    lat = np.linspace(-90, 90, sz[0])
+    lon = np.linspace(0, 360*(1-1/sz[1]), sz[1])
+    #f = interp2d(lon, lat, zz, kind='cubic')
+    f = RectBivariateSpline(lat, lon, zz)
+    sz += 1
+    mask = np.ones(sz,dtype=int)
+    lat = np.linspace(-90, 90, sz[0])
+    lon = np.linspace(0, 360, sz[1])
+    longrid, latgrid = np.meshgrid(lon, lat)
+    for i,ll in enumerate(lat):
+        lonscl = np.cos(np.deg2rad(ll))*sz[1]
+        l1 = int(np.ceil((sz[1]-lonscl)/2))
+        l2 = int(np.floor((sz[1]+lonscl)/2))
+        if l2>=l1+1:
+            longrid[i][:l1+1] = 0
+            longrid[i][l2:] = 0
+            longrid[i][l1+1:l2] = np.linspace(0,360,l2-l1-1)
+            mask[i][l1+1:l2] = 0
+        else:
+            longrid[i] = 0
+    out = f(latgrid,longrid,grid=False)
+    out[mask==1] = np.nan
+    return out
