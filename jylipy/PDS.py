@@ -197,14 +197,13 @@ class PDSData(object):
         out = np.fromstring(st, dtype=dtype, count=count)
         if 'SCALING_FACTOR' in obj.keys():
             out = out*obj['SCALING_FACTOR']
-        #if ('unit' in list(obj.keys())) or ('UNIT' in list(obj.keys())):
-        #    if obj['unit'].lower() == 'du':
-        #        unit = units.adu
-        #    else:
-        #        unit = units.Unit(obj['unit'])
-        #else:
-        #    unit = ''
-        unit = ''
+        if ('unit' in list(obj.keys())) or ('UNIT' in list(obj.keys())):
+            if obj['unit'].lower() == 'du':
+                unit = units.adu
+            else:
+                unit = units.Unit(obj['unit'],parse_strict='warn')
+        else:
+            unit = ''
         if obj['BANDS'] == 1:
             im = Image(np.squeeze(out.reshape(shape)),meta=obj,unit=unit)
         else:
