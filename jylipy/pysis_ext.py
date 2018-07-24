@@ -17,16 +17,17 @@ v0.0.3 : 3/1/2016, JYL @PSI
   Define a wrapper `EZWrapper` to change the API of ISIS command calls
 v0.0.4 : 5/17/2016, JYL @PSI
   Include all ISIS commands in the wrapped API
+Stopped version tracking here, use git for change control
 '''
 
-import os
-import pysis
-from pysis import isis
+from pysis import isis, cubefile
+from os.path import splitext, isfile, isdir, basename, dirname, join
 
-#_to_load = ['explode', 'ratio', 'catlab', 'cubeit', 'mosrange', 'fits2isis', 'cam2map', 'dawnfc2isis', 'dawnvir2isis']
+__all__ = isis.__all__ + ['CubeFile', 'EZWrapper', 'iter_isis', 'listgen']
+
 _to_load = isis.__all__
 
-class CubeFile(pysis.cubefile.CubeFile):
+class CubeFile(cubefile.CubeFile):
     '''Modified CubeFile class that reverse the data in vertical
     direction to be consistent with FITS format and DS9 display,
     where the origin (0,0) is at lower-left and vertical direction
@@ -43,23 +44,32 @@ def iter_isis(func, indata, *args, **kwargs):
     Parameters
     ----------
     func : Function to execute
-    indata : str
-      A single file, or a directory.  If directory, then all files in
-      it, or all subdirectories, will be processed iteratively.
-    outdata : str, optional
-      Output file or directory corresponding to `indata`.  I.e., if
-      `indata` is a file/dir, then `outdata` is considered a file/dir.
+    indata : str or iterable of str
+      A single file name, a list of file name, or a directory name.  If
+      directory, then all files in it, and all subdirectories, will be
+      processed iteratively.
+    outdata : str or iterable of str, optional
+      Output file name(s) or directory name corresponding to `indata`.
+      If `indata` is a file/dir, then `outdata` is considered a file/dir.
+      If `indata` is a list of files/dirs, then: if `outdata` is a single
+      string, then it's considered a directory name to store all output;
+      if `outdata` is a list of string, then it is individual output
+      name corresponding to input files
       It can be absent if the isis command `func` doesn't require a
       to= parameter
-    verbose : bool, optional
-      Verbose mode.  Default is True
+    verbose : bool, taggle on verbose mode
+    ext : str, the extension or ending of files to be processed.  Can be used
+      to filter out unwanted files in the same directory
+    suffix : str, if provided, then the extension of input file name will be
+      replaced by this string.  Note that if use this keyword to change the
+      extension of input file name, then the . (dot) has to be included here
     **kwargs : the input parameters for isis command `func`
 
     v1.0.0, 05/26/2015, JYL @PSI
     '''
-    from .core import findfile
+    from .core import findfile, is_iterable
+    from os import makedirs
 
-    verbose = kwargs.pop('verbose', True)
     if len(args) == 1:
         outdata = args[0]
     elif len(args) == 0:
@@ -67,49 +77,66 @@ def iter_isis(func, indata, *args, **kwargs):
     else:
         raise TypeError('iter_isis() takes 2 or 3 arguments, {0} received'.format(2+len(args)))
 
-    isiskeys = {}
-    if os.path.isfile(indata):
-        if verbose:
-            print('processing file ', os.path.basename(indata))
-        isiskeys['from'] = indata
+    if is_iterable(indata):
+        # if input is a string of file/dir names, loop through them
         if outdata is not None:
-            outpath = os.path.dirname(outdata)
-            outfile = os.path.basename(outdata)
-            if not os.path.isdir(outpath):
-                os.makedirs(outpath)
-            if outdata.split('.')[-1].lower() != 'cub':
-                outdata = '.'.join(outdata.split('.')[:-1]+['cub'])
-            isiskeys['to'] = outdata
-        for k in list(kwargs.keys()):
-            isiskeys[k] = kwargs[k]
-        func(**isiskeys)
-    elif os.path.isdir(indata):
+            if is_iterable(outdata):
+                for fi, fo in zip(indata, outdata):
+                    iter_isis(func, fi, fo, **kwargs)
+            else:
+                # `outdata` is a directory name
+                makedirs(outdata, exist_ok=True)
+                for fi in indata:
+                    iter_isis(func, fi, join(outdata, basename(fi)), **kwargs)
+        else:
+            for fi in indata:
+                iter_isis(func, fi, **kwargs)
+    elif isdir(indata):
+        # if input is a directory
+        verbose = kwargs.get('verbose', True)
+        ext = kwargs.get('ext', None)
         insidedir = findfile(indata, dir=True)
         insidefile = findfile(indata)
-        insidefile = [x for x in insidefile if x.lower().endswith('.img') or x.lower().endswith('.pds') or x.lower().endswith('.cub') or x.lower().endswith('.fit') or x.lower().endswith('.fits')]
+        if ext is not None:
+            insidefile = [x for x in insidefile if x.lower().endswith(ext)]
         if len(insidefile) > 0:
             if verbose:
-                print('directory {0}: {1} files found'.format(os.path.basename(indata), len(insidefile)))
+                print('directory {0}/: {1} files found'.format(indata, len(insidefile)))
             if outdata is not None:
-                if not os.path.isdir(outdata):
-                    os.makedirs(outdata)
+                makedirs(outdata, exist_ok=True)
                 for fi in insidefile:
-                    iter_isis(func, fi, os.path.join(outdata, os.path.basename(fi)), verbose=verbose, **kwargs)
+                    fo = join(outdata, basename(fi))
+                    iter_isis(func, fi, fo, **kwargs)
             else:
                 for fi in insidefile:
-                    iter_isis(func, fi, verbose=verbose, **kwargs)
+                    iter_isis(func, fi, **kwargs)
         if len(insidedir) > 0:
             if verbose:
-                print('directory {0}: {1} subdirectories found'.format(os.path.basename(indata), len(insidedir)))
+                print('directory {0}/: {1} subdirectories found'.format(indata, len(insidedir)))
             if outdata is not None:
-                if not os.path.isdir(outdata):
-                    os.makedirs(outdata)
+                makedirs(outdata, exist_ok=True)
                 for di in insidedir:
-                    print('processing directory ', os.path.basename(di))
-                    iter_isis(func, di, os.path.join(outdata, os.path.basename(di)), verbose=verbose, **kwargs)
+                    print('processing directory {0}/', basename(di))
+                    iter_isis(func, di, join(outdata, basename(di)), **kwargs)
             else:
                 for di in insidedir:
-                    iter_isis(func, di, verbose=verbose, **kwargs)
+                    iter_isis(func, di, **kwargs)
+    elif isfile(indata):
+        # if input is a single file
+        verbose = kwargs.pop('verbose', True)
+        suffix = kwargs.pop('suffix', None)
+        ext = kwargs.pop('ext', None)
+        if verbose:
+            print('processing file {0}'.format(basename(indata)))
+        isiskeys = {}
+        isiskeys['from'] = indata
+        if outdata is not None:
+            makedirs(dirname(outdata), exist_ok=True)
+            if suffix is not None:
+                fo = splitext(outdata)[0]+suffix
+            isiskeys['to'] = fo
+        isiskeys.update(kwargs)
+        func(**isiskeys)
     else:
         raise ValueError('input not found: {0}'.format(indata))
 
@@ -118,7 +145,7 @@ def listgen(outfile, strlist, overwrite=True):
     '''Generate a list file with the strings in `strlist`'''
 
     if not overwrite:
-        if os.path.isfile(outfile):
+        if isfile(outfile):
             raise IOError('output file exists')
 
     f = open(outfile, 'w')
@@ -174,7 +201,8 @@ class EZWrapper(object):
           then the temporary list file will be removed after the call
         **kwargs : other key=value for the ISIS command.  The values set
           here will override the default values set in the initialization
-          of functions.
+          of functions.  The 'yes' or 'no' value keys can be set by boolean
+          values True or False.
 
     v1.0.0 : JYL @PSI, 3/1/2016
     '''
@@ -199,7 +227,7 @@ class EZWrapper(object):
                 fromlist = True
                 listfile = kwargs.pop('listfile', None)
                 if listfile is None:
-                    lstfile = os.path.join(tempdir, self.func.name.split('/')[-1]+'.lst')
+                    lstfile = join(tempdir, self.func.name.split('/')[-1]+'.lst')
                 else:
                     lstfile = listfile
                 listgen(lstfile, infile)
@@ -215,16 +243,22 @@ class EZWrapper(object):
 
         if len(parms)>0:
             if log is None:
-                logfile = os.path.join(tempdir, 'temp.log')
+                logfile = join(tempdir, 'temp.log')
             else:
                 logfile = log
             parms['-log'] = logfile
+
+        for k in parms:
+            if parms[k] == True:
+                parms[k] = 'yes'
+            elif parms[k] == False:
+                parms[k] = 'no'
 
         self.func(**parms)
 
         if fromlist and (listfile is None):
             os.remove(lstfile)
-        if (len(parms)>0) & (log is None) and ('-log' in list(parms.keys())) and os.path.isfile(logfile):
+        if (len(parms)>0) & (log is None) and ('-log' in list(parms.keys())) and isfile(logfile):
             os.remove(logfile)
 
 
