@@ -739,7 +739,7 @@ class PhotometricData(object):
     '''
 
     def __init__(self, *args, **kwargs):
-        if len(args) == 0:
+        if (len(args) == 0) or ((len(args) == 1) and (args[0] is None)):
             if len(kwargs) == 0:
                 # Initialize an empty class.  In this case, only `append` and `read` methods can be called
                 self._data = None
@@ -3427,7 +3427,7 @@ def extract_phodata(illfile, iofdata=0, maskdata=None, backplanes=None, binsize=
     # organize data
     ww = where(~mask)
     if len(ww[0])>0:
-        data = np.concatenate((im.astype('f4'), ill.astype('f4')))
+        data = np.concatenate((im[np.newaxis,...].astype('f4'), ill.astype('f4')))
         data = data[:,~mask]
         names = imnames + backplanes
         out = Table(list(data), names=names)
@@ -3438,3 +3438,4 @@ def extract_phodata(illfile, iofdata=0, maskdata=None, backplanes=None, binsize=
     else:
         if verbose:
             print('No valid data extracted.')
+        return PhotometricData()
