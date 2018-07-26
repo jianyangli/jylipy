@@ -20,22 +20,13 @@ v0.0.4 : 5/17/2016, JYL @PSI
 Stopped version tracking here, use git for change control
 '''
 
-from pysis import isis, cubefile
+from pysis import isis
+from pysis.cubefile import CubeFile
 from os.path import splitext, isfile, isdir, basename, dirname, join
 
 __all__ = isis.__all__ + ['CubeFile', 'EZWrapper', 'iter_isis', 'listgen']
 
 _to_load = isis.__all__
-
-class CubeFile(cubefile.CubeFile):
-    '''Modified CubeFile class that reverse the data in vertical
-    direction to be consistent with FITS format and DS9 display,
-    where the origin (0,0) is at lower-left and vertical direction
-    goes up.
-    '''
-    def __init__(self, *args, **kwargs):
-        super(CubeFile, self).__init__(*args, **kwargs)
-        self.data = self.data[:,::-1,:]
 
 
 def iter_isis(func, indata, *args, **kwargs):

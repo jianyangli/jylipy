@@ -11,6 +11,7 @@ History
 '''
 
 import collections
+import warnings
 import numpy as np
 from matplotlib import pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
@@ -18,6 +19,10 @@ import photutils as P
 import ccdproc
 from .saoimage import getds9
 from .apext import *
+
+
+class jylipyDeprecationWarning(DeprecationWarning):
+    pass
 
 
 def is_iterable(v):
@@ -2051,6 +2056,7 @@ def readfits(imfile, ext=0, verbose=True, header=False):
             else:
                 img = fitsfile[extindex].data
 
+        fitsfile.close()
         if header:
             return img, hdr
         else:
@@ -2067,16 +2073,19 @@ def readfits(imfile, ext=0, verbose=True, header=False):
         raise TypeError('str or list of str expected, {0} received'.format(type(imfile)))
 
 
-def writefits(imfile, data=None, header=None, name=None, append=False, clobber=False):
+def writefits(imfile, data=None, header=None, name=None, append=False, clobber=False, overwrite=False):
     '''IDL writefits emulator'''
+    if clobber:
+        warnings.warn('"clobber" was deprecated and will be removed in the future. Use argument "overwrite" instead.', jylipyDeprecationWarning,stacklevel=2)
+        overwrite=True
     if append:
         hdu = fits.ImageHDU(data, header=header, name=name)
         hdulist = fits.open(imfile)
         hdulist.append(hdu)
-        hdulist.writeto(imfile, clobber=True)
+        hdulist.writeto(imfile, overwrite=True)
     else:
         hdu = fits.PrimaryHDU(data, header=header)
-        hdu.writeto(imfile, clobber=clobber)
+        hdu.writeto(imfile, overwrite=overwrite)
 
 
 def headfits(imfile, ext=0, verbose=True):
@@ -3342,9 +3351,7 @@ def write_fitstable(filename, *args, **kwargs):
    output file.  See astropy.io.fits.header.
  append : boolean, default is True
     If True, then the new table is appended to the existing file.
-    Otherwise, if clobber keyword is explicitly set to True, then the
-    new table will replace the existing file.  If clobber is not
-    set, then an exception will be generated.
+    Otherwise the new table will replace the existing file.
 
  Returns
  -------
@@ -3354,21 +3361,13 @@ def write_fitstable(filename, *args, **kwargs):
     '''
 
     ncol = len(args)
-
-    colnames = kwargs.pop('colnames',None)
+    colnames = kwargs.pop('colnames',['col{0}'.format(i) for i in range(ncol)])
     format = kwargs.pop('format',['E']*ncol)
     units = kwargs.pop('units',[None]*ncol)
     header = kwargs.pop('header',None)
     append = kwargs.pop('append',True)
 
-    if colnames == None:
-        colnames = []
-        for i in range(ncol):
-            colnames.append('COL'+repr(i+1))
-
-    cols = []
-    for c, n, f, u in zip(args, colnames, format, units):
-        cols.append(fits.Column(name=n, format=f, array=c, unit=u))
+    cols = [fits.Column(name=n, format=f, array=c, unit=u) for c, n, f, u in zip(args, colnames, format, units)]
 
     tbhdu = fits.new_table(fits.ColDefs(cols))
     if header != None:
@@ -3378,8 +3377,7 @@ def write_fitstable(filename, *args, **kwargs):
     if append and os.path.exists(filename):
         hdulist = fits.open(filename)
         hdulist.append(tbhdu)
-        kwargs.pop('clobber', None)
-        hdulist.writeto(filename, clobber=True, **kwargs)
+        hdulist.writeto(filename, overwrite=True, **kwargs)
     else:
         pmhdu = fits.PrimaryHDU()
         hdulist = fits.HDUList([pmhdu,tbhdu])
