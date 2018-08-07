@@ -15,7 +15,6 @@ import warnings
 import numpy as np
 from matplotlib import pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
-import photutils as P
 import ccdproc
 from .saoimage import getds9
 from .apext import *
@@ -241,7 +240,8 @@ def aperture_photometry(data, apertures, **kwargs):
 
     v1.0.0 : JYL @PSI, Feb 2015'''
 
-    ap = Table(P.aperture_photometry(data, apertures, **kwargs))
+    from photutils import aperture_photometry
+    ap = Table(aperture_photometry(data, apertures, **kwargs))
     if apertures.positions.shape[0] == 1:
         xc = ap['xcenter'].data[0]
         yc = ap['ycenter'].data[0]
@@ -333,23 +333,29 @@ def num(v):
             return v
 
 
-def geometric_center(image, threshold, center=None, box=None):
+def geometric_center(image, threshold, mask=None):
     '''Returns the geometric center of an image for values above a
-    threshold'''
-    shape = image.shape
-    if center is None:
-        y0, x0 = np.array(shape)/2.
-    else:
-        y0, x0 = center
-    if box is None:
-        box = np.array(shape).min()/2.
-    subim = image[y0-box:y0+box,x0-box:x0+box]
-    subsp = subim.shape
-    y, x = makenxy(0, subsp[0]-1, subsp[0], 0, subsp[1]-1, subsp[1])
-    mask = np.asanyarray(subim) > threshold
-    yin, xin = y[mask], x[mask]
-    yc, xc = yin.mean()+y0-box, xin.mean()+x0-box
-    return yc, xc #, np.array([xin.max()-xin.min(), yin.max()-yin.min()]).max()
+    threshold
+
+    image : array_like
+      The 2D data array.
+
+    threshold : number
+      The threshold of image above background.
+
+    mask : array_like(bool), optional
+      A boolean mask, with the same shape as `data`, where `True` value
+      indicates the corresponding element of `data` is masked.
+
+    Returns: `center`: array of length 2, the `x, y` coordinates
+    '''
+    sz = image.shape
+    y, x = makenxy(0, sz[0]-1, sz[0], 0, sz[1]-1, sz[1])
+    im_mask = np.asanyarray(image) > threshold
+    if mask is not None:
+        im_mask |= mask
+    yin, xin = y[im_mask], x[im_mask]
+    return xin.mean(), yin.mean()
 
 
 def size2mag(radi, alb=0.1, rh=1.0, delta=1.0, phase=0.0, beta=0.04, magsun=-26.74):
@@ -2435,8 +2441,8 @@ def centroiding(im, ext=0, ds9=None, newframe=True, coord='image', refine=False,
     return cts
 
 
-def centroid(im, center=None, error=None, mask=None, method=0, box=6, niter=5, threshold=None, verbose=False):
-    '''High level wrapper for centroiding
+def centroid(im, center=None, error=None, mask=None, method=0, box=6, tol=0.01, maxiter=50, threshold=None, verbose=False):
+    '''Wrapper for photutils.centroiding functions
 
     Parameters
     ----------
@@ -2458,8 +2464,12 @@ def centroid(im, center=None, error=None, mask=None, method=0, box=6, niter=5, t
       [2, 'geom', 'geometric'] - Geometric center
     box : int, optional
       Box size for the search
-    niter : int, optional
-      The number of iterations in the search
+    tol : float, optional
+      The tolerance in pixels of the center.  Program exits iteration when
+      new center differs from the previous iteration less than `tol` or number
+      of iteration reaches `maxiter`.
+    maxiter : int, optional
+      The maximum number of iterations in the search
     threshold : number, optional
       Threshold, only used for method=2
     verbose : bool, optional
@@ -2469,11 +2479,11 @@ def centroid(im, center=None, error=None, mask=None, method=0, box=6, niter=5, t
     -------
     (y, x) as a numpy array
 
-    This program uses photutils.morphology.centroid_2dg() or ..centroid_com()
+    This program uses photutils.centroids.centroid_2dg() or .centroid_com()
 
     v1.0.0 : JYL @PSI, Feb 19, 2015
     '''
-    from photutils.morphology import centroid_2dg, centroid_com
+    from photutils.centroids import centroid_2dg, centroid_com
     if isinstance(im, nddata.NDData):
         if error is None:
             if im.uncertainty is not None:
@@ -2496,7 +2506,8 @@ def centroid(im, center=None, error=None, mask=None, method=0, box=6, niter=5, t
         print(('Error array '+condition(error is None, 'not ', ' ')+'provided'))
         print(('Mask array '+condition(mask is None, 'not ', ' ')+'provided'))
     i = 0
-    while i < niter:
+    delta_center = np.array([1e5,1e5])
+    while (i < maxiter) and (delta_center.max() > tol):
         if verbose:
             print(('  iteration {0}, center = ({1},{2})'.format(i, center[0], center[1])))
         p1, p2 = np.floor(center-b2).astype('int'), np.ceil(center+b2).astype('int')
@@ -2510,14 +2521,16 @@ def centroid(im, center=None, error=None, mask=None, method=0, box=6, niter=5, t
         else:
             submask = np.asarray(mask[p1[0]:p2[0],p1[1]:p2[1]])
         if method in [0, '2dg', 'gaussian']:
-            xc, yc = centroid_2dg(subim, suberr, submask)
+            xc, yc = centroid_2dg(subim, error=suberr, mask=submask)
         elif method in [1, 'com']:
-            xc, yc = centroid_com(subim, submask)
+            xc, yc = centroid_com(subim, mask=submask)
         elif method in [2, 'geom', 'geometric']:
-            yc, xc = geometric_center(subim, threshold, center=center, box=box)
+            xc, yc = geometric_center(subim, threshold, mask=submask)
         else:
             raise ValueError("unrecognized `method` {0} received.  Should be [0, '2dg', 'gaussian'] or [1, 'com']".format(method))
-        center = np.asarray([yc+p1[0], xc+p1[1]])
+        center1 = np.asarray([yc+p1[0], xc+p1[1]])
+        delta_center = abs(center1-center)
+        center = center1
         i += 1
 
     if verbose:
