@@ -18,7 +18,7 @@ from matplotlib.backends.backend_pdf import PdfPages
 import ccdproc
 from .saoimage import getds9
 from .apext import *
-
+import contextlib
 
 class jylipyDeprecationWarning(DeprecationWarning):
     pass
@@ -50,6 +50,16 @@ def quadeq(a, b, c):
     else:
         d = np.sqrt(d)
         return (-b+d*np.array([-1, 1]))/(2*a)
+
+
+@contextlib.contextmanager
+def printoptions(*args, **kwargs):
+    original = np.get_printoptions()
+    np.set_printoptions(*args, **kwargs)
+    try:
+        yield
+    finally:
+        np.set_printoptions(**original)
 
 
 class CaseInsensitiveMapping(collections.MutableMapping):
@@ -2113,10 +2123,10 @@ def headfits(imfile, ext=0, verbose=True):
  v1.0.0 : JYL @PSI, Nov 17, 2013
     '''
 
-    if (not isinstance(imfile, (str, bytes))) and hasattr(imfile,'__iter__'):
+    if is_iterable(imfile):
         return [headfits(f,ext=ext,verbose=verbose) for f in imfile]
-    else:
-        raise ValueError('string types or string iterable expected, {0} received'.format(type(imfile)))
+    elif not isinstance(imfile, (str, bytes)):
+        raise ValueError('string types or iterable expected, {0} received'.format(type(imfile)))
 
     fitsfile = fits.open(imfile)
     if verbose:
