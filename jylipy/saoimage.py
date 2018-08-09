@@ -323,7 +323,7 @@ class DS9(pyds9.DS9):
                 self.set_np2arr(shift(self.get_arr2np(),(-1,0)))
                 self.data[self.get('frame')]['shift'][0] -= 1
 
-    def imdisp(self, im, ext=0, par='scale log', newframe=True, verbose=True):
+    def imdisp(self, im, ext=None, par=None, newframe=True, verbose=True):
         '''Display images.
 
         Parameters
@@ -342,12 +342,22 @@ class DS9(pyds9.DS9):
         verbose : bool, optional
           If `False`, then all print out is suppressed.
 
+        Returns: int or list(int)
+          The status code:
+          0 - no error
+          1 - image file not found
+          2 - extension not existent
+          3 - invalid image extension
+          13 - invalid PDS format
+          14 - invalid FITS format
+          15 - Unrecognized extension
+
         v1.0.0 : JYL @PSI, 2/14/2015, adopted from the standalone imdisp()
         '''
 
         # Pre-process for the case of a single image
         from astropy import nddata
-        if isinstance(im, str):
+        if isinstance(im, (str,bytes)):
             ims = [im]
         elif isinstance(im, np.ndarray):
             if im.ndim == 2:
@@ -362,43 +372,80 @@ class DS9(pyds9.DS9):
         # Loop through all images
         if len(ims) > 1:
             self.set('tile')
+        st = []
         for im in ims:
             if newframe:
                 self.set('frame new')
             # Display image(s)
             if isinstance(im, str):
-                if im.lower().endswith('.fits') or im.lower().endswith('.fit'):
-                    from astropy.io import fits
-                    fitsimg = fits.open(im)
-                    if ext >= len(fitsimg):
-                        st.append(-1)
-                        if verbose:
-                            print()
-                            print(('Error: Extension '+repr(ext)+' does not exist!'))
-                            print((fitsimg.info()))
-                    elif fitsimg[ext].data is None:
-                        if verbose:
-                            print()
-                            print(('Error: Extension '+repr(ext)+' contains no image!'))
-                            print()
-                            print((fitsimg.info()))
-                    else:
-                        tmp = self.set('file '+im+'['+repr(ext)+']')
+                if im.split('[')[0].lower().endswith(('.fits','.fit','fz')):
+                    try:
+                        if ext is None:
+                            print('fits {0}'.format(im))
+                            tmp = self.set('fits {0}'.format(im))
+                        else:
+                            print('fits {0}[{1}]'.format(im,ext))
+                            tmp = self.set('fits {0}[{1}]'.format(im,ext))
+                        st.append(0)
+                    except ValueError:
+                        from os.path import isfile
+                        if not isfile(im):
+                            if verbose:
+                                print()
+                                print('File does not exist: {0}'.format(im))
+                            st.append(1)
+                        elif ext is None:
+                            if verbose:
+                                print()
+                                print('Invalid FITS format')
+                            st.append(14)
+                        else:
+                            from astropy.io import fits
+                            info = fits.info(im,output=False)
+                            if ext >= len(info):
+                                if verbose:
+                                    print()
+                                    print(('Error: Extension '+repr(ext)+' does not exist!'))
+                                st.append(2)
+                            elif (info[ext][3] in ('ImageHDU','CompImageHDU')) and (len(info[ext][5])>1):
+                                if verbose:
+                                    print()
+                                    print(('Error: Extension '+repr(ext)+' contains no image!'))
+                                    print()
+                                st.append(3)
+                            print((fits.info(im)))
                 elif im.lower().endswith('.img'):
                     from .PDS import readpds
-                    self.set_np2arr(np.asarray(readpds(im)).astype('f4'))
+                    try:
+                        self.set_np2arr(np.asarray(readpds(im)).astype('f4'))
+                        st.append(0)
+                    except:
+                        if verbose:
+                            print()
+                            print('Invalid PDS format')
+                        st.append(13)
                 else:
-                    raise ValueError('unrecognized file extension')
+                    if verbose:
+                        print()
+                        print('Unrecognized extension')
+                    st.append(15)
             else:
                 self.set_np2arr(np.asarray(im).astype('f4'))
+                st.append(0)
 
             # set DS9 parameters
             if par is not None:
                 self.sets(par)
 
+        if len(st) == 1:
+            st = st[0]
+        return st
+
+
     def multiframe(self, fitsfile):
         '''Display multiframe FITS'''
         self.set('multiframe '+fitsfile)
+
 
     def region(self, frame=None, system='image', zerobased=True):
         '''Returns a list of regions already defined in the frame
