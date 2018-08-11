@@ -764,7 +764,7 @@ def coma(azind, azfth, size=(300,300), center=None, ns=200, core=(2,2), r=None, 
 
 
     ys, xs = size
-    if center == None:
+    if center is None:
         yc, xc = (ys-1.)/2., (xs-1.)/2.
     else:
         yc, xc = center
@@ -797,8 +797,8 @@ def coma(azind, azfth, size=(300,300), center=None, ns=200, core=(2,2), r=None, 
 
     # revise core region
     if ns > 1:
-        x1, x2 = round(xc)-core[0], round(xc)+core[0]+1
-        y1, y2 = round(yc)-core[1], round(yc)+core[1]+1
+        x1, x2 = int(round(xc)-core[0]), int(round(xc)+core[0]+1)
+        y1, y2 = int(round(yc)-core[1]), int(round(yc)+core[1]+1)
         coresize = (core[1]*2+1)*ns, (core[0]*2+1)*ns
         center = ns*(core[1]+0.5+xc-round(xc))-0.5, ns*(core[0]+0.5+yc-round(yc))-0.5
         coma_center = coma(azind,azfth,size=coresize, center=center, ns=-ns)
@@ -1158,7 +1158,8 @@ def enhance_1overrho(im, ext=0, center=None, centroid=False, div=True):
         # Generate 1/rho model
         sz = img.shape
         comamodel = coma(1.,1.,size=sz, center=ct)
-        scl = comamodel[ct[0]-1:ct[0]+2,ct[1]-1:ct[1]+2].sum()/img[ct[0]-1:ct[0]+2,ct[1]-1:ct[1]+2].sum()
+        ct1 = [int(x) for x in ct]
+        scl = comamodel[ct1[0]-1:ct1[0]+2,ct1[1]-1:ct1[1]+2].sum()/img[ct1[0]-1:ct1[0]+2,ct1[1]-1:ct1[1]+2].sum()
 
         # Enhance image
         if div:
@@ -1707,20 +1708,22 @@ def rot(im, ang, mag=1.0, center=None, missing=0., pivot=False, order=3, method=
         center = (sz-1.)/2.
 
     def rot_xform(coords, ang, mag, size, center, pivot):
+        import math
         yy, xx = coords
         ys, xs = size
         y0, x0 = center
 
         if pivot:
-            xx, yy = xx-x0, yy-y0
+            xx = xx-x0
+            yy = yy-y0
         else:
-            xx, yy = xx-(xs-1.)/2., yy-(ys-1.)/2.
+            xx = xx-(xs-1.)/2.
+            yy = yy-(ys-1.)/2.
 
-        cosa = np.cos(ang*np.pi/180)
-        sina = np.sin(ang*np.pi/180)
-        xx0, yy0 = (xx*cosa+yy*sina)/mag, (-xx*sina+yy*cosa)/mag
-
-        xx0, yy0 = xx0+x0, yy0+y0
+        cosa = math.cos(ang*np.pi/180)
+        sina = math.sin(ang*np.pi/180)
+        xx0 = (xx*cosa+yy*sina)/mag+x0
+        yy0 = (-xx*sina+yy*cosa)/mag+y0
 
         return (yy0, xx0)
 
@@ -1743,6 +1746,14 @@ def rot(im, ang, mag=1.0, center=None, missing=0., pivot=False, order=3, method=
 
         from scipy.interpolate import interpn
         return interpn(points, im, xi, method=method, bounds_error=False, fill_value=np.asarray(missing).astype(im.dtype)).reshape(sz)
+
+
+def rot1(im, ang, mag=1.0, center=None, missing=0., pivot=False, order=3, method='linear', axis=(1,0), mode='constant', prefilter=True):
+    from scipy.ndimage import rotate
+    iy,ix = im.shape
+    out = rotate(im, ang, axis=axis, cval=missing, mode=mode, prefilter=prefilter)
+    if center == None:
+        center = (sz-1)/2
 
 
 def xy2rt(im, xxx_todo_changeme2, rastep=1., ramax=None, azstep=1., order=3, missing=0., method='linear', version='1.1'):
@@ -1973,8 +1984,8 @@ def background(im, ext=0, region=None, std=False, method='mean', plot=False):
                     return bg
                 else:
                     return bg, st
-        else:
-            raise ValueError('string type or string iterable or 3-D array expected, {0} received'.format(type(im)))
+        #else:
+        #    raise ValueError('string type or string iterable or 3-D array expected, {0} received'.format(type(im)))
 
     if isinstance(im, (str,bytes)):
         img = fits.getdata(im,ext).astype(np.float32)
