@@ -1,7 +1,10 @@
 import numpy as np
 import telnetlib
 from jylipy import Time, Table, is_iterable
-from astroquery.jplhorizons import Horizons
+from astroquery.jplhorizons import Horizons, conf
+
+conf.horizons_server = 'https://ssd.jpl.nasa.gov/horizons_batch.cgi'
+
 
 class JPLHorizons(telnetlib.Telnet):
     '''JPL Horizons telnet class'''
