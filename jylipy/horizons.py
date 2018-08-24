@@ -1,7 +1,7 @@
 import numpy as np
 import telnetlib
-import callhorizons
-from jylipy import Time, Table, Column
+from jylipy import Time, Table, is_iterable
+from astroquery.jplhorizons import Horizons
 
 class JPLHorizons(telnetlib.Telnet):
     '''JPL Horizons telnet class'''
@@ -279,37 +279,38 @@ def geteph(*args, **kwargs):
 
     keywords:
 
-    observatory_code : str or int, observer's location code, default is '@399'
-    outfile : string, file name to save the ephemerides
-    Other keywords accepted by callhorizons.get_ephemerides()
+    observatory_code : str or int, optional
+        Observer's location code, default is '@399'
+    id_type : str, optional
+        Identifier type, see astroquery.jplhorizons.Horizons.__init__
+    outfile : string, optional
+        File name to save the ephemerides
 
     Returns an astropy Table with all ephemerides fields
     '''
 
     observatory_code = kwargs.pop('observatory_code', '@399')
+    id_type = kwargs.pop('id_type', 'smallbody')
     outfile = kwargs.pop('outfile', None)
 
     nargs = len(args)
     if nargs not in [2, 4]:
         raise TypeError('geteph() takes 2 or 4 arguments ({0} given)'.format(nargs))
 
-    obj = callhorizons.query(args[0])
     if nargs == 2:
         jds = Time(args[1]).jd
-        if (not isinstance(args[1], (str,bytes))) and hasattr(args[1],'__iter__'):
+        if is_iterable(args[1]):
             jds = list(jds)
         else:
             jds = [jds]
-        obj.set_discreteepochs(jds)
     else:
-        obj.set_epochrange(args[1], args[2], args[3])
-    nlines = obj.get_ephemerides(observatory_code, **kwargs)
-    if nlines != 0:
-        out = Table()
-        for k in obj.fields:
-            out.add_column(Column(obj[k],name=k))
-        if outfile != None:
+        jds = {'start': args[1], 'stop': args[2], 'step': args[3]}
+    obj = Horizons(id=args[0], location=observatory_code, epochs=jds, id_type=id_type)
+    try:
+        out = obj.ephemerides()
+        out = Table(out)
+        if outfile is not None:
             out.write(outfile)
-        return out
-    else:
+        return Table(out)
+    except:
         raise HorizonsError('Horizons Error')
