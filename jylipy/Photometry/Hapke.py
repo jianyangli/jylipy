@@ -10,7 +10,8 @@ Written by Jian-Yang Li (Planetary Science Institute)
 from ..core import *
 from .core import PhotometricModel, HG1
 from ..plotting import *
-import numpy as np
+from .. import mesh
+import numpy as np, copy
 from astropy.modeling import Fittable1DModel, Fittable2DModel, FittableModel, Parameter
 
 
@@ -2615,3 +2616,72 @@ def create_pvl(par, outfile, **kwarg):
     f.write('  EndGroup\n')
     f.write('EndObject\n')
     f.close()
+
+
+
+class DiskInt():
+    """Disk-integrated phase function class for a sphere
+    """
+    def __init__(self, par, obs_dist=np.inf, light_dist=np.inf):
+        """
+        par: dict
+            Hapke model parameters
+        obs_dist, light_dist: number, optional
+            The observer distance and light source distance to body center
+        """
+        self.par = copy.deepcopy(par)
+        self.obs_dist = obs_dist
+        self.light_dist = light_dist
+
+    def __call__(self, obj, pha, normalized=False, return_all=False, **kwarg):
+        """Calculate disk-integrated phase function of a sphere numerically
+        obj: object mesh class
+            The object for which the phase function is calculated.  It must
+            have a method `.backplanes` that returns a tuple of
+            (inc_map, emi_map, pha_map, mask)
+        pha: number or array_like of number
+            Phase angles in rad
+        normalized: bool, optional
+            Returned phase function normalized or not
+        **kwarg: optional keywords
+            see `mesh.Sphere` for **kwarg
+
+        Return: ndarray of number
+            Phase function at `pha`
+        """
+        if hasattr(pha, '__iter__'):
+            out = np.zeros_like(pha)
+            if return_all:
+                imaps = []
+                emaps = []
+                amaps = []
+                masks = []
+                imgs = []
+            for i,p in enumerate(pha):
+                tmp = copy.copy(self)(obj, p, return_all=return_all, **kwarg)
+                if return_all:
+                    out[i] = tmp[0]
+                    imaps.append(tmp[1])
+                    emaps.append(tmp[2])
+                    amaps.append(tmp[3])
+                    masks.append(tmp[4])
+                    imgs.append(tmp[5])
+                else:
+                   out[i] = tmp
+            if return_all:
+                return out, imaps, emaps, amaps, masks, imgs
+            else:
+                return out
+        else:
+            isz = kwarg.pop('isz', 300)
+            imap, emap, amap, mask = obj.backplanes(pha, obs_dist=self.obs_dist, light_dist=self.light_dist, isz=isz)
+            img = np.zeros_like(imap)
+            vis_ill = mask == 2
+            sca = np.rad2deg(imap[vis_ill]), np.rad2deg(emap[vis_ill]), np.rad2deg(amap[vis_ill])
+            img[vis_ill] = bdr(sca, self.par, **kwarg)
+            xsec = len(np.where(mask != 0)[0])
+            out = img.sum()/xsec
+            if return_all:
+                return out, imap, emap, amap, mask, img
+            else:
+                return out

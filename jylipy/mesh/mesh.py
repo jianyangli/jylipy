@@ -1,6 +1,7 @@
 import numpy as np, visvis as vv
 from astropy import units as u, table
 from ..core import *
+from .. import vector
 
 
 def meshRead(fname):
@@ -440,3 +441,72 @@ class Camera(vv.cameras.ThreeDCamera):
 
         self.loc = (0., 0., 0.)
 
+
+class Sphere():
+    """Sphere object mesh class
+    """
+    def __init__(self, radius=1):
+        """
+        radius: number, optional
+            The radius of sphere, same unit as `obs_dist` and `light_dist`
+        """
+        self.radius = radius
+
+    def backplanes(self, phase, obs_dist=np.inf, light_dist=np.inf, isz=300):
+        """ Calculate the scattering backplanes
+
+        phase: number
+            Phase angle with respect to body center in rad
+        obs_dist, light_dist: number, optional
+            The observer distance and light source distance to body center,
+            same unit as `radius`
+        isz: number, optional
+            Size of returned scattering backplanes
+
+        Return: tuple
+            (inc, emi, pha, mask)
+            2D arrays of shape (isz, isz) for incidence angle (float), emissoin
+            angle (float), phase angle (float), and mask (uint).  All angles
+            are in unit of rad.  In `mask` array, 2 means illuminated and
+            visible, 1 means unilluminated but visible, and 0 means invisible.
+        """
+        # generate mesh vectors
+        x = np.linspace(-1.05, 1.05, isz)
+        xarr, yarr = np.meshgrid(x, x)
+        xarr2 = xarr*xarr
+        yarr2 = yarr*yarr
+        darr2 = xarr2+yarr2
+        zarr = np.zeros_like(xarr)
+        inside = darr2 < 1
+        zarr[inside] = np.sqrt(1-darr2[inside])
+        mesh_vecs = vector.Vector(xarr[inside], yarr[inside], zarr[inside])
+
+        # mesh to viewer vector
+        if obs_dist == np.inf:
+            mesh_viewer = vector.Vector(0, 0, 1.)
+        else:
+            mesh_viewer = vector.Vector(0, 0, obs_dist/self.radius) - mesh_vecs
+        # mesh to sun vector
+        sun = vector.Vector(np.sin(phase), 0, np.cos(phase))
+        if light_dist == np.inf:
+            mesh_sun = sun
+        else:
+            mesh_sun = sun*(light_dist/self.radius) - mesh_vecs
+
+        # calculate scattering angles
+        emap = np.zeros_like(xarr)
+        imap = np.zeros_like(xarr)
+        amap = np.zeros_like(xarr)
+        emap[inside] = mesh_vecs.vsep(mesh_viewer)
+        imap[inside] = mesh_vecs.vsep(mesh_sun)
+        amap[inside] = (mesh_sun).vsep(mesh_viewer)
+
+        # set mask
+        mask = np.zeros_like(xarr,dtype=np.uint8)
+        visible = inside & (emap < np.pi/2)
+        illuminated = inside & (imap < np.pi/2)
+        mask[~visible] = 0
+        mask[visible & ~illuminated] = 1
+        mask[visible & illuminated] = 2
+
+        return imap, emap, amap, mask
