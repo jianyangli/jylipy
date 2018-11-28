@@ -2377,6 +2377,16 @@ class DiskInt5(Fittable1DModel):
         return [dravgdw, dravgdg, dravgdtheta, dravgdb0, dravgdh]
 
 
+class DiskInt5Log(DiskInt5):
+    @staticmethod
+    def evaluate(*args):
+        return np.log10(DiskInt5.evaluate(*args))
+
+    @staticmethod
+    def fit_deriv(*args):
+        return DiskInt5.fit_deriv(*args)/DiskInt5.evaluate(*args)
+
+
 class DiskInt6(Fittable1DModel):
     '''
  Hapke disk-integrated phase function model of a spherical shape with
@@ -2399,6 +2409,12 @@ class DiskInt6(Fittable1DModel):
     @staticmethod
     def evaluate(pha, w, b, c, theta, B0, h):
         return phasefunc(pha, {'w': w, 'g': (b, c), 'theta': theta, 'shoe': (B0, h)}, normalize=None)
+
+
+class DiskInt6Log(DiskInt6):
+    @staticmethod
+    def evaluate(*args):
+        return np.log10(DiskInt6.evaluate(*args))
 
 
 class Hapke5P(PhotometricModel):
@@ -2427,7 +2443,7 @@ class Hapke6P(PhotometricModel):
         return bdr((i, e, a), {'w': w, 'g': (b, c), 'shoe': (B0, h), 'theta': theta})
 
 
-def fitDiskInt5(alpha, measure, error=None, w=0.2, g=-0.3, theta=20., B0=1.0, h=0.01, covar=False, maxiter=1000, **kwarg):
+def fitDiskInt5(alpha, measure, error=None, w=0.2, g=-0.3, theta=20., B0=1.0, h=0.01, covar=False, maxiter=1000, log=False, **kwarg):
     '''Fit 5-parameter disk-integrated Hapke model
 
  Parameters
@@ -2464,11 +2480,17 @@ def fitDiskInt5(alpha, measure, error=None, w=0.2, g=-0.3, theta=20., B0=1.0, h=
     if error is not None and error.shape[0] != alpha.shape[0]:
         raise RuntimeError('Error array must have the same number of element as data')
 
+    parms = {'w': w, 'g': g, 'theta': theta, 'B0': B0, 'h': h}
     fixed = kwarg.pop('fixed', None)
-    if fixed is None:
-        model0 = DiskInt5(w=w, g=g, theta=theta, B0=B0, h=h)
+    if fixed is not None:
+        parms['fixed'] = fixed
+    if log:
+        model_class = DiskInt5Log
+        measure = np.log10(measure)
     else:
-        model0 = DiskInt5(w=w, g=g, theta=theta, B0=B0, h=h, fixed=fixed)
+        model_class = DiskInt5
+    model0 = model_class(**parms)
+
     f = MPFitter()
     #f = MPFitter()
     model = f(model0, alpha, measure, weights=weights, maxiter=maxiter, **kwarg)
@@ -2487,7 +2509,7 @@ def fitDiskInt5(alpha, measure, error=None, w=0.2, g=-0.3, theta=20., B0=1.0, h=
     return model
 
 
-def fitDiskInt6(alpha, measure, error=None, w=0.2, b=0.3, c=0.4, theta=20., B0=1.0, h=0.01, covar=False, maxiter=1000, **kwarg):
+def fitDiskInt6(alpha, measure, error=None, w=0.2, b=0.3, c=0.4, theta=20., B0=1.0, h=0.01, covar=False, maxiter=1000, log=False, **kwarg):
     '''Fit 6-parameter disk-integrated Hapke model
 
  Parameters
@@ -2524,11 +2546,17 @@ def fitDiskInt6(alpha, measure, error=None, w=0.2, b=0.3, c=0.4, theta=20., B0=1
     if error is not None and error.shape[0] != alpha.shape[0]:
         raise RuntimeError('Error array must have the same number of element as data')
 
+    parms = {'w': w, 'b': b, 'c': c, 'theta': theta, 'B0': B0, 'h': h}
     fixed = kwarg.pop('fixed', None)
-    if fixed is None:
-        model0 = DiskInt6(w=w, b=b, c=c, theta=theta, B0=B0, h=h)
+    if fixed is not None:
+        parms['fixed'] = fixed
+    if log:
+        model_class = DiskInt6Log
+        measure = np.log10(measure)
     else:
-        model0 = DiskInt6(w=w, b=b, c=c, theta=theta, B0=B0, h=h, fixed=fixed)
+        model_class = DiskInt6
+    model0 = model_class(**parms)
+
     #f = LevMarLSQFitter()
     f = MPFitter()
     model = f(model0, alpha, measure, weights=weights, maxiter=maxiter, **kwarg)
