@@ -22,7 +22,8 @@ Stopped version tracking here, use git for change control
 
 from pysis import isis
 from pysis.cubefile import CubeFile
-from os.path import splitext, isfile, isdir, basename, dirname, join
+from os import path
+import os
 
 __all__ = isis.__all__ + ['CubeFile', 'EZWrapper', 'iter_isis', 'listgen']
 
@@ -78,11 +79,11 @@ def iter_isis(func, indata, *args, **kwargs):
                 # `outdata` is a directory name
                 makedirs(outdata, exist_ok=True)
                 for fi in indata:
-                    iter_isis(func, fi, join(outdata, basename(fi)), **kwargs)
+                    iter_isis(func, fi, path.join(outdata, path.basename(fi)), **kwargs)
         else:
             for fi in indata:
                 iter_isis(func, fi, **kwargs)
-    elif isdir(indata):
+    elif path.isdir(indata):
         # if input is a directory
         verbose = kwargs.get('verbose', True)
         ext = kwargs.get('ext', None)
@@ -96,7 +97,7 @@ def iter_isis(func, indata, *args, **kwargs):
             if outdata is not None:
                 makedirs(outdata, exist_ok=True)
                 for fi in insidefile:
-                    fo = join(outdata, basename(fi))
+                    fo = path.join(outdata, path.basename(fi))
                     iter_isis(func, fi, fo, **kwargs)
             else:
                 for fi in insidefile:
@@ -107,24 +108,24 @@ def iter_isis(func, indata, *args, **kwargs):
             if outdata is not None:
                 makedirs(outdata, exist_ok=True)
                 for di in insidedir:
-                    print('processing directory {0}/', basename(di))
-                    iter_isis(func, di, join(outdata, basename(di)), **kwargs)
+                    print('processing directory {0}/', path.basename(di))
+                    iter_isis(func, di, path.join(outdata, path.basename(di)), **kwargs)
             else:
                 for di in insidedir:
                     iter_isis(func, di, **kwargs)
-    elif isfile(indata):
+    elif path.isfile(indata):
         # if input is a single file
         verbose = kwargs.pop('verbose', True)
         suffix = kwargs.pop('suffix', None)
         ext = kwargs.pop('ext', None)
         if verbose:
-            print('processing file {0}'.format(basename(indata)))
+            print('processing file {0}'.format(path.basename(indata)))
         isiskeys = {}
         isiskeys['from'] = indata
         if outdata is not None:
-            makedirs(dirname(outdata), exist_ok=True)
+            makedirs(path.dirname(outdata), exist_ok=True)
             if suffix is not None:
-                fo = splitext(outdata)[0]+suffix
+                fo = path.splitext(outdata)[0]+suffix
             isiskeys['to'] = fo
         isiskeys.update(kwargs)
         func(**isiskeys)
@@ -136,7 +137,7 @@ def listgen(outfile, strlist, overwrite=True):
     '''Generate a list file with the strings in `strlist`'''
 
     if not overwrite:
-        if isfile(outfile):
+        if path.isfile(outfile):
             raise IOError('output file exists')
 
     f = open(outfile, 'w')
@@ -218,7 +219,7 @@ class EZWrapper(object):
                 fromlist = True
                 listfile = kwargs.pop('listfile', None)
                 if listfile is None:
-                    lstfile = join(tempdir, self.func.name.split('/')[-1]+'.lst')
+                    lstfile = path.join(tempdir, self.func.name.split('/')[-1]+'.lst')
                 else:
                     lstfile = listfile
                 listgen(lstfile, infile)
@@ -234,7 +235,7 @@ class EZWrapper(object):
 
         if len(parms)>0:
             if log is None:
-                logfile = join(tempdir, 'temp.log')
+                logfile = path.join(tempdir, 'temp.log')
             else:
                 logfile = log
             parms['-log'] = logfile
@@ -249,7 +250,7 @@ class EZWrapper(object):
 
         if fromlist and (listfile is None):
             os.remove(lstfile)
-        if (len(parms)>0) & (log is None) and ('-log' in list(parms.keys())) and isfile(logfile):
+        if (len(parms)>0) & (log is None) and ('-log' in list(parms.keys())) and path.isfile(logfile):
             os.remove(logfile)
 
 
