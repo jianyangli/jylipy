@@ -4121,7 +4121,7 @@ def imageclean(im, threshold=3., pos=None, box=20, step=None, untouch=None, mask
  v1.0.0 : 4/29/2015, JYL @PSI
     '''
 
-    box2 = box/2
+    box2 = box//2
     if step is None:
         step = box2
     if pos is None:
@@ -4140,7 +4140,7 @@ def imageclean(im, threshold=3., pos=None, box=20, step=None, untouch=None, mask
         subim = im[y-box2:y+box2,x-box2:x+box2]#*(1-mask[y-box2:y+box2,x-box2:x+box2])
         submsk = np.zeros_like(subim,dtype=int)
         m,std = resmean(subim,threshold,std=True)
-        submsk[abs(subim-m) > std*3] = 1
+        submsk[abs(subim-m) > std*threshold] = 1
         mask[y-box2:y+box2,x-box2:x+box2] = submsk
         im1[y-box2:y+box2,x-box2:x+box2][submsk==1] = m
 
