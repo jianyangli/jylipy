@@ -1159,6 +1159,10 @@ class PhotometricData(object):
         rt = indata[rk]
         gk = [x for x in indata.colnames if x in geo_keys]
         gt = indata[gk]
+        if 'geolat' in gt.keys():
+            gt.rename_column('geolat', 'lat')
+        if 'geolon' in gt.keys():
+            gt.rename_column('geolon', 'lon')
         if 'TUNIT1' in infits.header:
             unit = infits.header['TUNIT1'].strip()
         else:
