@@ -2131,6 +2131,118 @@ class PhotometricDataGrid(object):
         return out
 
 
+class PhotometricModelFitter(object):
+    '''Base class for fitting photometric data to model
+
+    v1.0.0 : 2015, JYL @PSI
+    v1.0.1 : 1/11/2016, JYL @PSI
+      Removed the default fitter definition and leave it for inherited class
+      Add `fitter` keyword to `__call__`.
+    '''
+
+    def __init__(self):
+        self.fitted = False
+
+    def __call__(self, model, pho, ilim=None, elim=None, alim=None, rlim=None, **kwargs):
+        '''
+        Parameters:
+        -----------
+        model : PhotometricModel instance
+      The initial model to fit to data
+        pho : PhotometricData instance
+      The data to be fitted
+        fitter : Any Fitter-like class
+      The fitter to be used.  If this keyword is present, then the
+      fitter class defined in this class is overrided.  If not specified,
+      and no fitter class is defined in this class or its inherited class,
+      an error will be thrown.
+        **kwargs: Other keywords accepted by the fitter.
+
+        v1.0.0 : 2015, JYL @PSI
+        v1.0.1 : 1/11/2016, JYL @PSI
+          Added fitter keywords
+        '''
+        if 'fitter' in kwargs:
+            f = kwargs.pop('fitter')()
+        else:
+            if not hasattr(self, 'fitter'):
+                raise ValueError('fitter not defined')
+            else:
+                f = self.fitter()
+
+        self.data = pho.copy()
+        self.data.validate()
+        self.data.trim(ilim=ilim, elim=elim, alim=alim, rlim=rlim)
+        inputs = []
+        for k in model.inputs:
+            inputs.append(getattr(self.data.sca,k).to('deg').value)
+        bdr = self.data.BDR
+        if bdr.ndim == 1:
+            self.model = f(model, inputs[0], inputs[1], inputs[2], bdr, **kwargs)
+            self.fit_info = f.fit_info
+            self.fit = self.model(*inputs)
+            self.RMS = np.sqrt(((self.fit-self.data.BDR)**2).mean())
+            self.fitted = True
+            return self.model
+        else:
+            self.model = []
+            self.fit_info = []
+            self.fit = []
+            self.RMS = []
+            self.fitted = []
+            for r in bdr.T:
+                self.model.append(f(model, inputs[0], inputs[1], inputs[2], r, **kwargs))
+                self.fit_info.append(f.fit_info)
+                self.fit.append(self.model[-1](*inputs))
+                self.RMS.append(np.sqrt(((self.fit[-1]-r)**2).mean()))
+                self.fitted.append(True)
+            return self.model
+
+    def plot(self, index=None):
+        if hasattr(self.model, '__iter__'):
+            if index is None:
+                raise ValueError('Index is not specified.')
+            fitted = self.fitted[index]
+            data = self.data.BDR[:,index]
+            fit = self.fit[index]
+        else:
+            fitted = self.fitted
+            data = self.data.BDR
+            fit = self.fit
+        if fitted == False:
+            print('No model has been fitted.')
+            return
+        from matplotlib import pyplot as plt
+        ratio = data/fit
+        figs = []
+        figs.append(plt.figure(100))
+        plt.clf()
+        f, ax = plt.subplots(3, 1, num=100)
+        for i, v, xlbl in zip(list(range(3)), [self.data.inc.value, self.data.emi.value, self.data.pha.value], ['Incidence', 'Emission', 'Phase']):
+            ax[i].plot(v, ratio, 'o')
+            ax[i].hlines(1, v.min(), v.max())
+            pplot(ax[i], xlabel=xlbl+' ('+str(self.data.inc.unit)+')', ylabel='Measured/Modeled')
+        figs.append(plt.figure(101))
+        plt.clf()
+        plt.plot(data, fit, 'o')
+        tmp1 = data
+        if isinstance(data, units.Quantity):
+            tmp1 = data.value
+        tmp2 = fit
+        if isinstance(fit, units.Quantity):
+            tmp2 = fit.value
+        tmp = np.concatenate((tmp1, tmp2))
+        lim = [tmp.min(),tmp.max()]
+        plt.plot(lim, lim)
+        pplot(xlabel='Measured BDR',ylabel='Modeled BDR')
+        return figs
+
+
+class PhotometricMPFitter(PhotometricModelFitter):
+    '''Photometric model fitter using MPFit'''
+    fitter = MPFitter
+
+
 class PhotometricGridFitter(object):
     def __init__(self):
         self.fitted = False
@@ -3145,118 +3257,6 @@ class Binner(object):
 
     def __call__(self, pho, verbose=False):
         return self.bin(pho, verbose=verbose)
-
-
-class PhotometricModelFitter(object):
-    '''Base class for fitting photometric data to model
-
-    v1.0.0 : 2015, JYL @PSI
-    v1.0.1 : 1/11/2016, JYL @PSI
-      Removed the default fitter definition and leave it for inherited class
-      Add `fitter` keyword to `__call__`.
-    '''
-
-    def __init__(self):
-        self.fitted = False
-
-    def __call__(self, model, pho, ilim=None, elim=None, alim=None, rlim=None, **kwargs):
-        '''
-    Parameters:
-    -----------
-    model : PhotometricModel instance
-      The initial model to fit to data
-    pho : PhotometricData instance
-      The data to be fitted
-    fitter : Any Fitter-like class
-      The fitter to be used.  If this keyword is present, then the
-      fitter class defined in this class is overrided.  If not specified,
-      and no fitter class is defined in this class or its inherited class,
-      an error will be thrown.
-    **kwargs: Other keywords accepted by the fitter.
-
-    v1.0.0 : 2015, JYL @PSI
-    v1.0.1 : 1/11/2016, JYL @PSI
-      Added fitter keywords
-        '''
-        if 'fitter' in kwargs:
-            f = kwargs.pop('fitter')()
-        else:
-            if not hasattr(self, 'fitter'):
-                raise ValueError('fitter not defined')
-            else:
-                f = self.fitter()
-
-        self.data = pho.copy()
-        self.data.validate()
-        self.data.trim(ilim=ilim, elim=elim, alim=alim, rlim=rlim)
-        inputs = []
-        for k in model.inputs:
-            inputs.append(getattr(self.data.sca,k).to('deg').value)
-        bdr = self.data.BDR
-        if bdr.ndim == 1:
-            self.model = f(model, inputs[0], inputs[1], inputs[2], bdr, **kwargs)
-            self.fit_info = f.fit_info
-            self.fit = self.model(*inputs)
-            self.RMS = np.sqrt(((self.fit-self.data.BDR)**2).mean())
-            self.fitted = True
-            return self.model
-        else:
-            self.model = []
-            self.fit_info = []
-            self.fit = []
-            self.RMS = []
-            self.fitted = []
-            for r in bdr.T:
-                self.model.append(f(model, inputs[0], inputs[1], inputs[2], r, **kwargs))
-                self.fit_info.append(f.fit_info)
-                self.fit.append(self.model[-1](*inputs))
-                self.RMS.append(np.sqrt(((self.fit[-1]-r)**2).mean()))
-                self.fitted.append(True)
-            return self.model
-
-    def plot(self, index=None):
-        if hasattr(self.model, '__iter__'):
-            if index is None:
-                raise ValueError('Index is not specified.')
-            fitted = self.fitted[index]
-            data = self.data.BDR[:,index]
-            fit = self.fit[index]
-        else:
-            fitted = self.fitted
-            data = self.data.BDR
-            fit = self.fit
-        if fitted == False:
-            print('No model has been fitted.')
-            return
-        from matplotlib import pyplot as plt
-        ratio = data/fit
-        figs = []
-        figs.append(plt.figure(100))
-        plt.clf()
-        f, ax = plt.subplots(3, 1, num=100)
-        for i, v, xlbl in zip(list(range(3)), [self.data.inc.value, self.data.emi.value, self.data.pha.value], ['Incidence', 'Emission', 'Phase']):
-            ax[i].plot(v, ratio, 'o')
-            ax[i].hlines(1, v.min(), v.max())
-            pplot(ax[i], xlabel=xlbl+' ('+str(self.data.inc.unit)+')', ylabel='Measured/Modeled')
-        figs.append(plt.figure(101))
-        plt.clf()
-        plt.plot(data, fit, 'o')
-        tmp1 = data
-        if isinstance(data, units.Quantity):
-            tmp1 = data.value
-        tmp2 = fit
-        if isinstance(fit, units.Quantity):
-            tmp2 = fit.value
-        tmp = np.concatenate((tmp1, tmp2))
-        lim = [tmp.min(),tmp.max()]
-        plt.plot(lim, lim)
-        pplot(xlabel='Measured BDR',ylabel='Modeled BDR')
-        return figs
-
-
-class PhotometricMPFitter(PhotometricModelFitter):
-    '''Photometric model fitter using MPFit'''
-    fitter = MPFitter
 
 
 class ROLOModelFitter(PhotometricModelFitter):
