@@ -3199,19 +3199,43 @@ class PhotometricModelFitter(object):
         for k in model.inputs:
             inputs.append(getattr(self.data.sca,k).to('deg').value)
         bdr = self.data.BDR
-        self.model = f(model, inputs[0], inputs[1], inputs[2], bdr, **kwargs)
-        self.fit_info = f.fit_info
-        self.fit = self.model(*inputs)
-        self.RMS = np.sqrt(((self.fit-self.data.BDR)**2).mean())
-        self.fitted = True
-        return self.model
+        if bdr.ndim == 1:
+            self.model = f(model, inputs[0], inputs[1], inputs[2], bdr, **kwargs)
+            self.fit_info = f.fit_info
+            self.fit = self.model(*inputs)
+            self.RMS = np.sqrt(((self.fit-self.data.BDR)**2).mean())
+            self.fitted = True
+            return self.model
+        else:
+            self.model = []
+            self.fit_info = []
+            self.fit = []
+            self.RMS = []
+            self.fitted = []
+            for r in bdr.T:
+                self.model.append(f(model, inputs[0], inputs[1], inputs[2], r, **kwargs))
+                self.fit_info.append(f.fit_info)
+                self.fit.append(self.model[-1](*inputs))
+                self.RMS.append(np.sqrt(((self.fit[-1]-r)**2).mean()))
+                self.fitted.append(True)
+            return self.model
 
-    def plot(self):
-        if self.fitted == False:
+    def plot(self, index=None):
+        if hasattr(self.model, '__iter__'):
+            if index is None:
+                raise ValueError('Index is not specified.')
+            fitted = self.fitted[index]
+            data = self.data.BDR[:,index]
+            fit = self.fit[index]
+        else:
+            fitted = self.fitted
+            data = self.data.BDR
+            fit = self.fit
+        if fitted == False:
             print('No model has been fitted.')
             return
         from matplotlib import pyplot as plt
-        ratio = self.data.BDR/self.fit
+        ratio = data/fit
         figs = []
         figs.append(plt.figure(100))
         plt.clf()
@@ -3222,13 +3246,13 @@ class PhotometricModelFitter(object):
             pplot(ax[i], xlabel=xlbl+' ('+str(self.data.inc.unit)+')', ylabel='Measured/Modeled')
         figs.append(plt.figure(101))
         plt.clf()
-        plt.plot(self.data.BDR, self.fit, 'o')
-        tmp1 = self.data.BDR
-        if isinstance(self.data.BDR, units.Quantity):
-            tmp1 = self.data.BDR.value
-        tmp2 = self.fit
-        if isinstance(self.fit, units.Quantity):
-            tmp2 = self.fit.value
+        plt.plot(data, fit, 'o')
+        tmp1 = data
+        if isinstance(data, units.Quantity):
+            tmp1 = data.value
+        tmp2 = fit
+        if isinstance(fit, units.Quantity):
+            tmp2 = fit.value
         tmp = np.concatenate((tmp1, tmp2))
         lim = [tmp.min(),tmp.max()]
         plt.plot(lim, lim)
