@@ -2137,12 +2137,9 @@ class PhotometricGridFitter(object):
 
     def __call__(self, model, data, fitter=None, ilim=None, elim=None, alim=None, rlim=None, **kwargs):
         if fitter is not None:
-            f = fitter()
-        else:
-            if not hasattr(self, 'fitter'):
-                raise ValueError('fitter not defined')
-            else:
-                f = self.fitter()
+            self.fitter = fitter
+        if not hasattr(self, 'fitter'):
+            raise ValueError('Fitter not defined.')
         nlat, nlon = data.shape
         self.model = ModelGrid(type(model), nlon, nlat)
         self.fit_info = np.zeros((nlat,nlon),dtype=dict)
@@ -2156,15 +2153,12 @@ class PhotometricGridFitter(object):
                     d = data[i,j].copy()
                     d.validate()
                     d.trim(ilim=ilim, elim=elim, alim=alim, rlim=rlim)
-                    inputs = []
-                    for k in model.inputs:
-                        inputs.append(getattr(d.sca,k).to('deg').value)
-                    bdr = d.BDR
-                    if len(inputs[0])>len(model)+3:  # no idea why this line!!!
-                        self.model[i,j] = f(model, inputs[0], inputs[1], inputs[2], bdr, **kwargs)
-                        self.fit_info[i,j] = f.fit_info.copy()
-                        self.fit[i,j] = self.model[i,j](*inputs)
-                        self.RMS[i,j] = np.sqrt(((self.fit[i,j]-bdr)**2).mean())/bdr.mean()
+                    if len(d) > 10:
+                        fitter = d.fit(model, fitter=self.fitter(), **kwargs)
+                        self.model[i,j] = fitter.model
+                        self.fit_info[i,j] = fitter.fit_info
+                        self.fit[i,j] = fitter.fit
+                        self.RMS[i,j] = fitter.RMS
                     else:
                         self.mask[i,j] = False
                 else:
@@ -2174,7 +2168,7 @@ class PhotometricGridFitter(object):
 
 
 class PhotometricGridMPFitter(PhotometricGridFitter):
-    fitter = MPFitter
+    fitter = PhotometricMPFitter
 
 
 class ModelGrid(object):
