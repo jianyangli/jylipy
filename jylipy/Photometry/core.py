@@ -2248,26 +2248,31 @@ class PhotometricGridFitter(object):
         self.fitted = False
 
     def __call__(self, model, data, fitter=None, ilim=None, elim=None, alim=None, rlim=None, **kwargs):
+        verbose = kwargs.pop('verbose', True)
         if fitter is not None:
             self.fitter = fitter
         if not hasattr(self, 'fitter'):
             raise ValueError('Fitter not defined.')
         nlat, nlon = data.shape
         self.model = ModelGrid(type(model), nlon, nlat)
-        self.fit_info = np.zeros((nlat,nlon),dtype=dict)
+        self.fit_info = np.zeros((nlat,nlon),dtype=object)
         self.fit = np.zeros((nlat,nlon),dtype=np.ndarray)
-        self.RMS = np.zeros((nlat,nlon))
+        self.RMS = np.zeros((nlat,nlon),dtype=object)
         self.mask = np.ones((nlat,nlon),dtype=bool)
         for i in range(nlat):
             for j in range(nlon):
-                print('data ({0}, {1}) of ({2}, {3})'.format(i,j,nlat,nlon))
+                if verbose:
+                    print('data ({0}, {1}) of ({2}, {3})'.format(i,j,nlat,nlon))
                 if isinstance(data[i,j], PhotometricData):
                     d = data[i,j].copy()
                     d.validate()
                     d.trim(ilim=ilim, elim=elim, alim=alim, rlim=rlim)
                     if len(d) > 10:
-                        fitter = d.fit(model, fitter=self.fitter(), **kwargs)
-                        self.model[i,j] = fitter.model
+                        fitter = d.fit(model, fitter=self.fitter(), verbose=False, **kwargs)
+                        # assemble to a model set
+                        params = np.array([m.parameters for m in fitter.model])
+                        model_set = type(fitter.model[0])(*params.T, n_models=params.shape[0])
+                        self.model[i,j] = model_set
                         self.fit_info[i,j] = fitter.fit_info
                         self.fit[i,j] = fitter.fit
                         self.RMS[i,j] = fitter.RMS
@@ -2275,6 +2280,9 @@ class PhotometricGridFitter(object):
                         self.mask[i,j] = False
                 else:
                     self.mask[i,j] = False
+                if verbose:
+                    if self.mask[i,j]:
+                        print(model_set)
         self.fitted = True
         return self.model
 
@@ -2326,7 +2334,7 @@ class ModelGrid(object):
                 self._model_grid = np.repeat(m, self.nlat*self.nlon).reshape(self.nlat,self.nlon)
                 self._mask = np.ones((self.nlat,self.nlon),dtype=bool)
                 for k in m.param_names:
-                    self.__dict__[k] = np.repeat(getattr(m, k), self.nlat*self.nlon).reshape(self.nlat,self.nlon)
+                    self.__dict__[k] = np.repeat(getattr(m, k), self.nlat*self.nlon).reshape(self.nlat,self.nlon).tolist()
 
     @property
     def param_names(self):
@@ -2415,7 +2423,7 @@ class ModelGrid(object):
             for j in lon:
                 if not self.mask[i,j]:
                     for k in key:
-                        self.__dict__[k][i,j] = getattr(self.model_grid[i,j],k).value
+                        self.__dict__[k][i][j] = getattr(self.model_grid[i,j],k).value
 
     def write(self, filename, overwrite=False):
         out = fits.HDUList()
