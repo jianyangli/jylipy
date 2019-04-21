@@ -3244,12 +3244,16 @@ class Binner(object):
                             e_idx = i_idx & (data[2] >= e1) & (data[2] < e2)
                             if e_idx.any():
                                 data_in = [data[i][e_idx] for i in range(4)]
-                                [binned[i].append(data_in[i].mean()) for i in range(4)]
+                                [binned[i].append(data_in[i].mean(axis=0)) for i in range(4)]
                                 count.append(len(data_in[0]))
                                 if count[-1] > 1:
-                                    [error[i].append(data_in[i].std()) for i in range(4)]
+                                    [error[i].append(data_in[i].std(axis=0)) for i in range(4)]
                                 else:
-                                    [error[i].append(0.) for i in range(4)]
+                                    [error[i].append(0.) for i in range(3)]
+                                    if data[3].ndim == 1:
+                                        error[3].append(0.)
+                                    else:
+                                        error[3].append(np.zeros_like(data_in[3][0]))
 
         parms = {'dims': self.dims, 'bins': self.bins, 'boundary': self.boundary, 'count': np.array(count)}
         keys = {}
