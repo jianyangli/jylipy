@@ -8,6 +8,7 @@ import numpy as np, numbers
 from ..core import ulen, condition
 from ..plotting import density, pplot
 from ..apext import units, Table, table, MPFitter, Column, fits
+import astropy.units as u
 from astropy.modeling import FittableModel, Fittable1DModel, Fittable2DModel, Parameter
 
 
@@ -2018,16 +2019,70 @@ class PhotometricDataGrid(object):
                 self._info['masked'][j,i] = True
         else:
             self._info['count'][j,i] = len(data)
-            self._info['latmin'][j,i] = data.latlim[0]
-            self._info['latmax'][j,i] = data.latlim[1]
-            self._info['lonmin'][j,i] = data.lonlim[0]
-            self._info['lonmax'][j,i] = data.lonlim[1]
+            if data.latlim is None:
+                self._info['latmin'][j,i] = 0 * u.deg
+                self._info['latmax'][j,i] = 0 * u.deg
+            else:
+                self._info['latmin'][j,i] = data.latlim[0]
+                self._info['latmax'][j,i] = data.latlim[1]
+            if data.lonlim is None:
+                self._info['lonmin'][j,i] = 0 * u.deg
+                self._info['lonmax'][j,i] = 0 * u.deg
+            else:
+                self._info['lonmin'][j,i] = data.lonlim[0]
+                self._info['lonmax'][j,i] = data.lonlim[1]
             self._info['incmin'][j,i] = data.inclim[0]
             self._info['incmax'][j,i] = data.inclim[1]
             self._info['emimin'][j,i] = data.emilim[0]
             self._info['emimax'][j,i] = data.emilim[1]
             self._info['phamin'][j,i] = data.phalim[0]
             self._info['phamax'][j,i] = data.phalim[1]
+
+    def _update_property_1d(self,i,masked=None,loaded=None):
+        if masked is not None:
+            self._info1d['masked'][i] = masked
+        if loaded is not None:
+            self._info1d['loaded'][i] = loaded
+        if self._info1d['masked'][i]:
+            data = 0
+        else:
+            if not self._info1d['loaded'][i]:
+                self._load_data(i)
+            data = self._data1d[i]
+        if isinstance(data, int) or len(data) <= 0:
+            self._info1d['count'][i] = 0.
+            self._info1d['latmin'][i] = 0.
+            self._info1d['latmax'][i] = 0.
+            self._info1d['lonmin'][i] = 0.
+            self._info1d['lonmax'][i] = 0.
+            self._info1d['incmin'][i] = 0.
+            self._info1d['incmax'][i] = 0.
+            self._info1d['emimin'][i] = 0.
+            self._info1d['emimax'][i] = 0.
+            self._info1d['phamin'][i] = 0.
+            self._info1d['phamax'][i] = 0.
+            if masked is None:
+                self._info1d['masked'][i] = True
+        else:
+            self._info1d['count'][i] = len(data)
+            if data.latlim is None:
+                self._info1d['latmin'][i] = 0 * u.deg
+                self._info1d['latmax'][i] = 0 * u.deg
+            else:
+                self._info1d['latmin'][i] = data.latlim[0]
+                self._info1d['latmax'][i] = data.latlim[1]
+            if data.lonlim is None:
+                self._info1d['lonmin'][i] = 0 * u.deg
+                self._info1d['lonmax'][i] = 0 * u.deg
+            else:
+                self._info1d['lonmin'][i] = data.lonlim[0]
+                self._info1d['lonmax'][i] = data.lonlim[1]
+            self._info1d['incmin'][i] = data.inclim[0]
+            self._info1d['incmax'][i] = data.inclim[1]
+            self._info1d['emimin'][i] = data.emilim[0]
+            self._info1d['emimax'][i] = data.emilim[1]
+            self._info1d['phamin'][i] = data.phalim[0]
+            self._info1d['phamax'][i] = data.phalim[1]
 
     def populate(self, *args, **kwargs):
         '''Populate photometric data grid.
@@ -2218,6 +2273,29 @@ class PhotometricDataGrid(object):
                 out.append(self._data1d[i])
         return out
 
+    def bin(self, outfile, **kwargs):
+        """Bin photometric data in all grid.
+
+        See `Binner` for parameters.
+
+        Returns a `PhotometricDataGrid` object associated with output file
+        ``outfile``.
+        """
+        import os
+        out = PhotometricDataGrid(lon=self.lon.copy(), lat=self.lat.copy())
+        if os.path.isfile(outfile):
+            raise IOError('Output file already exists.')
+        out.file = outfile
+        out._info1d['masked'] = self._info1d['masked']
+        for i in range(len(out._data1d)):
+            if self._info1d['masked'][i]:
+                out._data1d[i] = 0
+            else:
+                if not self._info1d['loaded'][i]:
+                    self._load_data(i)
+                out._data1d[i] = self._data1d[i].bin(**kwargs)
+            out._update_property_1d(i, loaded=True)
+        return out
 
 class PhotometricModelFitter(object):
     '''Base class for fitting photometric data to model
