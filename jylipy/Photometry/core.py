@@ -1638,10 +1638,13 @@ class PhotometricDataGrid(object):
         if verbose:
             print('Cleaning memory...')
         for i in range(self.size):
-            if self._info1d['loaded'][i]:
+            if (self._info1d['loaded'][i]) and \
+                    (not self._info1d['masked'][i]) and \
+                    (not self._flushed1d[i]):
                 self._save_data(i)
                 self._data1d[i] = None
                 self._info1d['loaded'][i] = False
+                self._flushed1d[i] = True
         return True
 
     @property
@@ -1751,40 +1754,72 @@ class PhotometricDataGrid(object):
                 f = path+'/'+self._info['file'][i,j]
                 if os.path.isfile(f):
                     self._data[i,j] = PhotometricData(f)
-                    self._info['loaded'][i,j] = True
-                    self._info['masked'][i,j] = False
-                    self._flushed[i,j] = True
+                else:
+                    raise IOError('Data record not found for position ({}, {}'
+                        ') from file {}'.format(i,j,f))
+            self._info['loaded'][i,j] = True
+            self._flushed[i,j] = True
         elif len(args) == 1:
             i = args[0]
-            f = path+'/'+self._info1d['file'][i]
-            if os.path.isfile(f):
-                self._data1d[i] = PhotometricData(f)
-                self._info1d['loaded'][i] = True
-                self._info1d['masked'][i] = False
-                self._flushed1d[i] = True
+            if not self._info1d['masked'][i]:
+                f = path+'/'+self._info1d['file'][i]
+                if os.path.isfile(f):
+                    self._data1d[i] = PhotometricData(f)
+                else:
+                    raise IOError('Data record not found for flattened '
+                        'position ({}) from file {}'.format(i,f))
+            self._info1d['loaded'][i] = True
+            self._flushed1d[i] = True
         else:
             raise ValueError('2 or 3 arguments expected, {0} received'.format(len(args)+1))
         return cleaned
 
-    def _save_data(self, *args, **kwargs):
+    def _save_data(self, *args, outfile=None, update_flush_flag=True, **kwargs):
+        """Save data at specified position to output file
+
+        If ``outfile`` is set, then data will be directly saved to the
+        specified file.
+
+        If ``outfile`` is not set, then the output file will be inferred from
+        ``self.file``.
+
+        If ``update_flush_flag`` is True, then the corresponding
+        ``self._flushed`` flag will be updated to True after saving data.
+        Otherwise this flag is not updated.
+        """
         import os
-        if self.file is None:
-            raise ValueError('data file not specified')
-        infofile, path = self._path_name(self.file)
-        if not os.path.isdir(path):
-            os.mkdir(path)
+        if outfile is None:
+            if self.file is None:
+                raise ValueError('data file not specified')
+            infofile, path = self._path_name(self.file)
+            if not os.path.isdir(path):
+                os.mkdir(path)
+        else:
+            path = None
         if len(args) == 2:
             i, j = args
-            if (not self._info['masked'][i,j]) and (not self._flushed[i,j]):
-                f = path+'/'+self._info['file'][i,j]
+            if not self._info['masked'][i,j]:
+                if path is None:
+                    f = outfile
+                else:
+                    f = path+'/'+self._info['file'][i,j]
+                if not self._info['loaded'][i,j]:
+                    self._load_data(i,j)
                 self._data[i,j].write(f, overwrite=True)
-                self._flushed[i,j] = True
+                if update_flush_flag:
+                    self._flushed[i,j] = True
         elif len(args) == 1:
             i = args[0]
-            if (not self._info1d['masked'][i]) and (not self._flushed1d[i]):
-                f = path+'/'+self._info1d['file'][i]
+            if not self._info1d['masked'][i]:
+                if path is None:
+                    f = outfile
+                else:
+                    f = path+'/'+self._info1d['file'][i]
+                if not self._info1d['loaded'][i]:
+                    self._load_data(i)
                 self._data1d[i].write(f, overwrite=True)
-                self._flushed1d[i] = True
+                if update_flush_flag:
+                    self._flushed1d[i] = True
         else:
             raise ValueError('2 or 3 arguments expected, {0} received'.format(len(args)+1))
 
@@ -1797,7 +1832,18 @@ class PhotometricDataGrid(object):
         return outfile, outdir
 
     def write(self, outfile=None, overwrite=False):
-        '''Write data to disk
+        '''Write data to disk.
+
+        If ``outfile is None``, then this method flushes all data to disk
+        based on the location specified by ``self.file``.  If
+        ``self.file is None``, then it will throw an exception.
+
+        If a file name is provided via ``outfile``, then this method saves all
+        data to the specified output file.  If ``self.file == None`` before
+        calling this smethod, then the provided file name will be associated
+        to class object for operations.  Otherwise ``self.file`` will not be
+        changed, and the location specified by ``outfile`` is just an extra
+        copy of the data.
 
         outfile : str, optional
           Output file name.  If omitted, then the program does a memory flush,
@@ -1819,7 +1865,9 @@ class PhotometricDataGrid(object):
         else:
             if self.file is None:
                 self.file = outfile
-            flush = False
+                flush = True
+            else:
+                flush = False
 
         outfile, outdir = self._path_name(outfile)
         if os.path.isfile(outfile):
@@ -1835,16 +1883,16 @@ class PhotometricDataGrid(object):
         if not os.path.isdir(outdir):
             os.mkdir(outdir)
         for i in range(self.size):
+            f = outdir+'/'+self._info1d['file'][i]
             if self._info1d['masked'][i]:
-                f = outdir+'/'+self._info1d['file'][i]
                 if os.path.isfile(f):
                     os.remove(f)
             else:
                 if flush:
                     if not self._flushed1d[i]:
-                        self._save_data(i)
+                        self._save_data(i, outfile=f)
                 else:
-                    self._save_data(i)
+                    self._save_data(i, outfile=f, update_flush_flag=False)
 
         # save information
         lst = Table(self._info1d)
