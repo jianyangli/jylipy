@@ -1879,6 +1879,20 @@ class PhotometricDataGrid(object):
                 else:
                     raise IOError('output file {0} already exists'.format(outfile))
 
+        # save envolope information
+        hdr0 = fits.Header()
+        hdr0['version'] = self.version
+        primary_hdu = fits.PrimaryHDU(header=hdr0)
+        hdr1 = fits.Header()
+        hdr1['extname'] = 'INFO'
+        table_hdu = fits.BinTableHDU(Table(self._info1d), header=hdr1)
+        lon_hdu = fits.ImageHDU(self.lon.value, name='lon')
+        lon_hdu.header['bunit'] = str(self.lon.unit)
+        lat_hdu = fits.ImageHDU(self.lat.value, name='lat')
+        lat_hdu.header['bunit'] = str(self.lat.unit)
+        hdu_list = fits.HDUList([primary_hdu, table_hdu, lon_hdu, lat_hdu])
+        hdu_list.writeto(outfile, overwrite=True)
+
         # save data
         if not os.path.isdir(outdir):
             os.mkdir(outdir)
@@ -1893,20 +1907,6 @@ class PhotometricDataGrid(object):
                         self._save_data(i, outfile=f)
                 else:
                     self._save_data(i, outfile=f, update_flush_flag=False)
-
-        # save information
-        lst = Table(self._info1d)
-        lst.write(outfile, overwrite=True)
-        hdus = fits.open(outfile)
-        hdus[0].header['version'] = self.version
-        hdus[1].header['extname'] = 'INFO'
-        lonhdu = fits.ImageHDU(self.lon.value, name='lon')
-        lonhdu.header['bunit'] = str(self.lon.unit)
-        hdus.append(lonhdu)
-        lathdu = fits.ImageHDU(self.lat.value, name='lat')
-        lathdu.header['bunit'] = str(self.lat.unit)
-        hdus.append(lathdu)
-        hdus.writeto(outfile, clobber=True)
 
     def read(self, infile=None, verbose=False, load=False):
         '''Read data from a directory or a list of files
