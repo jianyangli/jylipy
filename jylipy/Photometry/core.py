@@ -2182,6 +2182,7 @@ class PhotometricModelFitter(object):
             self.fit_info = f.fit_info
             self.fit = self.model(*inputs)
             self.RMS = np.sqrt(((self.fit-self.data.BDR)**2).mean())
+            self.RRMS = self.RMS/self.data.BDR.mean()
             self.fitted = True
             return self.model
         else:
@@ -2189,12 +2190,14 @@ class PhotometricModelFitter(object):
             self.fit_info = []
             self.fit = []
             self.RMS = []
+            self.RRMS = []
             self.fitted = []
             for r in bdr.T:
                 self.model.append(f(model, inputs[0], inputs[1], inputs[2], r, **kwargs))
                 self.fit_info.append(f.fit_info)
                 self.fit.append(self.model[-1](*inputs))
                 self.RMS.append(np.sqrt(((self.fit[-1]-r)**2).mean()))
+                self.RRMS.append(self.RMS[-1]/r.mean())
                 self.fitted.append(True)
             return self.model
 
@@ -2258,6 +2261,7 @@ class PhotometricGridFitter(object):
         self.fit_info = np.zeros((nlat,nlon),dtype=object)
         self.fit = np.zeros((nlat,nlon),dtype=np.ndarray)
         self.RMS = np.zeros((nlat,nlon),dtype=object)
+        self.RRMS = np.zeros((nlat,nlon),dtype=object)
         self.mask = np.ones((nlat,nlon),dtype=bool)
         for i in range(nlat):
             for j in range(nlon):
@@ -2276,6 +2280,7 @@ class PhotometricGridFitter(object):
                         self.fit_info[i,j] = fitter.fit_info
                         self.fit[i,j] = fitter.fit
                         self.RMS[i,j] = fitter.RMS
+                        self.RRMS[i,j] = fitter.RRMS
                     else:
                         self.mask[i,j] = False
                 else:
