@@ -1675,7 +1675,8 @@ class PhotometricDataGrid(object):
     def __len__(self):
         return len(self._data)
 
-    def __getitem__(self, key):
+    def _process_key(self, key):
+        """Process index key and return lists of indices"""
         if hasattr(key,'__iter__'):
             if len(key)!=2:
                 raise KeyError('invalid index')
@@ -1690,6 +1691,11 @@ class PhotometricDataGrid(object):
             i = key
             j = list(range(len(self.lon)-1))
         y, x = np.meshgrid(i, j)
+        return y, x
+
+    def __getitem__(self, key):
+        """Return value ``self[key]``"""
+        y, x = self._process_key(key)
         # check whether the data to be loaded are too large
         if _memory_size(self._info['count'][y,x].sum())>self.max_mem:
             raise MemoryError('insufficient memory to load all data requested')
@@ -1703,6 +1709,32 @@ class PhotometricDataGrid(object):
                 self._load_data(i, j)
         out = self._data[key]
         return out
+
+    def __setitem__(self, key, value):
+        """Assign value ``value`` to ``self[key]``"""
+        valid_v = False
+        if isinstance(value, (PhotometricData, int)):
+            valid_v = True
+            value_shape = (1,1)
+        elif isinstance(value, (list, tuple, np.ndarray)):
+            if np.array([isinstance(v, (PhotometricData, int)) for v in np.asanyarray(value).flatten()]).all():
+                valid_v = True
+                value_shape = np.shape(value)
+        if not valid_v:
+            raise ValueError('Only ``PhotometricData`` or array of it can be assigned.')
+        y, x = self._process_key(key)
+        print('x.size = ',x.size)
+        print('type(value) = ', type(value))
+        if x.shape != value_shape:
+            raise ValueError('Values to be assigned must have the same shape.')
+        loaded = self._info['loaded']
+        loaded[y, x] = True
+        if _memory_size((self._info['count']*loaded.astype('i')).sum())>self.max_mem:
+            self._clean_memory(forced=True)
+        self._data[key] = value
+        self._info['loaded'][key] = True
+        self._info['masked'][key] = (value == 0)
+        self._flushed[key] = self._info['masked'][key] | False
 
     def _load_data(self, *args):
         '''Load data for position [i,j] or position [i] for flattened case'''
