@@ -1945,23 +1945,16 @@ class PhotometricDataGrid(object):
                 self._flushed[j,i] = False
                 self._clean_memory(verbose=verbose)
 
-    def _update_property(self,j,i,masked=False,loaded=True):
-        data = self[j,i]
-        if len(data)>0:
-            self._info['count'][j,i] = len(data)
-            self._info['latmin'][j,i] = data.latlim[0]
-            self._info['latmax'][j,i] = data.latlim[1]
-            self._info['lonmin'][j,i] = data.lonlim[0]
-            self._info['lonmax'][j,i] = data.lonlim[1]
-            self._info['incmin'][j,i] = data.inclim[0]
-            self._info['incmax'][j,i] = data.inclim[1]
-            self._info['emimin'][j,i] = data.emilim[0]
-            self._info['emimax'][j,i] = data.emilim[1]
-            self._info['phamin'][j,i] = data.phalim[0]
-            self._info['phamax'][j,i] = data.phalim[1]
+    def _update_property(self,j,i,masked=None,loaded=None):
+        if masked is not None:
             self._info['masked'][j,i] = masked
+        if loaded is not None:
             self._info['loaded'][j,i] = loaded
+        if self._info['masked'][j,i]:
+            data = 0
         else:
+            data = self[j,i]
+        if isinstance(data, int) or len(data) <= 0:
             self._info['count'][j,i] = 0.
             self._info['latmin'][j,i] = 0.
             self._info['latmax'][j,i] = 0.
@@ -1973,8 +1966,20 @@ class PhotometricDataGrid(object):
             self._info['emimax'][j,i] = 0.
             self._info['phamin'][j,i] = 0.
             self._info['phamax'][j,i] = 0.
-            self._info['masked'][j,i] = True
-            self._info['loaded'][j,i] = loaded
+            if masked is None:
+                self._info['masked'][j,i] = True
+        else:
+            self._info['count'][j,i] = len(data)
+            self._info['latmin'][j,i] = data.latlim[0]
+            self._info['latmax'][j,i] = data.latlim[1]
+            self._info['lonmin'][j,i] = data.lonlim[0]
+            self._info['lonmax'][j,i] = data.lonlim[1]
+            self._info['incmin'][j,i] = data.inclim[0]
+            self._info['incmax'][j,i] = data.inclim[1]
+            self._info['emimin'][j,i] = data.emilim[0]
+            self._info['emimax'][j,i] = data.emilim[1]
+            self._info['phamin'][j,i] = data.phalim[0]
+            self._info['phamax'][j,i] = data.phalim[1]
 
     def populate(self, *args, **kwargs):
         '''Populate photometric data grid.
