@@ -1712,6 +1712,7 @@ class PhotometricDataGrid(object):
 
     def __setitem__(self, key, value):
         """Assign value ``value`` to ``self[key]``"""
+        # process input
         valid_v = False
         if isinstance(value, (PhotometricData, int)):
             valid_v = True
@@ -1723,18 +1724,19 @@ class PhotometricDataGrid(object):
         if not valid_v:
             raise ValueError('Only ``PhotometricData`` or array of it can be assigned.')
         y, x = self._process_key(key)
-        print('x.size = ',x.size)
-        print('type(value) = ', type(value))
         if x.shape != value_shape:
             raise ValueError('Values to be assigned must have the same shape.')
-        loaded = self._info['loaded']
-        loaded[y, x] = True
-        if _memory_size((self._info['count']*loaded.astype('i')).sum())>self.max_mem:
-            self._clean_memory(forced=True)
+        # assign values
         self._data[key] = value
         self._info['loaded'][key] = True
         self._info['masked'][key] = (value == 0)
         self._flushed[key] = self._info['masked'][key] | False
+        for i,j in zip(y.flatten(), x.flatten()):
+            self._update_property(i,j)
+        # free memory if needed
+        loaded = self._info['loaded']
+        if _memory_size((self._info['count']*loaded.astype('i')).sum())>self.max_mem:
+            self._clean_memory(forced=True)
 
     def _load_data(self, *args):
         '''Load data for position [i,j] or position [i] for flattened case'''
@@ -1745,12 +1747,13 @@ class PhotometricDataGrid(object):
         cleaned = self._clean_memory()
         if len(args) == 2:
             i, j = args
-            f = path+'/'+self._info['file'][i,j]
-            if os.path.isfile(f):
-                self._data[i,j] = PhotometricData(f)
-                self._info['loaded'][i,j] = True
-                self._info['masked'][i,j] = False
-                self._flushed[i,j] = True
+            if not self._info['masked'][i,j]:
+                f = path+'/'+self._info['file'][i,j]
+                if os.path.isfile(f):
+                    self._data[i,j] = PhotometricData(f)
+                    self._info['loaded'][i,j] = True
+                    self._info['masked'][i,j] = False
+                    self._flushed[i,j] = True
         elif len(args) == 1:
             i = args[0]
             f = path+'/'+self._info1d['file'][i]
