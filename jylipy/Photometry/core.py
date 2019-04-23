@@ -1872,13 +1872,12 @@ class PhotometricDataGrid(object):
 
         outfile, outdir = self._path_name(outfile)
         if os.path.isfile(outfile):
-            if not flush:
-                if overwrite:
-                    os.remove(outfile)
-                    if os.path.isdir(outdir):
-                        os.system('rm -rf '+outdir)
-                else:
-                    raise IOError('output file {0} already exists'.format(outfile))
+            if overwrite:
+                os.remove(outfile)
+                if os.path.isdir(outdir):
+                    os.system('rm -rf '+outdir)
+            elif not flush:
+                raise IOError('output file {0} already exists'.format(outfile))
 
         # save envolope information
         hdr0 = fits.Header()
@@ -2296,6 +2295,7 @@ class PhotometricDataGrid(object):
                 out._data1d[i] = self._data1d[i].bin(**kwargs)
             out._update_property_1d(i, loaded=True)
         return out
+
 
 class PhotometricModelFitter(object):
     '''Base class for fitting photometric data to model
