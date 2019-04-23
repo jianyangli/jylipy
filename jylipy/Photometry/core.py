@@ -2440,8 +2440,11 @@ class PhotometricGridFitter(object):
                     if len(d) > 10:
                         fitter = d.fit(model, fitter=self.fitter(), verbose=False, **kwargs)
                         # assemble to a model set
-                        params = np.array([m.parameters for m in fitter.model])
-                        model_set = type(fitter.model[0])(*params.T, n_models=params.shape[0])
+                        if hasattr(fitter.model, '__iter__'):
+                            params = np.array([m.parameters for m in fitter.model])
+                            model_set = type(fitter.model[0])(*params.T, n_models=params.shape[0])
+                        else:
+                            model_set = fitter.model
                         self.model[i,j] = model_set
                         self.fit_info[i,j] = fitter.fit_info
                         self.fit[i,j] = fitter.fit
@@ -2453,7 +2456,7 @@ class PhotometricGridFitter(object):
                     self.mask[i,j] = False
                 if verbose:
                     if self.mask[i,j]:
-                        print(model_set)
+                        print(model_set.__repr__())
         self.fitted = True
         return self.model
 
