@@ -190,7 +190,7 @@ class PDSData(object):
         '''Read a PDS image data record'''
         import warnings
         dtype = pds_types[obj['SAMPLE_TYPE']]+str(obj['SAMPLE_BITS'])
-        if obj['BANDS'] > 1:
+        if 'BANDS' in obj.keys() and obj['BANDS'] > 1:
             if obj['BAND_STORAGE_TYPE'] == 'BAND_SEQUENTIAL':
                 shape = obj['BANDS'],obj['LINES'],obj['LINE_SAMPLES']
             else:
@@ -209,7 +209,7 @@ class PDSData(object):
                 unit = units.Unit(obj['unit'],parse_strict='warn')
         else:
             unit = ''
-        if obj['BANDS'] == 1:
+        if 'BANDS' in obj.keys() and obj['BANDS'] == 1:
             im = Image(np.squeeze(out.reshape(shape)),meta=obj,unit=unit)
         else:
             im = np.squeeze(out.reshape(shape))
