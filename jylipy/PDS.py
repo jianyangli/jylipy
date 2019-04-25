@@ -123,7 +123,9 @@ class Header(CaseInsensitiveOrderedDict):
                             u = u.strip('<>')
                             if 'per' in u:
                                 u = u.replace('per', '/')
-                            u = u.lower()
+                            if 'degC' in u:
+                                u = u.replace('degC', 'deg_C')
+                            #u = u.lower()
                             v.append(float(vv)*units.Unit(u))
                         else:
                             v.append(num(i))
@@ -148,12 +150,14 @@ class Header(CaseInsensitiveOrderedDict):
                 u = u.strip('<>')
                 if u == 'kelvin':
                     u = 'Kelvin'
-                else:
-                    u = u.lower()
-                if u == 'degrees':
+                elif u == 'degrees':
                     u = 'degree'
+                elif u == 'degC':
+                    u = 'deg_C'
                 elif u in ['w','v']:
                     u = u.upper()
+                else:
+                    u = u.lower()
                 if isinstance(v, numbers.Number):
                     self[k] = v*units.Unit(u)
             else:
@@ -164,7 +168,8 @@ class Header(CaseInsensitiveOrderedDict):
 
 pds_types = {'LSB_UNSIGNED_INTEGER': 'uint', \
              'MSB_UNSIGNED_INTEGER': 'uint', \
-             'PC_REAL': 'float'}
+             'PC_REAL': 'float', \
+             'IEEE_REAL': 'float'}
 
 class PDSData(object):
 
