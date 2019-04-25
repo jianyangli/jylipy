@@ -2456,7 +2456,10 @@ class PhotometricGridFitter(object):
                     self.mask[i,j] = False
                 if verbose:
                     if self.mask[i,j]:
-                        print(model_set.__repr__())
+                        if len(model_set) == 1:
+                            print(model_set.__repr__())
+                        else:
+                            print(model_set)
         self.fitted = True
         return self.model
 
