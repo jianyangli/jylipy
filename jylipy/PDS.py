@@ -238,9 +238,16 @@ class PDSData(object):
                 if isinstance(hdr.pointers[objname], int):
                     pt = (hdr.pointers[objname]-1)*hdr['RECORD_BYTES']
                     ims[objname] = self.read_image_rec(hdr[objname], s[pt:])
-                elif isinstance(hdr.pointers[objname], str):
+                else:
                     from os.path import dirname
-                    f = open('/'.join([dirname(infile),hdr.pointers[objname]]), 'rb')
+                    if isinstance(hdr.pointers[objname], str):
+                        imgfile = hdr.pointers[objname]
+                        start = 1
+                    elif hasattr(hdr.pointers[objname], '__iter__'):
+                        imgfile, start = hdr.pointers[objname]
+                        start = int(start)
+                    f = open('/'.join([dirname(infile),imgfile]), 'rb')
+                    s = f.read(start-1)
                     s = f.read()
                     f.close()
                     ims[objname] = self.read_image_rec(hdr[objname], s)
