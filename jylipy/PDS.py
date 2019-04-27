@@ -199,7 +199,7 @@ class PDSData(object):
         else:
             shape = obj['LINES'],obj['LINE_SAMPLES']
             count = obj['LINES']*obj['LINE_SAMPLES']
-        out = np.fromstring(st, dtype=dtype, count=count)
+        out = np.frombuffer(st, dtype=dtype, count=count)
         if 'SCALING_FACTOR' in obj.keys():
             out = out*obj['SCALING_FACTOR']
         if ('unit' in list(obj.keys())) or ('UNIT' in list(obj.keys())):
