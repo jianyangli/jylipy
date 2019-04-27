@@ -168,8 +168,8 @@ class Header(CaseInsensitiveOrderedDict):
 
 pds_types = {'LSB_UNSIGNED_INTEGER': 'uint', \
              'MSB_UNSIGNED_INTEGER': 'uint', \
-             'PC_REAL': 'float', \
-             'IEEE_REAL': 'float'}
+             'PC_REAL': 'float'} #, \
+             # 'IEEE_REAL': 'float'}
 
 class PDSData(object):
 
