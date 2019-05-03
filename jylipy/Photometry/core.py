@@ -2610,10 +2610,30 @@ class ModelGrid(object):
         out.append(hdu)
         hdu = fits.ImageHDU(self.mask.astype('i'), name='mask')
         out.append(hdu)
-        for k in self.param_names:
-            hdu = fits.ImageHDU(getattr(self, k), name=k)
-            out.append(hdu)
-        out.writeto(filename, clobber=overwrite)
+        #p_len = np.zeros((self.nlat, self.nlon), dtype=int)
+        #for i in range(self.nlat):
+        #    for j in range(self.nlon):
+        #        p_len[i,j] = len(self[i,j])
+        #n_models = p_len.max()
+        indx = np.where(~self.mask.flatten())[0][0]
+        n_models = len(self._model_grid.flatten()[indx])
+        if n_models == 1:
+            for k in self.param_names:
+                hdu = fits.ImageHDU(getattr(self, k), name=k)
+                out.append(hdu)
+        else:
+            for k in self.param_names:
+                v = getattr(self, k)
+                par = np.zeros((self.nlat, self.nlon, n_models))
+                for i in range(self.nlat):
+                    for j in range(self.nlon):
+                        if self.mask[i,j]:
+                            par[i,j] = np.repeat(v[i][j], n_models)
+                        else:
+                            par[i,j] = v[i][j]
+                hdu = fits.ImageHDU(par, name=k)
+                out.append(hdu)
+        out.writeto(filename, overwrite=overwrite)
 
     def read(self, filename):
         hdus = fits.open(filename)
@@ -2621,16 +2641,28 @@ class ModelGrid(object):
         self._param_names = eval(hdus['primary'].header['parnames'])
         self._mask = hdus['mask'].data.astype(bool)
         self._nlat, self._nlon = self.mask.shape
-        for k in self.param_names:
-            self.__dict__[k] = hdus[k].data.copy()
+        if hdus[self._param_names[0]].data.ndim == 2:
+            for k in self.param_names:
+                self.__dict__[k] = hdus[k].data.copy()
+        elif hdus[self._param_names[0]].data.ndim == 3:
+            for k in self.param_names:
+                self.__dict__[k] = [[hdus[k].data[i,j] for j in
+                    range(self.nlon)] for i in range(self.nlat)]
+            ii, jj = np.where(self.mask)
+            for i,j in zip(ii,jj):
+                for k in self.param_names:
+                    self.__dict__[k][i][j] = self.__dict__[k][i][j][0]
         self._model_grid = np.zeros((self.nlat, self.nlon), dtype=self.model_class)
         for i in range(self.nlat):
             for j in range(self.nlon):
                 if not self.mask[i,j]:
                     parms = {}
                     for k in self.param_names:
-                        parms[k] = getattr(self,k)[i,j]
+                        parms[k] = getattr(self,k)[i][j]
+                    parms['n_models'] = len(parms[self.param_names[0]])
                     self._model_grid[i,j] = self.model_class(**parms)
+                else:
+                    self._model_grid[i,j] = self.model_class()
 
 
 class PhaseFunction(FittableModel):
