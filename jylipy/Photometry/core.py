@@ -2469,22 +2469,28 @@ class PhotometricGridMPFitter(PhotometricGridFitter):
 
 
 class ModelGrid(object):
-    '''The longitude-latitude model grid corresponding to
-    `PhotometricDataGrid` data
+    """The longitude-latitude model grid class
 
- v1.0.0 : Jan 18, 2016, JYL @PSI
-    '''
+    This class is to support the modeling of `PhotometricDataGrid` class.  It
+    contains a grid of the same photometric model.
+    """
 
     _version = '1.0.0'
 
     def __init__(self, m0=None, nlon=None, nlat=None, datafile=None):
-        '''Initialization
+        """Initialization
 
- m0 : A model class
-   The class name of model to be fitted to the photometric data grid
-
- v1.0.0 : Jan 18, 2016, JYL @PSI
- '''
+        m0 : Model class
+            The class name of model.
+        nlon : number
+            The number of longitude grid points.  Non-integer will be rounded
+            to integer.
+        nlat : number
+            The number of latitude grid points.  Non-integer will be rounded
+            to integer.
+        datafile : str
+            Name of data file to initialize class.
+       """
         if datafile is not None:
             self.read(datafile)
             return
@@ -2492,18 +2498,15 @@ class ModelGrid(object):
         self._model_class = None
         self._model_grid = None
         self._param_names = None
-        self._nlon = None
-        self._nlat = None
-        self._mask = None
-        self.model_class = m0
-        self.reset_grid(nlon, nlat)
-
-    def reset_grid(self, nlon, nlat):
         self._nlon = nlon
         self._nlat = nlat
+        self._mask = None
+        self.model_class = m0
         self._init_model_params()
 
     def _init_model_params(self):
+        """Initialize model class using default parameters of self.model_class
+        """
         if self.model_class is not None:
             m = self.model_class()
             self._param_names = m.param_names
@@ -2515,26 +2518,32 @@ class ModelGrid(object):
 
     @property
     def param_names(self):
+        """Parameter names"""
         return self._param_names
 
     @property
     def model_grid(self):
+        """A numpy array contains the model grid"""
         return self._model_grid
 
     @property
     def nlon(self):
+        """Number of longitude grid points"""
         return self._nlon
 
     @property
     def nlat(self):
+        """Number of latitude grid points"""
         return self._nlat
 
     @property
     def model_class(self):
+        """Model class"""
         return self._model_class
 
     @model_class.setter
     def model_class(self, m0):
+        """Set model class"""
         if m0 is None:
             self._model_class = None
             self._model_grid = None
@@ -2545,10 +2554,12 @@ class ModelGrid(object):
 
     @property
     def mask(self):
+        """Model grid mask, where invalide models are masked (True)"""
         return self._mask
 
     @property
     def shape(self):
+        """Shape of model grid"""
         if self._model_grid is None:
             return ()
         else:
@@ -2558,10 +2569,12 @@ class ModelGrid(object):
         return len(self._model_grid)
 
     def __getitem__(self, k):
+        """Return model at specified index"""
         if self._model_grid is not None:
             return self._model_grid[k]
 
     def __setitem__(self, k, v):
+        """Set model at specified index"""
         if self._model_grid is None:
             raise ValueError('model grid not defined yet')
         if isinstance(v, self.model_class):
@@ -2574,7 +2587,22 @@ class ModelGrid(object):
         self.mask[k] = False
         self.update_params(*k)
 
-    def update_params(self, lat=None, lon=None, key=None):
+    def update_params(self, lat=None, lon=None, key=None, grid=True):
+        """Update model parameter attribute from model grid
+
+        lat : array-like int
+            Indices of latitudes to be updated.  Default is all latitude grid
+            points
+        lon : array-like int
+            Indices of longitudes to be updated.  Default is all longitude
+            grid points
+        key : array-like str
+            Names of parameters to be updated.  Default is all parameters
+        grid : bool
+            If `True` (defult), then `lat`, `lon` will be used to generate a
+            grid for the update.  Otherwise the update will be performed at
+            the coordinates of each pair of elements in `lat`, `lon`.
+        """
         if lat is None:
             lat = list(range(self.nlat))
         elif isinstance(lat,slice):
@@ -2596,13 +2624,41 @@ class ModelGrid(object):
         else:
             if not hasattr(key,'__iter__'):
                 key = np.asarray(key)
-        for i in lat:
-            for j in lon:
+        if grid:
+            for i in lat:
+                for j in lon:
+                    if not self.mask[i,j]:
+                        for k in key:
+                            self.__dict__[k][i][j] = getattr(self.model_grid[i,j],k).value
+        else:
+            for i, j in zip(lat, lon):
                 if not self.mask[i,j]:
                     for k in key:
                         self.__dict__[k][i][j] = getattr(self.model_grid[i,j],k).value
 
     def write(self, filename, overwrite=False):
+        """Write model grid to a FITS file
+
+        filename : str
+            The output file name
+        overwrite : bool
+            Overwrite existing file
+
+        The output file is a multi-extension FITS file.
+
+        Primary extension:
+            `.header['model']` = str : model name
+            `.header['parnames'] = str : tuple of model parameters
+            No data
+        Secondary extension has a name 'MASK'
+            2D int array of shape (nlat, nlon) : model mask
+        Other extensions stores the model parameters, one parameter in each
+            extension, corresponding to the parameter names stored in the
+            primary header `.header['parnames']`.  The extension names are
+            parameter names.  The shape of data is (nlat, nlon) if the model
+            at all grid points are single model, or (nlat, nlon, n_models) if
+            model set.
+        """
         out = fits.HDUList()
         hdu = fits.PrimaryHDU()
         hdu.header['model'] = self.model_class.name
@@ -2610,11 +2666,6 @@ class ModelGrid(object):
         out.append(hdu)
         hdu = fits.ImageHDU(self.mask.astype('i'), name='mask')
         out.append(hdu)
-        #p_len = np.zeros((self.nlat, self.nlon), dtype=int)
-        #for i in range(self.nlat):
-        #    for j in range(self.nlon):
-        #        p_len[i,j] = len(self[i,j])
-        #n_models = p_len.max()
         indx = np.where(~self.mask.flatten())[0][0]
         n_models = len(self._model_grid.flatten()[indx])
         if n_models == 1:
@@ -2636,6 +2687,11 @@ class ModelGrid(object):
         out.writeto(filename, overwrite=overwrite)
 
     def read(self, filename):
+        """Read model grid from input FITS file
+
+        filename : str
+            The name of input FITS file
+        """
         hdus = fits.open(filename)
         self._model_class = eval(hdus['primary'].header['model'])
         self._param_names = eval(hdus['primary'].header['parnames'])
