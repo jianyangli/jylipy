@@ -15,7 +15,7 @@ import warnings
 import numpy as np
 from matplotlib import pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
-import ccdproc
+#import ccdproc
 from .saoimage import getds9
 from .apext import *
 import contextlib
@@ -192,7 +192,7 @@ def imdisp(im, ds9=None, newwindow=False, **kwargs):
     return d
 
 
-class CCDData(ccdproc.CCDData):
+class CCDData():#ccdproc.CCDData):
     '''Subclass of ccdproc.CCDData
 
     Removed the required keyword `unit` from ccdproc.CCDData, assigning
