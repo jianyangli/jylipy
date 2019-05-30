@@ -19,7 +19,7 @@ from .multiproc import *
 from . import constants
 from . import Photometry
 from . import mesh
-from . import HST
+#from . import HST
 from . import convenience
 from . import PDS
 from . import vector
