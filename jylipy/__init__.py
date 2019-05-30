@@ -10,7 +10,7 @@ jylpy --- JYLi's personal library.
 from .core import *
 from .horizons import *
 from .saoimage import *
-from .geometry import *
+#from .geometry import *
 from .apext import *
 from .plotting import *
 from .multiproc import *
