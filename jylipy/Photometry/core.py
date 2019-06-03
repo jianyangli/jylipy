@@ -2502,6 +2502,8 @@ class PhotometricGridFitter(object):
                         else:
                             print(model_set)
         self.fitted = True
+        self.model.extra['RMS'] = self.RMS.astype(float)
+        self.model.extra['RRMS'] = self.RRMS.astype(float)
         return self.model
 
 
