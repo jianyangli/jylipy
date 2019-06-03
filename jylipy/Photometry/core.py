@@ -2532,6 +2532,7 @@ class ModelGrid(object):
         datafile : str
             Name of data file to initialize class.
        """
+        self.extra = {}
         if datafile is not None:
             self.read(datafile)
             return
@@ -2725,6 +2726,12 @@ class ModelGrid(object):
                             par[i,j] = v[i][j]
                 hdu = fits.ImageHDU(par, name=k)
                 out.append(hdu)
+        ex_keys = self.extra.keys()
+        if len(ex_keys) > 0:
+            out[0].header['extra'] = str(tuple(ex_keys))
+            for k in ex_keys:
+                hdu = fits.ImageHDU(self.extra[k], name=k)
+                out.append(hdu)
         out.writeto(filename, overwrite=overwrite)
 
     def read(self, filename):
@@ -2756,11 +2763,17 @@ class ModelGrid(object):
                     parms = {}
                     for k in self.param_names:
                         parms[k] = getattr(self,k)[i][j]
-                    parms['n_models'] = len(parms[self.param_names[0]])
+                    if hasattr(parms[self.param_names[0]], '__iter__'):
+                        parms['n_models'] = len(parms[self.param_names[0]])
+                    else:
+                        parms['n_models'] = 1
                     self._model_grid[i,j] = self.model_class(**parms)
                 else:
                     self._model_grid[i,j] = self.model_class()
-
+        if 'extra' in hdus['primary'].header:
+            keys = eval(hdus['primary'].header['extra'])
+            for k in keys:
+                self.extra[k] = hdus[k].data
 
 class PhaseFunction(FittableModel):
 
