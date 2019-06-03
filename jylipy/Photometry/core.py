@@ -2418,8 +2418,37 @@ class PhotometricGridFitter(object):
     def __init__(self):
         self.fitted = False
 
-    def __call__(self, model, data, fitter=None, ilim=None, elim=None, alim=None, rlim=None, **kwargs):
+    def __call__(self, model, data, fitter=None, ilim=None, elim=None, alim=None, rlim=None, latlim=None, lonlim=None, **kwargs):
+        """Fit PhotometricDataGrid to model
+
+        model : `~astropy.modeling.Model` instance
+            Model to be fitted
+        data : `PhotometricDataGrid`
+            Data to be fitted
+        fitter : astropy fitter class instance
+            Fitter used to fit the data
+        ilim : 2-element array like number or `astropy.units.Quantity`
+            Limit of incidence angle
+        elim : 2-element array like number or `astropy.units.Quantity`
+            Limit of emission angle
+        alim : 2-element array like number or `astropy.units.Quantity`
+            Limit of phase angle
+        rlim : 2-element array like number or `astropy.units.Quantity`
+            Limit of bidirectional reflectance
+        latlim : 2-element array like number of `astropy.units.Quantity`
+            Latitude range to be fitted
+        lonlim : 2-element array like number of `astropy.units.Quantity`
+            Longitude range to be fitted
+        **kwargs : dict
+            Keyword arguments accepted by `PhotometricData.fit()`
+
+        Return : `ModelGrid` instance
+        """
         verbose = kwargs.pop('verbose', True)
+        if latlim is None:
+            latlim = [-90, 90]
+        if lonlim is None:
+            lonlim = [0, 360]
         if fitter is not None:
             self.fitter = fitter
         if not hasattr(self, 'fitter'):
@@ -2431,10 +2460,20 @@ class PhotometricGridFitter(object):
         self.RMS = np.zeros((nlat,nlon),dtype=object)
         self.RRMS = np.zeros((nlat,nlon),dtype=object)
         self.mask = np.ones((nlat,nlon),dtype=bool)
-        for i in range(nlat):
-            for j in range(nlon):
+        index_boundary = (np.asarray(latlim)+90)/180*nlat
+        i1 = int(np.floor(index_boundary[0]))
+        i2 = int(np.ceil(index_boundary[1]))
+        ii = range(i1, i2, 1)
+        nii = len(ii)
+        index_boundary = np.asarray(lonlim)/360*nlon
+        j1 = int(np.floor(index_boundary[0]))
+        j2 = int(np.ceil(index_boundary[1]))
+        jj = range(j1, j2, 1)
+        njj = len(jj)
+        for i in ii:
+            for j in jj:
                 if verbose:
-                    print('data ({0}, {1}) of ({2}, {3})'.format(i,j,nlat,nlon))
+                    print('data ({0}, {1}) of ({2}-{3}, {4}-{5})'.format(i,j,i1,i2,j1,j2))
                 if isinstance(data[i,j], PhotometricData):
                     d = data[i,j].copy()
                     d.validate()
