@@ -1393,13 +1393,15 @@ class PhotometricData(object):
             self.geo.remove_row(*args, **kwargs)
         self._set_properties()
 
-    def trim(self, ilim=None, elim=None, alim=None, rlim=None):
+    def trim(self, ilim=None, elim=None, alim=None, rlim=None,
+        latlim=None, lonlim=None):
         '''Trim photometric data based on the limits in (i, e, a).
 
         v1.0.0 : 1/11/2016, JYL @PSI
         '''
         rm = np.zeros(len(self), dtype=bool)
-        for data,lim in zip([self.inc,self.emi,self.pha],[ilim, elim, alim]):
+        for data,lim in zip([self.inc, self.emi, self.pha, self.geolat,
+                self.geolon],[ilim, elim, alim, latlim, lonlim]):
             if lim is not None:
                 if hasattr(lim[0],'unit'):
                     l1 = lim[0].to('deg').value
