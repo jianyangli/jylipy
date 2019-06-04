@@ -1393,13 +1393,15 @@ class PhotometricData(object):
             self.geo.remove_row(*args, **kwargs)
         self._set_properties()
 
-    def trim(self, ilim=None, elim=None, alim=None, rlim=None):
+    def trim(self, ilim=None, elim=None, alim=None, rlim=None,
+        latlim=None, lonlim=None):
         '''Trim photometric data based on the limits in (i, e, a).
 
         v1.0.0 : 1/11/2016, JYL @PSI
         '''
         rm = np.zeros(len(self), dtype=bool)
-        for data,lim in zip([self.inc,self.emi,self.pha],[ilim, elim, alim]):
+        for data,lim in zip([self.inc, self.emi, self.pha, self.geolat,
+                self.geolon],[ilim, elim, alim, latlim, lonlim]):
             if lim is not None:
                 if hasattr(lim[0],'unit'):
                     l1 = lim[0].to('deg').value
@@ -2416,8 +2418,40 @@ class PhotometricGridFitter(object):
     def __init__(self):
         self.fitted = False
 
-    def __call__(self, model, data, fitter=None, ilim=None, elim=None, alim=None, rlim=None, **kwargs):
+    def __call__(self, model, data, fitter=None, ilim=None, elim=None,
+        alim=None, rlim=None, latlim=None, lonlim=None, multi=None, **kwargs):
+        """Fit PhotometricDataGrid to model
+
+        model : `~astropy.modeling.Model` instance
+            Model to be fitted
+        data : `PhotometricDataGrid`
+            Data to be fitted
+        fitter : astropy fitter class instance
+            Fitter used to fit the data
+        ilim : 2-element array like number or `astropy.units.Quantity`
+            Limit of incidence angle
+        elim : 2-element array like number or `astropy.units.Quantity`
+            Limit of emission angle
+        alim : 2-element array like number or `astropy.units.Quantity`
+            Limit of phase angle
+        rlim : 2-element array like number or `astropy.units.Quantity`
+            Limit of bidirectional reflectance
+        latlim : 2-element array like number of `astropy.units.Quantity`
+            Latitude range to be fitted
+        lonlim : 2-element array like number of `astropy.units.Quantity`
+            Longitude range to be fitted
+        multi : number
+            Number of multiple processes to run
+        **kwargs : dict
+            Keyword arguments accepted by `PhotometricData.fit()`
+
+        Return : `ModelGrid` instance
+        """
         verbose = kwargs.pop('verbose', True)
+        if latlim is None:
+            latlim = [-90, 90]
+        if lonlim is None:
+            lonlim = [0, 360]
         if fitter is not None:
             self.fitter = fitter
         if not hasattr(self, 'fitter'):
@@ -2429,38 +2463,95 @@ class PhotometricGridFitter(object):
         self.RMS = np.zeros((nlat,nlon),dtype=object)
         self.RRMS = np.zeros((nlat,nlon),dtype=object)
         self.mask = np.ones((nlat,nlon),dtype=bool)
-        for i in range(nlat):
-            for j in range(nlon):
-                if verbose:
-                    print('data ({0}, {1}) of ({2}, {3})'.format(i,j,nlat,nlon))
-                if isinstance(data[i,j], PhotometricData):
-                    d = data[i,j].copy()
-                    d.validate()
-                    d.trim(ilim=ilim, elim=elim, alim=alim, rlim=rlim)
-                    if len(d) > 10:
-                        fitter = d.fit(model, fitter=self.fitter(), verbose=False, **kwargs)
-                        # assemble to a model set
-                        if hasattr(fitter.model, '__iter__'):
-                            params = np.array([m.parameters for m in fitter.model])
-                            model_set = type(fitter.model[0])(*params.T, n_models=params.shape[0])
-                        else:
-                            model_set = fitter.model
-                        self.model[i,j] = model_set
-                        self.fit_info[i,j] = fitter.fit_info
-                        self.fit[i,j] = fitter.fit
-                        self.RMS[i,j] = fitter.RMS
-                        self.RRMS[i,j] = fitter.RRMS
-                    else:
-                        self.mask[i,j] = False
+        index_boundary = (np.asarray(latlim)+90)/180*nlat
+        i1 = int(np.floor(index_boundary[0]))
+        i2 = int(np.ceil(index_boundary[1]))
+        ii = range(i1, i2, 1)
+        nii = len(ii)
+        index_boundary = np.asarray(lonlim)/360*nlon
+        j1 = int(np.floor(index_boundary[0]))
+        j2 = int(np.ceil(index_boundary[1]))
+        jj = range(j1, j2, 1)
+        njj = len(jj)
+
+        def fit_ij(i, j):
+            if isinstance(data[i,j], PhotometricData):
+                d = data[i,j].copy()
+                d.validate()
+                d.trim(ilim=ilim, elim=elim, alim=alim, rlim=rlim)
+                if len(d) > 10:
+                    fitter = d.fit(model, fitter=self.fitter(), verbose=False,
+                        **kwargs)
+                    return fitter, i, j
+            return None
+
+        def process_fit(fitter, i, j, verbose=False):
+            if fitter is not None:
+                # assemble to a model set
+                if hasattr(fitter.model, '__iter__'):
+                    params = np.array([m.parameters for m in fitter.model])
+                    model_set = type(fitter.model[0])(*params.T,
+                        n_models=params.shape[0])
                 else:
-                    self.mask[i,j] = False
-                if verbose:
-                    if self.mask[i,j]:
-                        if len(model_set) == 1:
-                            print(model_set.__repr__())
-                        else:
-                            print(model_set)
+                    model_set = fitter.model
+                self.model[i,j] = model_set
+                self.fit_info[i,j] = fitter.fit_info
+                self.fit[i,j] = fitter.fit
+                self.RMS[i,j] = fitter.RMS
+                self.RRMS[i,j] = fitter.RRMS
+                self.mask[i,j] = False
+            if verbose:
+                print('Grid ({0}, {1}) of ({2}-{3}, {4}-{5})'.format(i,j,i1,i2,
+                    j1,j2), end=': ')
+                if not self.mask[i,j]:
+                    if len(model_set) == 1:
+                        print(model_set.__repr__())
+                    else:
+                        print(model_set)
+                else:
+                    print('not fitted.')
+
+        def worker(ii, jj, out_q):
+            results = []
+            for i, j in zip(ii, jj):
+                results.append(fit_ij(i, j))
+            out_q.put(results)
+
+        if multi is not None:
+            if verbose:
+                print(f'Multiprocessing with {multi} workers')
+            import multiprocessing
+            from time import sleep
+            iis, jjs = np.meshgrid(ii, jj, indexing='ij')
+            iis = iis.flatten()
+            jjs = jjs.flatten()
+            niis = len(iis)
+            boundaries = [int(x) for x in np.round(np.linspace(0, niis+1,
+                multi+1))]
+            procs = []
+            out_q = multiprocessing.Queue()
+            for b1,b2 in zip(boundaries[:-1], boundaries[1:]):
+                p = multiprocessing.Process(target=worker,
+                    args=(iis[b1:b2], jjs[b1:b2], out_q))
+                procs.append(p)
+                p.start()
+            for i in range(multi):
+                results = out_q.get()
+                for r in results:
+                    if r is not None:
+                        process_fit(r[0], r[1], r[2], verbose=verbose)
+            for p in procs:
+                p.join()
+
+        else:
+            for i in ii:
+                for j in jj:
+                    fitter, m, n = fit_ij(i, j)
+                    process_fit(fitter, m, n, verbose=verbose)
+
         self.fitted = True
+        self.model.extra['RMS'] = self.RMS.astype(float)
+        self.model.extra['RRMS'] = self.RRMS.astype(float)
         return self.model
 
 
@@ -2491,6 +2582,7 @@ class ModelGrid(object):
         datafile : str
             Name of data file to initialize class.
        """
+        self.extra = {}
         if datafile is not None:
             self.read(datafile)
             return
@@ -2684,6 +2776,12 @@ class ModelGrid(object):
                             par[i,j] = v[i][j]
                 hdu = fits.ImageHDU(par, name=k)
                 out.append(hdu)
+        ex_keys = self.extra.keys()
+        if len(ex_keys) > 0:
+            out[0].header['extra'] = str(tuple(ex_keys))
+            for k in ex_keys:
+                hdu = fits.ImageHDU(self.extra[k], name=k)
+                out.append(hdu)
         out.writeto(filename, overwrite=overwrite)
 
     def read(self, filename):
@@ -2715,11 +2813,17 @@ class ModelGrid(object):
                     parms = {}
                     for k in self.param_names:
                         parms[k] = getattr(self,k)[i][j]
-                    parms['n_models'] = len(parms[self.param_names[0]])
+                    if hasattr(parms[self.param_names[0]], '__iter__'):
+                        parms['n_models'] = len(parms[self.param_names[0]])
+                    else:
+                        parms['n_models'] = 1
                     self._model_grid[i,j] = self.model_class(**parms)
                 else:
                     self._model_grid[i,j] = self.model_class()
-
+        if 'extra' in hdus['primary'].header:
+            keys = eval(hdus['primary'].header['extra'])
+            for k in keys:
+                self.extra[k] = hdus[k].data
 
 class PhaseFunction(FittableModel):
 
