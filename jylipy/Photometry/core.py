@@ -2504,15 +2504,15 @@ class PhotometricGridFitter(object):
                 self.RMS[i,j] = fitter.RMS
                 self.RRMS[i,j] = fitter.RRMS
                 self.mask[i,j] = False
-                if verbose:
-                    print('Grid ({0}, {1}) of ({2}-{3}, {4}-{5})'.format(i,j,i1,i2,
+            if verbose:
+                print('Grid ({0}, {1}) of ({2}-{3}, {4}-{5})'.format(i,j,i1,i2,
                     j1,j2), end=': ')
+                if not self.mask[i,j]:
                     if len(model_set) == 1:
                         print(model_set.__repr__())
                     else:
                         print(model_set)
-            else:
-                if verbose:
+                else:
                     print('not fitted.')
 
         def worker(ii, jj, out_q):
