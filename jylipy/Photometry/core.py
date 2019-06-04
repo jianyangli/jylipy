@@ -587,7 +587,11 @@ class ScatteringGeometry(object):
 
     def is_valid(self):
         '''Check the validity of geometry, returns a bool array'''
-        return np.isfinite(self.inc) & np.isfinite(self.emi) & np.isfinite(self.pha) & np.isfinite(self.lon) & np.isfinite(self.lat) & np.isfinite(self.psi)
+        return np.isfinite(self.inc) & np.isfinite(self.emi) & \
+            np.isfinite(self.pha) & np.isfinite(self.lon) & \
+            np.isfinite(self.lat) & np.isfinite(self.psi) & \
+            (self.inc+self.emi >= self.pha) & \
+            (abs(self.inc-self.emi) <= self.pha)
 
     def validate(self):
         good = self.is_valid()
