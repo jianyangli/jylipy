@@ -23,6 +23,7 @@ Stopped version tracking here, use git for change control
 from pysis import isis
 from pysis.cubefile import CubeFile
 from os.path import splitext, isfile, isdir, basename, dirname, join
+import os
 
 __all__ = isis.__all__ + ['CubeFile', 'EZWrapper', 'iter_isis', 'listgen']
 

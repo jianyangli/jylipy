@@ -488,7 +488,7 @@ def calc_psi(i, e, alpha, cos=False):
     cospsi = (np.cos(ph_cp*np.pi/180)-mu0*mu)/sise
 
     # When cos(psi) is too close to 1 or -1, set it to 1 or -1
-    ww = np.abs(1-np.abs(cospsi)) < 1e-6
+    ww = np.abs(1-np.abs(cospsi)) < 1e-4
     cospsi[ww] = np.sign(cospsi[ww])
     psi = np.rad2deg(np.arccos(cospsi))
     psi[zeros] = 0.  # if i or e is 0, set the angle to be 0
