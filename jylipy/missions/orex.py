@@ -546,10 +546,10 @@ def add_sample_site(ax, size):
 # OCAMS resolved photometric mapping
 class OCAMS_Photometry():
 
-    def __init__(self, datadir=None, filter=['pan', 'b', 'v', 'w', 'x'],
+    def __init__(self, datadir=None, filter=['v', 'w', 'b', 'x', 'pan'],
         match_map=True, binsize=None, pho_datafile=None, grid_datafile=None,
-        mesh_size=1, suffix='', model=None, overwrite=False, maxmem=10,
-        verbose=True, **kwargs):
+        model_file=None, mesh_size=1, suffix='', model=None, overwrite=False,
+        maxmem=10, verbose=True, **kwargs):
         """
         datadir : str
             Directory of input data
@@ -588,7 +588,8 @@ class OCAMS_Photometry():
         self.match_map = match_map
         self.binsize = binsize
         self.pho_datafile = pho_datafile
-        self._grid_datafile = grid_datafile
+        self.grid_datafile = grid_datafile
+        self.model_file = model_file
         self.mesh_size = mesh_size
         self.suffix = suffix
         self.model = model
@@ -600,63 +601,73 @@ class OCAMS_Photometry():
             {'pan': 651.9, 'b': 469.7, 'v': 549.5, 'w': 700.9, 'x': 854.0}
 
     @property
+    def pho_datafile(self):
+        if self._pho_datafile is None:
+            return None
+        else:
+            phofile = [f'{self._pho_datafile}_{flt}' for flt in self.filter]
+            if self.suffix:
+                return [f'{s}_{self.suffix}.fits' for s in phofile]
+            else:
+                return [f'{s}.fits' for s in phofile]
+
+    @pho_datafile.setter
+    def pho_datafile(self, v):
+        if v is None:
+            self._pho_datafile = None
+        else:
+            self._pho_datafile = os.path.splitext(v)[0]
+
+    @property
     def grid_datafile(self):
         if self._grid_datafile is None:
             if self.pho_datafile is not None:
-                return f'{self.pho_datafile}_grid{self.mesh_size}deg'
+                out = [f'{self._pho_datafile}_{flt}_grid{self.mesh_size}deg' \
+                    for flt in self.filter]
             else:
                 return None
         else:
-            return self._grid_datafile
+            out = [f'{self._grid_datafile}_{flt}_grid{self.mesh_size}deg' \
+                for flt in self.filter]
+        if self.suffix:
+            return [f'{s}_{self.suffix}.fits' for s in out]
+        else:
+            return [f'{s}.fits' for s in out]
 
     @grid_datafile.setter
     def grid_datafile(self, v):
-        self._grid_datafile = v
-
-    def _generate_phodata_filename(self):
-        """Generate the file name for `PhotometricData`
-        """
-        if self.pho_datafile is None:
-            raise ValueError('`PhotometricData` file name is not'
-                ' specified.')
+        if v is None:
+            self._grid_datafile = None
         else:
-            phofile = [f'{self.pho_datafile}_{flt}' \
-                for flt in self.filter]
-            if self.suffix:
-                phofile = [f'{s}_{self.suffix}.fits' for s in phofile]
-            else:
-                phofile = [f'{s}.fits' for s in phofile]
-            return phofile
+            self._grid_datafile = os.path.splitext(v)[0]
 
-    def _generate_phogrid_filename(self):
-        """Generate the file names for `PhotometricDataGrid`
-        """
-        if self.grid_datafile is None:
-            raise ValueError('`PhotometricDataGrid` file name is not'
-                ' specified.')
-        else:
-            gridfile = [f'{self.grid_datafile}_{flt}' for flt in self.filter]
-            if self.suffix:
-                gridfile = [f'{s}_{self.suffix}.fits' for s in gridfile]
-            else:
-                gridfile = [f'{s}.fits' for s in gridfile]
-            return gridfile
-
-    def _generate_model_filename(self, datafile=None):
-        """Generate the file names to save fitted model grid
-        """
+    @property
+    def model_file(self):
         if self.model is None:
             model_suffix = 'model'
         else:
             model_suffix = self.model.__class__.__name__
-        if datafile is None:
-            datafile = self._generate_phogrid_filename()
-        if isinstance(datafile, str):
-            datafile = os.path.splitext(datafile)[0]
-            return f'{datafile}_{model_suffix}.fits'
+        if self._model_file is None:
+            if self.grid_datafile is not None:
+                out = [os.path.splitext(x)[0] for x in self.grid_datafile]
+                if self.suffix:
+                    out = ['_'.join(x.split('_')[:-1]) for x in out]
+            else:
+                return None
         else:
-            datafile = [os.path.splitext(s)[0] for s in datafile]
-            return [f'{f}_{model_suffix}.fits' for f in datafile]
+            out = [f'{self._model_file}_{flt}' for flt in self.filter]
+        out = [f'{x}_{model_suffix}' for x in out]
+        if self.suffix:
+            return [f'{x}_{self.suffix}.fits' for x in out]
+        else:
+            return [f'{x}.fits' for x in out]
+
+    @model_file.setter
+    def model_file(self, v):
+        if v is None:
+            self._model_file = None
+        else:
+            self._model_file = os.path.splitext(v)[0]
 
     def ingest_phodata(self, datadir=None, filter=None, pho_datafile=None,
         match_map=None, binsize=None, overwrite=None, suffix=None,
@@ -678,6 +689,11 @@ class OCAMS_Photometry():
             filter = self.filter
         if pho_datafile is None:
             pho_datafile = self.pho_datafile
+        else:
+            tmp = self._pho_datafile
+            self.pho_datafile = pho_datafile
+            pho_datafile = self.pho_datafile
+            self._pho_datafile = tmp
         if match_map is None:
             match_map = self.match_map
         if binsize is None:
@@ -696,8 +712,7 @@ class OCAMS_Photometry():
         files = np.concatenate([findfile(x,'dn.fits') for x in datadir])
 
         out = []
-        outfiles = self._generate_phodata_filename()
-        for flt,of in zip(filter, outfiles):
+        for i,flt in enumerate(filter):
             fs = [x for x in files if x.find(flt+'.')!=-1]
             if verbose:
                 print(f'Processing filter {flt}: {len(fs)} files found.')
@@ -747,7 +762,8 @@ class OCAMS_Photometry():
                 if verbose:
                     print(f'    {basename(f)}, {len(pho)} data points')
             out.append(pho_all)
-            pho_all.write(of, overwrite=overwrite)
+            if pho_datafile is not None:
+                pho_all.write(pho_datafile[i], overwrite=overwrite)
         if len(out) == 1:
             out = out[0]
         return out
@@ -770,6 +786,13 @@ class OCAMS_Photometry():
             mesh_size = self.mesh_size
         if grid_datafile is None:
             grid_datafile = self.grid_datafile
+        else:
+            tmp = self._grid_datafile
+            self.grid_datafile = grid_datafile
+            grid_datafile = self.grid_datafile
+            self._grid_datafile = tmp
+        if grid_datafile is None:
+            raise ValueError('Output data file needs to be specified.')
         if overwrite is None:
             overwrite = self.overwrite
         if verbose is None:
@@ -798,12 +821,13 @@ class OCAMS_Photometry():
                         ' data from default')
                     pho_datafile = None
             if pho_datafile is None:
-                phofiles = self._generate_phodata_filename()
+                phofiles = self.pho_datafile
+            if phofiles is None:
+                raise ValueError('Input data not specified.')
             phodata = [PhotometricData(f) for f in phofiles]
 
         out = []
-        outfiles = self._generate_phogrid_filename()
-        for p, o in zip(phodata, outfiles):
+        for p, o in zip(phodata, grid_datafile):
             pg = PhotometricDataGrid(lat=lat,lon=lon, maxmem=maxmem)
             pg.file = o
             pg.port(p, verbose=verbose)
@@ -813,8 +837,8 @@ class OCAMS_Photometry():
             out = out[0]
         return out
 
-    def fit_phomesh(self, phodata=None, grid_datafile=None, model=None,
-        verbose=None, overwrite=None, **kwargs):
+    def fit_phomesh(self, phodata=None, grid_datafile=None, model_file=None,
+        model=None, verbose=None, overwrite=None, **kwargs):
         """Fit photometric model to photometric grid data
 
         phodata : `PhotometricDataGrid` of list of
@@ -828,6 +852,13 @@ class OCAMS_Photometry():
 
         Return : `astropy.modeling.Fitter` or list of
         """
+        if model_file is None:
+            model_file = self.model_file
+        else:
+            tmp = self._model_file
+            self.model_file = model_file
+            model_file = self.model_file
+            self._model_file = tmp
         if model is None:
             model = self.model
         if verbose is None:
@@ -846,22 +877,21 @@ class OCAMS_Photometry():
         else:
             if grid_datafile is not None:
                 if isinstance(grid_datafile, str):
-                    gridfiles = [grid_datafile]
+                    gridfile = [grid_datafile]
                 elif isinstance(grid_datafile[0], str):
-                    gridfiles = grid_datafile
+                    gridfile = grid_datafile
                 else:
                     warnings.warn('Specified input files not recognized, load'
                         ' data from default')
                     grid_datafile = None
             if grid_datafile is None:
-                gridfiles = self._generate_phogrid_filename()
-            phodata = [PhotometricDataGrid(datafile=f) for f in gridfiles]
-            model_file = self._generate_model_filename(gridfiles)
-            if isinstance(model_file, str):
-                model_file = [model_file]
+                grid_datafile = self.grid_datafile
+            if grid_datafile is None:
+                raise ValueError('Input data not specified.')
+            phodata = [PhotometricDataGrid(datafile=f) for f in grid_datafile]
 
         out = []
-        fitting_kwargs = self.fitting_kwargs
+        fitting_kwargs = self.fitting_kwargs.copy()
         fitting_kwargs.update(kwargs)
         for i,p in enumerate(phodata):
             fit = p.fit(model, **fitting_kwargs)
@@ -870,7 +900,7 @@ class OCAMS_Photometry():
             out.append(fit)
         return out
 
-    def cube_model_pars(self, models=None, outfile=None, cube=True,
+    def cube_model_pars(self, models=None, outfile=None, type='all',
         overwrite=None):
         """Assemble model parameters into cubes
 
@@ -880,6 +910,8 @@ class OCAMS_Photometry():
             'file' : str, name of fits file that stores the model grid
         outfile : str
             Name of fits file to store the cubes
+        type : ['all', 'cube', 'fits']
+            Specify the type of output file
         """
         from jylipy import pysis_ext
 
@@ -887,7 +919,7 @@ class OCAMS_Photometry():
             overwrite = self.overwrite
 
         if models is None:
-            file = self._generate_model_filename()
+            file = self.model_file
             filter = self.filter
             wavelength = [self.wavelength[x] for x in self.filter]
             models = {'filter': filter, 'wavelength': wavelength, 'file': file}
@@ -913,7 +945,7 @@ class OCAMS_Photometry():
                 outfile = f'{outfile}_{self.model.__class__.__name__}'
             outfile = os.path.splitext(outfile)[0]
 
-        if cube:
+        if type in ['all', 'cube']:
             # save cube files
             fparms = [fits.open(f['file']) for f in models]
             keys = [fparms[0][i].header['extname'] for i in range(1,
@@ -930,7 +962,8 @@ class OCAMS_Photometry():
                 for i in range(len(fparms)):
                     os.remove(f'temp_{i:02d}.fits')
                     os.remove(f'temp_{i:02d}.cub')
-        else:
+
+        if type in ['all', 'fits']:
             # save fits file
             fparms = [fits.open(f['file']) for f in models]
             out = {fparms[0][i].header['extname']: [] \
@@ -1045,13 +1078,17 @@ class OVIRS_Photometry():
 
     @property
     def model_file(self):
+        if self.model is None:
+            model_suffix = 'model'
+        else:
+            model_suffix = self.model.__class__.__name__
         if self._model_file is None:
             if self.grid_datafile is not None:
                 out = self.grid_datafile
                 out = os.path.splitext(out)[0]
                 if self.suffix:
                     out = '_'.join(out.split('_')[:-1])
-                out = f'{out}_{self.model.__class__.__name__}'
+                out = f'{out}_{model_suffix}'
             else:
                 return None
         else:
