@@ -1050,7 +1050,7 @@ class OVIRS_Photometry():
             out = f'{out}_{self.suffix}'
         return f'{out}.fits'
 
-    @model_file.fitter
+    @model_file.setter
     def model_file(self, v):
         self._model_file = os.path.splitext(v)[0]
 
