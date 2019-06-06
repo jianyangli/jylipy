@@ -1011,48 +1011,61 @@ class OVIRS_Photometry():
         if self._pho_datafile is None:
             return None
         else:
-            out = os.path.splitext(self._pho_datafile)[0]
-            if self.suffix is not None:
+            out = self._pho_datafile
+            if self.suffix:
                 out = f'{out}_{self.suffix}'
             return f'{out}.fits'
 
     @pho_datafile.setter
     def pho_datafile(self, v):
-        self._pho_datafile = os.path.splitext(v)[0]
+        if v is None:
+            self._pho_datafile = None
+        else:
+            self._pho_datafile = os.path.splitext(v)[0]
 
     @property
     def grid_datafile(self):
         if self._grid_datafile is None:
             if self.pho_datafile is not None:
-                out = f'{self.pho_datafile}_grid{self.mesh_size}deg'
+                out = f'{self._pho_datafile}_grid{self.mesh_size}deg'
             else:
                 return None
         else:
             out = self._grid_datafile
-        if self.suffix is not None:
+        if self.suffix:
             out = f'{out}_{self.suffix}'
         return f'{out}.fits'
 
     @grid_datafile.setter
     def grid_datafile(self, v):
-        self._grid_datafile = os.path.splitext(v)[0]
+        if v is None:
+            self._grid_datafile = None
+        else:
+            self._grid_datafile = os.path.splitext(v)[0]
 
     @property
     def model_file(self):
         if self._model_file is None:
             if self.grid_datafile is not None:
-                out = f'{self.grid_datafile}_{self.model.__class__.__name__}'
+                out = self.grid_datafile
+                out = os.path.splitext(out)[0]
+                if self.suffix:
+                    out = '_'.join(out.split('_')[:-1])
+                out = f'{out}_{self.model.__class__.__name__}'
             else:
                 return None
         else:
             out = self._model_file
-        if self.suffix is not None:
+        if self.suffix:
             out = f'{out}_{self.suffix}'
         return f'{out}.fits'
 
     @model_file.setter
     def model_file(self, v):
-        self._model_file = os.path.splitext(v)[0]
+        if v is None:
+            self._model_file = None
+        else:
+            self._model_file = os.path.splitext(v)[0]
 
     def ingest_phodata(self, datadir=None, bands=None, pho_datafile=None,
         overwrite=None,
