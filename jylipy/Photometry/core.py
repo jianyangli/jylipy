@@ -10,6 +10,7 @@ from ..plotting import density, pplot
 from ..apext import units, Table, table, MPFitter, Column, fits
 import astropy.units as u
 from astropy.modeling import FittableModel, Fittable1DModel, Fittable2DModel, Parameter
+import os
 
 
 recipi = 1/np.pi  # reciprocal pi
@@ -1567,9 +1568,10 @@ class PhotometricDataArray(np.ndarray):
         datafile = kwargs.pop('datafile', None)
         dtype = kwargs.pop('dtype', None)
         names = tuple('pho file count incmin incmax emimin emimax'
-            ' phamin phamax lonmin lonmax latmin latmax masked loaded'.split())
+            ' phamin phamax lonmin lonmax latmin latmax masked loaded'
+            ' flushed'.split())
         types = [object, object, int, float, float, float, float, float,
-            float, float, float, float, float, bool, bool]
+            float, float, float, float, float, bool, bool, bool]
         dtype = [(n, d) for n, d in zip(names, types)]
         obj = super().__new__(cls, *args, dtype=dtype, **kwargs)
         obj.maxmem = maxmem
@@ -1578,12 +1580,65 @@ class PhotometricDataArray(np.ndarray):
         fmt = '%'+n+'.'+n+'i'
         obj.reshape(-1)['file'] = np.array(['phgrd_'+fmt % i+'.fits' for i in range(obj.size)])
         obj.reshape(-1)['masked'] = True
+        obj.reshape(-1)['flushed'] = True
         return obj
 
     def __array_finalize__(self, obj):
         if obj is None: return
         self.maxmem = getattr(obj, 'maxmem', None)
         self.datafile = getattr(obj, 'datafile', None)
+
+    def _clean_memory(self, forced=False, verbose=False):
+        """Check the size of object, free memory by deleting
+        """
+        if not forced:
+            total_counts = (self['count']*self['loaded'].astype('i')).sum()
+            sz = _memory_size(total_counts*1.2)
+            if sz<self.max_mem:
+                return False
+        # free memory by deleting all PhotometricData instances
+        if verbose:
+            print('Cleaning memory...')
+        self1d = self.reshape(-1)
+        flushed1d = self._flushed.reshape(-1)
+        for i in range(self1d.size):
+            if (not self1d['masked'][i]) and \
+                    self1d[i]['loaded'] and \
+                    (not flushed1d[i]):
+                self._save_data(i)
+                self1d[i]['pho'] = None
+                self1d[i]['loaded'] = False
+                flushed1d[i] = True
+        return True
+
+    def _path_name(self, filename):
+        """Return the information file name and data file directory name
+        """
+        filename = os.path.splitext(filename)[0]
+        datadir = filename+'_dir'
+        infofile = filename+'.fits'
+        return infofile, datadir
+
+    def _load_data(self, *k):
+        """Load data for position [k]
+        """
+        import os
+        if self.datafile is None:
+            raise ValueError('Data file not specified.')
+        infofile, datadir = self._path_name(self.datafile)
+        cleaned = self._clean_memory()
+        self_slice1d = self[k].reshape(-1)
+        for i in range(self_slice1d.size):
+            if not self_slice1d[i]['masked']:
+                f = '/'.join(datadir, self_slice1d[i]['file'])
+                if os.path.isfile(f):
+                    self_slice1d[i]['pho'] = PhotometricData(f)
+                    self_slice1d[i][]
+                    self_slice1d[i]['loaded'] = True
+                    self_slice1d[i]['flushed'] = True
+                else:
+                    raise IOError('Data record not found for position ({}, {}'
+                        ') from file {}'.format(i))
 
 
 class PhotometricDataGrid(object):
