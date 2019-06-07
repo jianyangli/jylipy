@@ -1559,6 +1559,33 @@ class PhotometricDataGroup(OrderedDict):
 _memory_size = lambda x: x*4.470348358154297e-08
 
 
+class PhotometricDataArray(np.ndarray):
+    """Photometric data array object
+    """
+    def __new__(cls, *args, **kwargs):
+        maxmem = kwargs.pop('maxmem', 10)
+        datafile = kwargs.pop('datafile', None)
+        dtype = kwargs.pop('dtype', None)
+        names = tuple('pho file count incmin incmax emimin emimax'
+            ' phamin phamax lonmin lonmax latmin latmax masked loaded'.split())
+        types = [object, object, int, float, float, float, float, float,
+            float, float, float, float, float, bool, bool]
+        dtype = [(n, d) for n, d in zip(names, types)]
+        obj = super().__new__(cls, *args, dtype=dtype, **kwargs)
+        obj.maxmem = maxmem
+        obj.datafile = datafile
+        n = '%i' % (np.floor(np.log10(obj.size))+1)
+        fmt = '%'+n+'.'+n+'i'
+        obj.reshape(-1)['file'] = np.array(['phgrd_'+fmt % i+'.fits' for i in range(obj.size)])
+        obj.reshape(-1)['masked'] = True
+        return obj
+
+    def __array_finalize__(self, obj):
+        if obj is None: return
+        self.maxmem = getattr(obj, 'maxmem', None)
+        self.datafile = getattr(obj, 'datafile', None)
+
+
 class PhotometricDataGrid(object):
     '''Class for photometric data on a regular lat-lon grid
 
