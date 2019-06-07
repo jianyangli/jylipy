@@ -713,7 +713,7 @@ class OCAMS_Photometry():
 
         out = []
         for i,flt in enumerate(filter):
-            fs = [x for x in files if x.find(flt+'.')!=-1]
+            fs = [x for x in files if x.find('L2'+flt)!=-1]
             if verbose:
                 print(f'Processing filter {flt}: {len(fs)} files found.')
             pho_all = PhotometricData()
