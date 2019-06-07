@@ -1135,9 +1135,9 @@ class OVIRS_Photometry():
             raise ValueError('Input data directory not specified.')
         if isinstance(datadir, str):
             datadir = [datadir]
-        fs = np.concatenate([findfile(x,'dn.fits') for x in datadir])
+        fs = np.concatenate([findfile(x,'.fits') for x in datadir])
         if verbose:
-            print(f'Processing filter {flt}: {len(fs)} files found.')
+            print(f'Ingesting data:: {len(fs)} files found.')
 
         # Extract photometric data
         pho_all = PhotometricData()
