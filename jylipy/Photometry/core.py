@@ -1558,6 +1558,757 @@ class PhotometricDataGroup(OrderedDict):
 
 _memory_size = lambda x: x*4.470348358154297e-08
 
+class PhotometricDataArray(object):
+    """Photometric data array class
+    """
+
+    def __init__(self, shape, datafile=None, maxmem=10):
+        """PhotometricDataArray class initialization
+
+        shape : tuple of ints
+            Shape of array
+        datafile : str, optional
+          The file to save the array
+        maxmem : number
+          Maximum memory allowed in GB.  The higher this number, the more the
+          program will potentially stress the memory.  The lower this number,
+          the more frequent the program will swamp data to disk to clean up
+          memory, therefore slower.
+        """
+        names = tuple('pho file count incmin incmax emimin emimax'
+            ' phamin phamax lonmin lonmax latmin latmax masked loaded'
+            ' flushed'.split())
+        types = [object, object, int, float, float, float, float, float,
+            float, float, float, float, float, bool, bool, bool]
+        dtype = [(n, d) for n, d in zip(names, types)]
+        self._data = np.ndarray(shape, dtype=dtype)
+        n = '%i' % (np.floor(np.log10(self.size))+1)
+        fmt = '%'+n+'.'+n+'i'
+        self._data.reshape(-1)['file'] = np.array(['phgrd_'+fmt % i+'.fits' \
+            for i in range(self.size)])
+        self._data.reshape(-1)['masked'] = True
+        self._data.reshape(-1)['flushed'] = True
+        self.datafile = datafile
+        self.maxmem = maxmem
+
+    def __getitem__(self, key):
+        """Return value `self[key]`
+        """
+        return self._data[key]
+        y, x = self._process_key(key)
+        # check whether memory clean is needed for this load
+        loaded = self._info['loaded'].copy()
+        loaded[y,x] = True
+        if _memory_size((self._info['count']*loaded.astype('i')).sum())>self.max_mem:
+            self._clean_memory(forced=True)
+        for i, j in zip(y.flatten(),x.flatten()):
+            if not self._info['loaded'][i, j]:
+                self._load_data(i, j)
+        out = self._data[key]
+        return out
+
+    def __setitem__(self, key, value):
+        """Assign value ``value`` to ``self[key]``"""
+        # process input
+        valid_v = False
+        if isinstance(value, (PhotometricData, int)):
+            valid_v = True
+            value_shape = (1,1)
+        elif isinstance(value, (list, tuple, np.ndarray)):
+            if np.array([isinstance(v, (PhotometricData, int)) for v in np.asanyarray(value).flatten()]).all():
+                valid_v = True
+                value_shape = np.shape(value)
+        if not valid_v:
+            raise ValueError('Only ``PhotometricData`` or array of it can be assigned.')
+        y, x = self._process_key(key)
+        if x.shape != value_shape:
+            raise ValueError('Values to be assigned must have the same shape.')
+        # assign values
+        self._data[key] = value
+        self._info['loaded'][key] = True
+        self._info['masked'][key] = (value == 0)
+        self._flushed[key] = self._info['masked'][key] | False
+        for i,j in zip(y.flatten(), x.flatten()):
+            self._update_property(i,j)
+        # free memory if needed
+        loaded = self._info['loaded']
+        if _memory_size((self._info['count']*loaded.astype('i')).sum())>self.max_mem:
+            self._clean_memory(forced=True)
+
+
+    @classmethod
+    def from_datafile(self, datafile):
+        """Generate photometric data array instance from data file
+        """
+        pass
+
+    def reset_grid(self, lon, lat):
+        '''Reset the longitude-latitude grid, therefore the whole class'''
+        from collections import OrderedDict
+        self._lat = lat
+        self._lon = lon
+        if self._lat is not None:
+            if not hasattr(self._lat, 'unit'):
+                self._lat = self._lat*units.deg
+        if self._lon is not None:
+            if not hasattr(self._lon, 'unit'):
+                self._lon = self._lon*units.deg
+
+        self._info = OrderedDict()
+        self._info1d = OrderedDict()
+        info_fields = np.array('file lonmin lonmax latmin latmax count incmin incmax emimin emimax phamin phamax masked loaded'.split())
+        for k in info_fields:
+            self._info[k] = None
+            self._info1d[k] = None
+
+        if (self._lon is not None) & (self._lat is not None):
+            nlon = len(lon)-1
+            nlat = len(lat)-1
+            self._data = np.empty((nlat, nlon), dtype=PhotometricData)
+            self._data1d = self._data.reshape(-1)
+            for i in range(self.size):
+                self._data1d[i] = PhotometricData()
+            n = '%i' % (np.floor(np.log10(self.size))+1)
+            fmt = '%'+n+'.'+n+'i'
+            fnames = np.array(['phgrd_'+fmt % i+'.fits' for i in range(self.size)])
+            self._info['file'] = fnames.reshape((nlat,nlon))
+            for i in [1,2,3,4,6,7,8,9,10,11]:
+                self._info[info_fields[i]] = np.zeros((nlat,nlon))*units.deg
+            self._info['count'] = np.zeros((nlat,nlon))
+            self._info['masked'] = np.ones((nlat,nlon), dtype=bool)
+            self._info['loaded'] = np.zeros((nlat,nlon), dtype=bool)
+            for k in list(self._info.keys()):
+                self._info1d[k] = self._info[k].reshape(-1)
+            self._flushed = np.zeros((nlat,nlon), dtype=bool)
+            self._flushed1d = self._flushed.reshape(-1)
+        else:
+            self._data = None
+            self._data1d = None
+            self._flushed = None
+            self._flushed1d = None
+
+    def _clean_memory(self, forced=False, verbose=False):
+        '''Check the size of object, free memory by deleting'''
+        if not forced:
+            sz = _memory_size((self._info1d['count']*self._info1d['loaded'].astype('i')).sum())
+            if sz<self.max_mem:
+                return False
+        # free memory by deleting all PhotometricData instances
+        if verbose:
+            print('Cleaning memory...')
+        for i in range(self.size):
+            if (self._info1d['loaded'][i]) and \
+                    (not self._info1d['masked'][i]) and \
+                    (not self._flushed1d[i]):
+                self._save_data(i)
+                self._data1d[i] = None
+                self._info1d['loaded'][i] = False
+                self._flushed1d[i] = True
+        return True
+
+    @property
+    def lon(self):
+        return self._lon
+
+    @property
+    def lat(self):
+        return self._lat
+
+    @property
+    def count(self):
+        return self._info['count']
+
+    @property
+    def loaded(self):
+        return self._info['loaded']
+
+    @property
+    def version(self):
+        return self._version
+
+    @property
+    def shape(self):
+        return self._data.shape
+
+    @property
+    def size(self):
+        return np.size(self._data)
+
+    def __len__(self):
+        return len(self._data)
+
+    def _process_key(self, key):
+        """Process index key and return lists of indices"""
+        if hasattr(key,'__iter__'):
+            if len(key)!=2:
+                raise KeyError('invalid index')
+            i, j = key
+            if isinstance(i, slice):
+                ii = i.indices(len(self.lat)-1)
+                i = list(range(ii[0],ii[1],ii[2]))
+            if isinstance(j, slice):
+                jj = j.indices(len(self.lon)-1)
+                j = list(range(jj[0],jj[1],jj[2]))
+        else:
+            i = key
+            j = list(range(len(self.lon)-1))
+        y, x = np.meshgrid(i, j)
+        return y, x
+
+    def _load_data(self, *args):
+        '''Load data for position [i,j] or position [i] for flattened case'''
+        import os
+        if self.file is None:
+            raise ValueError('data file not specified')
+        infofile, path = self._path_name(self.file)
+        cleaned = self._clean_memory()
+        if len(args) == 2:
+            i, j = args
+            if not self._info['masked'][i,j]:
+                f = path+'/'+self._info['file'][i,j]
+                if os.path.isfile(f):
+                    self._data[i,j] = PhotometricData(f)
+                else:
+                    raise IOError('Data record not found for position ({}, {}'
+                        ') from file {}'.format(i,j,f))
+            self._info['loaded'][i,j] = True
+            self._flushed[i,j] = True
+        elif len(args) == 1:
+            i = args[0]
+            if not self._info1d['masked'][i]:
+                f = path+'/'+self._info1d['file'][i]
+                if os.path.isfile(f):
+                    self._data1d[i] = PhotometricData(f)
+                else:
+                    raise IOError('Data record not found for flattened '
+                        'position ({}) from file {}'.format(i,f))
+            self._info1d['loaded'][i] = True
+            self._flushed1d[i] = True
+        else:
+            raise ValueError('2 or 3 arguments expected, {0} received'.format(len(args)+1))
+        return cleaned
+
+    def _save_data(self, *args, outfile=None, update_flush_flag=True, **kwargs):
+        """Save data at specified position to output file
+
+        If ``outfile`` is set, then data will be directly saved to the
+        specified file.
+
+        If ``outfile`` is not set, then the output file will be inferred from
+        ``self.file``.
+
+        If ``update_flush_flag`` is True, then the corresponding
+        ``self._flushed`` flag will be updated to True after saving data.
+        Otherwise this flag is not updated.
+        """
+        import os
+        if outfile is None:
+            if self.file is None:
+                raise ValueError('data file not specified')
+            infofile, path = self._path_name(self.file)
+            if not os.path.isdir(path):
+                os.mkdir(path)
+        else:
+            path = None
+        if len(args) == 2:
+            i, j = args
+            if not self._info['masked'][i,j]:
+                if path is None:
+                    f = outfile
+                else:
+                    f = path+'/'+self._info['file'][i,j]
+                if not self._info['loaded'][i,j]:
+                    self._load_data(i,j)
+                self._data[i,j].write(f, overwrite=True)
+                if update_flush_flag:
+                    self._flushed[i,j] = True
+        elif len(args) == 1:
+            i = args[0]
+            if not self._info1d['masked'][i]:
+                if path is None:
+                    f = outfile
+                else:
+                    f = path+'/'+self._info1d['file'][i]
+                if not self._info1d['loaded'][i]:
+                    self._load_data(i)
+                self._data1d[i].write(f, overwrite=True)
+                if update_flush_flag:
+                    self._flushed1d[i] = True
+        else:
+            raise ValueError('2 or 3 arguments expected, {0} received'.format(len(args)+1))
+
+    def _path_name(self, outfile):
+        if outfile.endswith('.fits'):
+            outdir = '.'.join(outfile.split('.')[:-1])+'_dir'
+        else:
+            outdir = outfile+'_dir'
+            outfile += '.fits'
+        return outfile, outdir
+
+    def write(self, outfile=None, overwrite=False):
+        '''Write data to disk.
+
+        If ``outfile is None``, then this method flushes all data to disk
+        based on the location specified by ``self.file``.  If
+        ``self.file is None``, then it will throw an exception.
+
+        If a file name is provided via ``outfile``, then this method saves all
+        data to the specified output file.  If ``self.file == None`` before
+        calling this smethod, then the provided file name will be associated
+        to class object for operations.  Otherwise ``self.file`` will not be
+        changed, and the location specified by ``outfile`` is just an extra
+        copy of the data.
+
+        outfile : str, optional
+          Output file name.  If omitted, then the program does a memory flush,
+          just updating the PhotometricData at grid points that have changed
+          since read into memory.
+        overwrite : bool, optional
+          Overwrite the existing data.  If `outfile` is `None`, then `overwrite`
+          will be ignored.
+
+        v1.0.0 : 1/12/2016, JYL @PSI
+        '''
+        import os
+
+        if outfile is None:
+            if self.file is None:
+                raise ValueError('output file not specified')
+            outfile = self.file
+            flush = True
+        else:
+            if self.file is None:
+                self.file = outfile
+                flush = True
+            else:
+                flush = False
+
+        outfile, outdir = self._path_name(outfile)
+        if os.path.isfile(outfile):
+            if overwrite:
+                os.remove(outfile)
+                if os.path.isdir(outdir):
+                    os.system('rm -rf '+outdir)
+            elif not flush:
+                raise IOError('output file {0} already exists'.format(outfile))
+
+        # save envolope information
+        hdr0 = fits.Header()
+        hdr0['version'] = self.version
+        primary_hdu = fits.PrimaryHDU(header=hdr0)
+        hdr1 = fits.Header()
+        hdr1['extname'] = 'INFO'
+        table_hdu = fits.BinTableHDU(Table(self._info1d), header=hdr1)
+        lon_hdu = fits.ImageHDU(self.lon.value, name='lon')
+        lon_hdu.header['bunit'] = str(self.lon.unit)
+        lat_hdu = fits.ImageHDU(self.lat.value, name='lat')
+        lat_hdu.header['bunit'] = str(self.lat.unit)
+        hdu_list = fits.HDUList([primary_hdu, table_hdu, lon_hdu, lat_hdu])
+        hdu_list.writeto(outfile, overwrite=True)
+
+        # save data
+        if not os.path.isdir(outdir):
+            os.mkdir(outdir)
+        for i in range(self.size):
+            f = outdir+'/'+self._info1d['file'][i]
+            if self._info1d['masked'][i]:
+                if os.path.isfile(f):
+                    os.remove(f)
+            else:
+                if flush:
+                    if not self._flushed1d[i]:
+                        self._save_data(i, outfile=f)
+                else:
+                    self._save_data(i, outfile=f, update_flush_flag=False)
+
+    def read(self, infile=None, verbose=False, load=False):
+        '''Read data from a directory or a list of files
+
+        infile : str
+          The summary file of data storage
+
+        v1.0.0 : 1/12/2016, JYL @PSI
+        '''
+        import os
+        if infile is None:
+            if self.file is None:
+                raise ValueError('input file not specified')
+            else:
+                infile = self.file
+        infile, indir = self._path_name(infile)
+
+        if not os.path.isfile(infile):
+            raise ValueError('input file {0} not found'.format(infile))
+        if not os.path.isdir(indir):
+            raise ValueError('input directory {0} not found'.format(indir))
+
+        # set up data structure and info array
+        info = self.info(infile)
+        self.file = infile
+        self._version = info['version']
+        self._lon = info['lon']
+        self._lat = info['lat']
+        self._info1d = info['info']
+        self._info1d['loaded'][:] = False
+        nlat = len(self.lat)-1
+        nlon = len(self.lon)-1
+        for k in list(self._info1d.keys()):
+            self._info[k] = self._info1d[k].reshape((nlat,nlon))
+        self._data = np.zeros((nlat,nlon), dtype=PhotometricData)
+        self._data1d = self._data.reshape(-1)
+        self._flushed = np.ones((nlat,nlon), dtype=bool)
+        self._flushed1d = self._flushed.reshape(-1)
+
+        # load photometric data
+        if load:
+            nf = nlat*nlon
+            tag = -0.1
+            for i in range(nf):
+                if verbose:
+                    prog = float(i)/nf*100
+                    if prog>tag:
+                        print('%3.1f%% completed: %i files read' % (prog, i))
+                        tag = prog+1
+                cleaned = self._load_data(i)
+                if cleaned:
+                    raise MemoryError('no sufficient memory available to load data')
+
+    def port(self, indata, verbose=True):
+        '''Port in data from PhotometricData instance'''
+        if (self.lon is None) or (self.lat is None):
+            raise ValueError('the grid parameters (lon, lat) not specified')
+        if verbose:
+            print('porting data from PhotometricData instance')
+        nlat, nlon = self.shape
+        nf = nlat*nlon
+        lon = indata.geolon
+        for lon1, lon2, i in zip(self.lon[:-1],self.lon[1:],list(range(nlon))):
+            ww = np.where((lon>lon1)&(lon<=lon2))
+            if len(ww[0]) == 0:
+                continue
+            d1 = indata[ww]
+            lat = d1.geolat
+            tag = -0.1
+            for lat1, lat2, j in zip(self.lat[:-1],self.lat[1:],list(range(nlat))):
+                if verbose:
+                    prog = (float(i)*nlat+j)/nf*100
+                    if prog>tag:
+                        print('%5.1f%% completed:  lon = (%5.1f, %5.1f), lat = (%5.1f, %5.1f)' % (prog,lon1.value,lon2.value,lat1.value,lat2.value))
+                        tag = prog+0.999
+                ww = np.where((lat>lat1)&(lat<=lat2))
+                if len(ww[0]) == 0:
+                    continue
+                d2 = d1[ww]
+                if not self._info['loaded'][j,i]:
+                    self._load_data(j,i)
+                self._data[j,i].append(d2)
+                self._update_property(j,i,masked=False,loaded=True)
+                self._flushed[j,i] = False
+                self._clean_memory(verbose=verbose)
+
+    def _update_property(self,j,i,masked=None,loaded=None):
+        if masked is not None:
+            self._info['masked'][j,i] = masked
+        if loaded is not None:
+            self._info['loaded'][j,i] = loaded
+        if self._info['masked'][j,i]:
+            data = 0
+        else:
+            data = self[j,i]
+        if isinstance(data, int) or len(data) <= 0:
+            self._info['count'][j,i] = 0.
+            self._info['latmin'][j,i] = 0.
+            self._info['latmax'][j,i] = 0.
+            self._info['lonmin'][j,i] = 0.
+            self._info['lonmax'][j,i] = 0.
+            self._info['incmin'][j,i] = 0.
+            self._info['incmax'][j,i] = 0.
+            self._info['emimin'][j,i] = 0.
+            self._info['emimax'][j,i] = 0.
+            self._info['phamin'][j,i] = 0.
+            self._info['phamax'][j,i] = 0.
+            if masked is None:
+                self._info['masked'][j,i] = True
+        else:
+            self._info['count'][j,i] = len(data)
+            if data.latlim is None:
+                self._info['latmin'][j,i] = 0 * u.deg
+                self._info['latmax'][j,i] = 0 * u.deg
+            else:
+                self._info['latmin'][j,i] = data.latlim[0]
+                self._info['latmax'][j,i] = data.latlim[1]
+            if data.lonlim is None:
+                self._info['lonmin'][j,i] = 0 * u.deg
+                self._info['lonmax'][j,i] = 0 * u.deg
+            else:
+                self._info['lonmin'][j,i] = data.lonlim[0]
+                self._info['lonmax'][j,i] = data.lonlim[1]
+            self._info['incmin'][j,i] = data.inclim[0]
+            self._info['incmax'][j,i] = data.inclim[1]
+            self._info['emimin'][j,i] = data.emilim[0]
+            self._info['emimax'][j,i] = data.emilim[1]
+            self._info['phamin'][j,i] = data.phalim[0]
+            self._info['phamax'][j,i] = data.phalim[1]
+
+    def _update_property_1d(self,i,masked=None,loaded=None):
+        if masked is not None:
+            self._info1d['masked'][i] = masked
+        if loaded is not None:
+            self._info1d['loaded'][i] = loaded
+        if self._info1d['masked'][i]:
+            data = 0
+        else:
+            if not self._info1d['loaded'][i]:
+                self._load_data(i)
+            data = self._data1d[i]
+        if isinstance(data, int) or len(data) <= 0:
+            self._info1d['count'][i] = 0.
+            self._info1d['latmin'][i] = 0.
+            self._info1d['latmax'][i] = 0.
+            self._info1d['lonmin'][i] = 0.
+            self._info1d['lonmax'][i] = 0.
+            self._info1d['incmin'][i] = 0.
+            self._info1d['incmax'][i] = 0.
+            self._info1d['emimin'][i] = 0.
+            self._info1d['emimax'][i] = 0.
+            self._info1d['phamin'][i] = 0.
+            self._info1d['phamax'][i] = 0.
+            if masked is None:
+                self._info1d['masked'][i] = True
+        else:
+            self._info1d['count'][i] = len(data)
+            if data.latlim is None:
+                self._info1d['latmin'][i] = 0 * u.deg
+                self._info1d['latmax'][i] = 0 * u.deg
+            else:
+                self._info1d['latmin'][i] = data.latlim[0]
+                self._info1d['latmax'][i] = data.latlim[1]
+            if data.lonlim is None:
+                self._info1d['lonmin'][i] = 0 * u.deg
+                self._info1d['lonmax'][i] = 0 * u.deg
+            else:
+                self._info1d['lonmin'][i] = data.lonlim[0]
+                self._info1d['lonmax'][i] = data.lonlim[1]
+            self._info1d['incmin'][i] = data.inclim[0]
+            self._info1d['incmax'][i] = data.inclim[1]
+            self._info1d['emimin'][i] = data.emilim[0]
+            self._info1d['emimax'][i] = data.emilim[1]
+            self._info1d['phamin'][i] = data.phalim[0]
+            self._info1d['phamax'][i] = data.phalim[1]
+
+    def populate(self, *args, **kwargs):
+        '''Populate photometric data grid.
+
+        The data can be either imported from another PhotometricData, or can
+        be directly extracted from backplanes and images.
+
+        When import from another PhotometricData variable, then it has to
+        contain geographic longitude and latitude information.
+
+        If import from data files, the calling sequence is the same as
+        `PhotometricData.populate`
+
+        Keywords:
+        ---------
+        verbose : bool, optional
+          Default is `True`
+
+        v1.0.0 : 1/12/2016, JYL @PSI
+        '''
+
+        if (self.lon is None) or (self.lat is None):
+            raise ValueError('grid parameters (lon, lat) not specified')
+
+        if len(args) != 1:
+            raise ValueError('exactly 2 arguments are required, received {0}'.format(len(args)+1))
+
+        verbose = kwargs.pop('verbose', True)
+        indata = args[0]
+        if isinstance(indata, PhotometricData):
+            self.port(indata, verbose=verbose)
+            return
+
+        elif (not isinstance(indata, (str,bytes))) and hasattr(indata, '__iter__'):
+            if isinstance(indata[0], str):
+                if verbose:
+                    print('importing data from backplanes and image files')
+                illfile = np.asarray(indata)
+                ioffile = kwargs.pop('ioffile',None)
+                if ioffile is None:
+                    ioffile = np.repeat(None, len(illfile))
+                else:
+                    ioffile = np.asarray(ioffile)
+
+                d = PhotometricData()
+                for illf, ioff in zip(illfile, ioffile):
+                    if verbose:
+                        from os.path import basename
+                        print('Extracting from ', basename(illf))
+                    d.extract(illf, ioff, verbose=verbose, **kwargs)
+                    sz = _memory_size(len(d))
+                    if _memory_size(len(d)) > self.max_mem:
+                        self.port(d, verbose=verbose)
+                        d = PhotometricData()
+                if len(d)>0:
+                    self.port(d, verbose=verbose)
+            else:
+                raise ValueError('input parameter error')
+        else:
+            raise ValueError('input parameter error')
+        self.write()
+
+    def info(self, infile=None):
+        '''Print out the data information'''
+        if infile is None:
+            ver = self.version
+            lon = self.lon
+            lat = self.lat
+            info = dict(self._info1d)
+        else:
+            infile, indir = self._path_name(infile)
+            from astropy.io import fits
+            inf = fits.open(infile)
+            ver = inf[0].header['version']
+            lon = inf['lon'].data*units.Unit(inf['lon'].header['bunit'])
+            lat = inf['lat'].data*units.Unit(inf['lat'].header['bunit'])
+            info = Table(inf['info'].data).asdict()
+            for k in 'latmin latmax lonmin lonmax incmin incmax emimin emimax phamin phamax'.split():
+                info[k] = info[k]*units.deg
+
+        return {'version': ver, 'lon': lon, 'lat': lat, 'info': info}
+
+    def merge(self, pho, verbose=True):
+        '''Merge with another PhotometricDataGroup instance'''
+        if (self.lon != pho.lon).any() or (self.lat != pho.lat).any():
+            raise ValueError('can''t merge with different longitude-latitude grid')
+        import sys
+        nlat = len(self.lat)-1
+        tag = -0.1
+        for i in range(len(self.lon)-1):
+            for j in range(len(self.lat)-1):
+                prog = (float(i)*nlat+j)/self.size*100
+                if verbose:
+                    if prog>tag:
+                        sys.stdout.write('%5.1f%% completed\r' % prog)
+                        sys.stdout.flush()
+                        tag = prog+0.999
+                if self._info['masked'][j,i]:
+                    if not pho._info['masked'][j,i]:
+                        self._data[j,i] = pho[j,i].copy()
+                else:
+                    if not pho._info['masked'][j,i]:
+                        if not self._info['loaded'][j,i]:
+                            self._load_data(j,i)
+                        self._data[j,i].merge(pho[j,i])
+                self._update_property(j,i,masked=False,loaded=True)
+                self._flushed[j,i] = False
+                self._clean_memory(verbose=verbose)
+        self.write()
+
+    def trim(self, ilim=None, elim=None, alim=None, rlim=None, verbose=True):
+        '''Trim photometric data based on the limits in (i, e, a).
+
+        v1.0.0 : 1/19/2016, JYL @PSI
+        '''
+        tag = -0.1
+        import sys
+        nlat,nlon = self.shape
+        for i in range(self.size):
+            prog = float(i)/self.size*100
+            if verbose:
+                #print prog, tag
+                if prog > tag:
+                    sys.stdout.write('%5.1f%% completed\r' % prog)
+                    sys.stdout.flush()
+                    tag = np.ceil(prog+0.1)
+            if self._info1d['masked'][i]:
+                continue
+            if not self._info1d['loaded'][i]:
+                self._load_data(i)
+            d = self._data1d[i]
+            rm = np.zeros(len(d), dtype=bool)
+            for data,lim in zip([d.inc,d.emi,d.pha],[ilim, elim, alim]):
+                if lim is not None:
+                    if hasattr(lim[0],'unit'):
+                        l1 = lim[0].to('deg').value
+                    else:
+                        l1 = lim[0]
+                    if hasattr(lim[1],'unit'):
+                        l2 = lim[1].to('deg').value
+                    else:
+                        l2 = lim[1]
+                    dd = data.to('deg').value
+                    rm |= (dd<l1) | (dd>l2)
+            if rlim is not None:
+                rm |= (d.BDR>rlim[1]) | (d.BDR<rlim[0])
+            rmidx = np.where(rm)[0]
+            d.remove_rows(rmidx)
+            self._update_property(i/nlon,i%nlon)
+            self._flushed1d[i] = False
+
+    def fit(self, model, fitter=None, **kwargs):
+        '''Fit data to model grid
+
+        model : PhotometricModel class instance
+          Initial model
+        fitter : PhotometricModelFitter class instance, optional
+          Fitter to be used
+        **kwargs : optional parameters accepted by fitter
+
+        v1.0.0 : 1/18/2016, JYL @PSI
+        '''
+        if fitter is None:
+            fitter = PhotometricGridMPFitter()
+        fitter(model, self, **kwargs)
+        return fitter
+
+    def convert(self, maxsize=1., verbose=True):
+        '''Convert to PhotometricData type
+
+        v1.0.0 : 1/19/2016 JYL @PSI
+        '''
+        import sys
+        sz = _memory_size((self._info['count']*(~self._info['masked']).astype('i')).sum())
+        if sz>maxsize:
+            raise MemoryError('data size exceeding maximum memory size allowed')
+        out = PhotometricData()
+        tag = -0.1
+        for i in range(self.size):
+            if verbose:
+                prog = float(i)/self.size*100
+                if prog>tag:
+                    sys.stdout.write('%5.1f%% completed\r' % prog)
+                    sys.stdout.flush()
+                    tag = np.ceil(prog+0.95)
+            if not self._info1d['masked'][i]:
+                self._load_data(i)
+                out.append(self._data1d[i])
+        return out
+
+    def bin(self, outfile, **kwargs):
+        """Bin photometric data in all grid.
+
+        See `Binner` for parameters.
+
+        Returns a `PhotometricDataGrid` object associated with output file
+        ``outfile``.
+        """
+        import os
+        out = PhotometricDataGrid(lon=self.lon.copy(), lat=self.lat.copy())
+        if os.path.isfile(outfile):
+            raise IOError('Output file already exists.')
+        out.file = outfile
+        out._info1d['masked'] = self._info1d['masked']
+        for i in range(len(out._data1d)):
+            if self._info1d['masked'][i]:
+                out._data1d[i] = 0
+            else:
+                if not self._info1d['loaded'][i]:
+                    self._load_data(i)
+                out._data1d[i] = self._data1d[i].bin(**kwargs)
+            out._update_property_1d(i, loaded=True)
+        return out
+
 
 class PhotometricDataGrid(object):
     '''Class for photometric data on a regular lat-lon grid
