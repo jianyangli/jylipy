@@ -1581,12 +1581,22 @@ class PhotometricDataArray(np.ndarray):
         obj.reshape(-1)['file'] = np.array(['phgrd_'+fmt % i+'.fits' for i in range(obj.size)])
         obj.reshape(-1)['masked'] = True
         obj.reshape(-1)['flushed'] = True
+        obj.__version__ = '1.0.0'
         return obj
 
     def __array_finalize__(self, obj):
         if obj is None: return
         self.maxmem = getattr(obj, 'maxmem', None)
         self.datafile = getattr(obj, 'datafile', None)
+        self.__version__ = getattr(obj, '__version__', '1.0.0')
+
+    def __repr__(self):
+        """Return repr(self)."""
+        return f'<{self.__class__.__name__} {self.shape}>'
+
+    def __str__(self):
+        """Return str(self)"""
+        return self.__repr__()
 
     def _clean_memory(self, forced=False, verbose=False):
         """Check the size of object, free memory by deleting
@@ -1619,26 +1629,164 @@ class PhotometricDataArray(np.ndarray):
         infofile = filename+'.fits'
         return infofile, datadir
 
-    def _load_data(self, *k):
-        """Load data for position [k]
+    def _load_data(self, k):
+        """Load data for position `k` in the flattened array
         """
-        import os
-        if self.datafile is None:
-            raise ValueError('Data file not specified.')
-        infofile, datadir = self._path_name(self.datafile)
-        cleaned = self._clean_memory()
-        self_slice1d = self[k].reshape(-1)
-        for i in range(self_slice1d.size):
-            if not self_slice1d[i]['masked']:
-                f = '/'.join(datadir, self_slice1d[i]['file'])
+        if (not self[k]['masked']) and (not self[k]['loaded']):
+            if self.datafile is None:
+                raise ValueError('Data file not specified.')
+            f = os.path.join(datadir, self[k]['file'])
+            if os.path.isfile(f):
+                self[k]['pho'] = PhotometricData(f)
+                self[k]['loaded'] = True
+                self[k]['flushed'] = True
+            else:
+                raise IOError('Data record not found from file {}'.
+                        format(f))
+
+    def write(self, outfile=None, overwrite=False):
+        """Write data to disk.
+
+        If `outfile` is `None`, then this method flushes all data to disk
+        based on the location specified by `self.datafile`.  If
+        `self.datafile` is `None`, then it will throw an exception.
+
+        outfile : str, optional
+            Output file name.  If `None`, then the program does a memory
+            flush.  If `self.datafile` is `None`, then an exception will be
+            thrown.
+            If a file name is provided via `outfile`, then this method saves
+            all data to the specified output file.  In this case, if
+            `self.datafile` is `None`, then the provided file name will be
+            assigned to `self.datafile` and becomes the default data file of
+            the class instance.  Otherwise `self.datafile` will remain
+            unchanged, and the location specified by `outfile` is just an
+            extra copy of the data.
+        overwrite : bool, optional
+            Overwrite the existing data.  If `outfile` is `None` (meaning a
+            memory flush), then `overwrite` will be ignored.
+        """
+        if outfile is None:
+            if self.datafile is None:
+                raise ValueError('output file not specified')
+            outfile = self.datafile
+            flush = True
+        else:
+            if self.datafile is None:
+                self.datafile = outfile
+                flush = True
+            else:
+                flush = False
+
+        outfile, outdir = self._path_name(outfile)
+        ### This segment is to be checked
+        if os.path.isfile(outfile):
+            if overwrite:
+                os.remove(outfile)
+                if os.path.isdir(outdir):
+                    os.system('rm -rf '+outdir)
+            elif not flush:
+                raise IOError('output file {0} already exists'.format(outfile))
+
+        # save envolope information
+        hdu_list = fits.HDUList()
+        hdr = fits.Header()
+        hdr['version'] = self.__version__
+        shape = self.shape
+        hdr['ndim'] = len(shape), 'Number of dimensions'
+        for i in range(hdr['ndim']):
+            hdr['dim{}'.format(i+1)] = shape[i], \
+                'Size in dimension {}'.format(i+1)
+        hdu = fits.PrimaryHDU(header=hdr)
+        hdu_list.append(hdu)
+        hdr = fits.Header()
+        hdr['extname'] = 'INFO'
+        info_table = Table(self.reshape(-1)[list(self.dtype.names[1:])])
+        hdu = fits.BinTableHDU(info_table, header=hdr)
+        hdu_list.append(hdu)
+        hdu_list.writeto(outfile, overwrite=True)
+
+        # save data
+        if not os.path.isdir(outdir):
+            os.mkdir(outdir)
+        self1d = self.reshape(-1)
+        for i in range(self.size):
+            f = os.path.join(outdir,self1d[i]['file'])
+            if self1d[i]['masked']:
                 if os.path.isfile(f):
-                    self_slice1d[i]['pho'] = PhotometricData(f)
-                    self_slice1d[i][]
-                    self_slice1d[i]['loaded'] = True
-                    self_slice1d[i]['flushed'] = True
+                    os.remove(f)
+            else:
+                if flush:
+                    if not self1d[i]['flushed']:
+                        self1d[i]['pho'].write(f)
+                        self1d[i]['flushed'] = True
                 else:
-                    raise IOError('Data record not found for position ({}, {}'
-                        ') from file {}'.format(i))
+                    self1d[i]['pho'].write(f)
+
+    def info(self, infile=None):
+        """Print out the data information
+        """
+        if infile is None:
+            return {'shape': self.shape,
+                    'info': self.reshape(-1)[list(self.dtype.names[1:])]}
+        else:
+            infile, indir = self._path_name(infile)
+            inf = fits.open(infile)
+            if inf[0].version != '1.0.0':
+                raise IOError('Unrecognized version number.')
+            ndim = inf[0]['ndim']
+            shape = tuple([inf[0]['dim{}'.format(i+1)] for i in range(ndim)])
+            return {'shape': shape, 'info': inf['info'].data}
+
+    def read(self, infile=None, verbose=False, load=False):
+        '''Read data from a directory or a list of files
+
+        infile : str
+          The summary file of data storage
+
+        v1.0.0 : 1/12/2016, JYL @PSI
+        '''
+        if infile is None:
+            if self.datafile is None:
+                raise ValueError('Input file not specified.')
+            else:
+                infile = self.datafile
+        infile, indir = self._path_name(infile)
+
+        if not os.path.isfile(infile):
+            raise ValueError('Input file {0} not found.'.format(infile))
+        if not os.path.isdir(indir):
+            raise ValueError('Input directory {0} not found.'.format(indir))
+
+        # set up data structure and info array
+        info = self.info(infile)
+        if info['shape'] != self.shape:
+            raise IOError("Shape of PhotometricDataArray doesn't match input"
+                " data.")
+        self.datafile = infile
+        self1d = self.reshape(-1)
+        for k in self.dtype.names[1:]:
+            self1d[k] = info['info'][k]
+
+    def __getitem__(self, k):
+        out = super(PhotometricDataArray, self).__getitem__(k)
+        if isinstance(out, PhotometricDataArray):
+            if (out.dtype.names is None) or (len(out.dtype.names) < 16):
+                return np.asarray(out)
+            return out
+        else:
+            if (not out['masked']) and (not out['loaded']):
+                if self.datafile is None:
+                    raise ValueError('Data file not specified.')
+                f = os.path.join(datadir, out['file'])
+                if os.path.isfile(f):
+                    out['pho'] = PhotometricData(f)
+                    out['loaded'] = True
+                    out['flushed'] = True
+                else:
+                    raise IOError('Data record not found from file {}'.
+                            format(f))
+            return out['pho']
 
 
 class PhotometricDataGrid(object):
