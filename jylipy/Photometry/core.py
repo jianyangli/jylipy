@@ -1787,6 +1787,7 @@ class PhotometricDataArray(np.ndarray):
                 datafile, datadir = self._path_name(self.datafile)
                 f = os.path.join(datadir, out['file'])
                 if os.path.isfile(f):
+                    self._memory_dump()
                     out['pho'] = PhotometricData(f)
                     out['loaded'] = True
                     out['flushed'] = True
@@ -1802,6 +1803,7 @@ class PhotometricDataArray(np.ndarray):
         if (self[k] is None) or (isinstance(self[k], PhotometricData)):
             if not isinstance(v, PhotometricData):
                 raise ValueError('`PhotometricData` instance required.')
+            self._memory_dump()
             self['pho'][k] = v
             self['count'][k] = len(v)
             self['incmin'][k] = v.inclim[0].to('deg').value
@@ -1819,6 +1821,7 @@ class PhotometricDataArray(np.ndarray):
             self['loaded'][k] = True
         elif isinstance(self[k], PhotometricDataArray):
             if isinstance(v, PhotometricData):
+                self._memory_dump()
                 for x in np.nditer(self[k], flags=['refs_ok'],
                         op_flags=['readwrite']):
                     recname = str(x['file'].copy())
@@ -1841,6 +1844,7 @@ class PhotometricDataArray(np.ndarray):
             elif isinstance(v, PhotometricDataArray):
                 fields = list(self.dtype.names)
                 fields.remove('file')
+                self._memory_dump()
                 for f in fields:
                     from copy import deepcopy
                     self[f][k] = deepcopy(v[f])
@@ -1854,6 +1858,7 @@ class PhotometricDataArray(np.ndarray):
         else:
             raise ValueError('Only `PhotometricData` or `PhotometricDataArray`'
                 ' instance allowed.')
+        self._memory_dump()
 
 class PhotometricDataGrid(object):
     '''Class for photometric data on a regular lat-lon grid
