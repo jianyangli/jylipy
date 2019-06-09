@@ -1583,8 +1583,6 @@ class PhotometricDataArray(np.ndarray):
             for i in range(obj.size)])
         obj['masked'] = True
         obj['flushed'] = True
-#        for i in range(obj1d.size):
-#            obj1d[i]['pho'] = PhotometricData()
         obj.__version__ = '1.0.0'
         return obj
 
@@ -1830,8 +1828,8 @@ class PhotometricDataArray(np.ndarray):
                               v.lonlim[0].to('deg').value,
                               v.lonlim[1].to('deg').value,
                               False,
-                              False,
-                              True)
+                              True,
+                              False)
             elif isinstance(v, PhotometricDataArray):
                 fields = list(self.dtype.names)
                 fields.remove('file')
