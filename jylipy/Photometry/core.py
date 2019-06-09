@@ -1578,7 +1578,8 @@ class PhotometricDataArray(np.ndarray):
         obj.datafile = datafile
         n = '%i' % (np.floor(np.log10(obj.size))+1)
         fmt = '%'+n+'.'+n+'i'
-        obj.reshape(-1)['file'] = np.array(['phgrd_'+fmt % i+'.fits' for i in range(obj.size)])
+        obj.reshape(-1)['file'] = np.array(['phgrd_'+fmt % i+'.fits' \
+            for i in range(obj.size)])
         obj.reshape(-1)['masked'] = True
         obj.reshape(-1)['flushed'] = True
         obj.__version__ = '1.0.0'
@@ -1788,6 +1789,37 @@ class PhotometricDataArray(np.ndarray):
                             format(f))
             return out['pho']
 
+    def __setitem__(self, k, v):
+        if (self[k] is None) or (isinstance(self[k], PhotometricData)):
+            if not isinstance(v, PhotometricData):
+                raise ValueError('`PhotometricData instance required.')
+            self['pho'][k] = v
+            self['count'][k] = len(v)
+            self['incmin'][k] = v.inclim[0].to('deg').value
+            self['incmax'][k] = v.inclim[1].to('deg').value
+            self['emimin'][k] = v.emilim[0].to('deg').value
+            self['emimax'][k] = v.emilim[1].to('deg').value
+            self['phamin'][k] = v.phalim[0].to('deg').value
+            self['phamax'][k] = v.phalim[1].to('deg').value
+            self['latmin'][k] = v.latlim[0].to('deg').value
+            self['latmax'][k] = v.latlim[1].to('deg').value
+            self['lonmin'][k] = v.lonlim[0].to('deg').value
+            self['lonmax'][k] = v.lonlim[1].to('deg').value
+            self['masked'][k] = False
+            self['flushed'][k] = False
+            self['loaded'][k] = True
+        elif isinstance(self[k], PhotometricDataArray):
+            fields = list(self.dtype.names)
+            fields.remove('file')
+            for f in fields:
+                from copy import deepcopy
+                self[f][k] = deepcopy(v[f])
+                for x in np.nditer(self[k], flags=['refs_ok'],
+                        op_flags=['readwrite']):
+                    if not x['masked']:
+                        x[...]['flushed'] = False
+        else:
+            super().__setitem__(k, v)
 
 class PhotometricDataGrid(object):
     '''Class for photometric data on a regular lat-lon grid
