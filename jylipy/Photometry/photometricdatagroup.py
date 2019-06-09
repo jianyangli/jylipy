@@ -343,3 +343,11 @@ class PhotometricDataArray(np.ndarray):
             raise ValueError('Only `PhotometricData` or `PhotometricDataArray`'
                 ' instance allowed.')
         self._memory_dump()
+
+    @classmethod
+    def from_file(cls, infile):
+        shape = phoarr_info(infile, shape=True)
+        obj = cls(shape)
+        obj.read(infile)
+        return obj
+
