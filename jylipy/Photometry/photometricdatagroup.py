@@ -1,0 +1,311 @@
+# Photometric data group classes
+
+import os
+import numpy as np
+from astropy.io import fits
+
+__all__ = ['PhotometricDataArray']
+
+
+_memory_size = lambda x: x*4.470348358154297e-08
+
+
+class PhotometricDataArray(np.ndarray):
+    """Photometric data array object
+    """
+    def __new__(cls, *args, **kwargs):
+        maxmem = kwargs.pop('maxmem', 10)
+        datafile = kwargs.pop('datafile', None)
+        n = int((np.floor(np.log10(np.array(args[0]).prod()))+1))
+        fmt = '%0' + '%i' % n + 'i'
+        dtype = kwargs.pop('dtype', None)
+        names = tuple('pho file count incmin incmax emimin emimax'
+            ' phamin phamax lonmin lonmax latmin latmax masked loaded'
+            ' flushed'.split())
+        types = [object, 'U{}'.format(n+13), int, float, float, float, float,
+            float, float, float, float, float, float, bool, bool, bool]
+        dtype = [(n, d) for n, d in zip(names, types)]
+        obj = super().__new__(cls, *args, dtype=dtype, **kwargs)
+        obj.maxmem = maxmem
+        obj.datafile = datafile
+        i = 0
+        for x in np.nditer(obj, flags=['refs_ok'], op_flags=['readwrite']):
+            x['file'] = 'phoarr_' + fmt % i + '.fits'
+            x['masked'] = True
+            x['flushed'] = True
+            i += 1
+        obj.__version__ = '1.0.0'
+        return obj
+
+    def __array_finalize__(self, obj):
+        if obj is None: return
+        self.maxmem = getattr(obj, 'maxmem', None)
+        self.datafile = getattr(obj, 'datafile', None)
+        self.__version__ = getattr(obj, '__version__', '1.0.0')
+
+    def __repr__(self):
+        """Return repr(self)."""
+        return f'<{self.__class__.__name__} {self.shape}>'
+
+    def __str__(self):
+        """Return str(self)"""
+        return self.__repr__()
+
+    def _memory_dump(self, forced=False, verbose=False):
+        """Check the size of object, free memory by deleting
+        """
+        if not forced:
+            total_counts = (self['count']*self['loaded'].astype('i')).sum()
+            sz = _memory_size(total_counts*1.2)
+            if sz<self.maxmem:
+                return False
+        # free memory by deleting all PhotometricData instances
+        if verbose:
+            print('Cleaning memory...')
+        for x in np.nditer(self, flags=['refs_ok'], op_flags=['readwrite']):
+            self._save_data(x)
+            x['pho'] = None
+            x['loaded'] = False
+        return True
+
+    def _path_name(self, filename):
+        """Return the information file name and data file directory name
+        """
+        filename = os.path.splitext(filename)[0]
+        datadir = filename+'_dir'
+        infofile = filename+'.fits'
+        return infofile, datadir
+
+    #def _load_data(self, x):
+    #    """Load photometric data record
+
+    #     x : one element in `PhotometricDataArray`
+    #    """
+    #    if (not x['masked']) and (not x['loaded']):
+    #        if self.datafile is None:
+    #            raise ValueError('Data file not specified.')
+    #        filename, datadir = self._path_name(self.datafile)
+    #        f = os.path.join(datadir, x['file'].item())
+    #        if os.path.isfile(f):
+    #            x['pho'][()] = PhotometricData(f)
+    #            x['loaded'] = True
+    #            x['flushed'] = True
+    #        else:
+    #            raise IOError('Data record not found.')
+
+    def _save_data(self, x, outdir=None, flush=True):
+        """Save photometric data record
+
+        x : one element in `PhotometricDataArray`
+        outdir : str
+            The directory name of data record files
+        flush : bool
+            The value that the 'flushed' flag will be set
+        """
+        if self.datafile is None:
+            raise ValueError('Data file not specified.')
+        if outdir is None:
+            outfile, outdir = self._path_name(self.datafile)
+        f = os.path.join(outdir, x['file'].item())
+        if (x['masked']) and os.path.isfile(f):
+            os.remove(f)
+        elif x['loaded'] and ((not x['flushed']) or not flush):
+            x['pho'].item().write(f, overwrite=True)
+            x['flushed'] = flush
+
+    def write(self, outfile=None, overwrite=False):
+        """Write data to disk.
+
+        outfile : str, optional
+            Output file name.  If `None`, then the program does a memory
+            flush.  If `self.datafile` is also `None`, then an exception will
+            be thrown.
+            If a file name is provided via `outfile`, then this method saves
+            all data to the specified output file.  In this case, if
+            `self.datafile` is `None`, then the provided file name will be
+            assigned to `self.datafile` and becomes the default data file of
+            the class instance.  Otherwise `self.datafile` will remain
+            unchanged, and the location specified by `outfile` is just an
+            extra copy of the data.
+        overwrite : bool, optional
+            Overwrite the existing data.  If `outfile` is `None` (meaning a
+            memory flush), then `overwrite` will be ignored.
+        """
+        if outfile is None:
+            if self.datafile is None:
+                raise ValueError('output file not specified')
+            outfile = self.datafile
+            flush = True
+        else:
+            if self.datafile is None:
+                self.datafile = outfile
+                flush = True
+            else:
+                flush = False
+
+        outfile, outdir = self._path_name(outfile)
+        ### This segment is to be checked
+        if (not flush) and (not overwrite) and os.path.isfile(outfile):
+            raise IOError('output file {0} already exists'.format(outfile))
+        if not os.path.isdir(outdir):
+            os.mkdir(outdir)
+
+        # save envolope information
+        hdu_list = fits.HDUList()
+        hdr = fits.Header()
+        hdr['version'] = self.__version__
+        shape = self.shape
+        hdr['ndim'] = len(shape), 'Number of dimensions'
+        for i in range(hdr['ndim']):
+            hdr['dim{}'.format(i+1)] = shape[i], \
+                'Size in dimension {}'.format(i+1)
+        hdu = fits.PrimaryHDU(header=hdr)
+        hdu_list.append(hdu)
+        hdr = fits.Header()
+        hdr['extname'] = 'INFO'
+        info_table = Table(self.info()['info'])
+        info_table.remove_columns(['loaded', 'flushed'])
+        hdu = fits.BinTableHDU(info_table, header=hdr)
+        hdu_list.append(hdu)
+        hdu_list.writeto(outfile, overwrite=True)
+
+        # save data records
+        for x in np.nditer(self, flags=['refs_ok'], op_flags=['readwrite']):
+            self._save_data(x, outdir=outdir, flush=flush)
+
+    def info(self, infile=None):
+        """Print out the data information
+        """
+        if infile is None:
+            return {'shape': self.shape,
+                    'info': self.reshape(-1)[list(self.dtype.names[1:])]}
+        else:
+            infile, indir = self._path_name(infile)
+            inf = fits.open(infile)
+            if inf[0].header['version'] != '1.0.0':
+                raise IOError('Unrecognized version number.')
+            ndim = inf[0].header['ndim']
+            shape = tuple([inf[0].header['dim{}'.format(i+1)] \
+                for i in range(ndim)])
+            return {'shape': shape, 'info': inf['info'].data}
+
+    def read(self, infile=None, verbose=False, load=False):
+        '''Read data from a directory or a list of files
+
+        infile : str
+          The summary file of data storage
+
+        v1.0.0 : 1/12/2016, JYL @PSI
+        '''
+        if infile is None:
+            if self.datafile is None:
+                raise ValueError('Input file not specified.')
+            else:
+                infile = self.datafile
+        if self.datafile is None:
+            self.datafile = infile
+        info = self.info(infile)
+        infile, indir = self._path_name(infile)
+
+        if not os.path.isfile(infile):
+            raise ValueError('Input file {0} not found.'.format(infile))
+        if not os.path.isdir(indir):
+            raise ValueError('Input directory {0} not found.'.format(indir))
+
+        # set up data structure
+        if info['shape'] != self.shape:
+            raise IOError("Shape of PhotometricDataArray doesn't match input"
+                " data.")
+        for k in info['info'].dtype.names:
+            self._set_property(k, info['info'][k].reshape(self.shape))
+
+    def _set_property(self, k, v):
+        """Set the property fields of the record array
+        """
+        super().__setitem__(k, v)
+
+    def __getitem__(self, k):
+        out = super().__getitem__(k)
+        if isinstance(out, PhotometricDataArray):
+            if (out.dtype.names is None) or (len(out.dtype.names) < 16):
+                return np.asarray(out)
+            return out
+        else:
+            if (not out['masked']) and (not out['loaded']):
+                if self.datafile is None:
+                    raise ValueError('Data file not specified.')
+                datafile, datadir = self._path_name(self.datafile)
+                f = os.path.join(datadir, out['file'])
+                if os.path.isfile(f):
+                    self._memory_dump()
+                    out['pho'] = PhotometricData(f)
+                    out['loaded'] = True
+                    out['flushed'] = True
+                else:
+                    raise IOError('Data record not found from file {}'.
+                            format(f))
+            return out['pho']
+
+    def __setitem__(self, k, v):
+        if isinstance(k, str) or ((hasattr(k, '__iter__')) and \
+                np.any([isinstance(x, str) for x in k])):
+            raise ValueError('Setting property fields not allowed')
+        if (self[k] is None) or (isinstance(self[k], PhotometricData)):
+            if not isinstance(v, PhotometricData):
+                raise ValueError('`PhotometricData` instance required.')
+            self._memory_dump()
+            self['pho'][k] = v
+            self['count'][k] = len(v)
+            self['incmin'][k] = v.inclim[0].to('deg').value
+            self['incmax'][k] = v.inclim[1].to('deg').value
+            self['emimin'][k] = v.emilim[0].to('deg').value
+            self['emimax'][k] = v.emilim[1].to('deg').value
+            self['phamin'][k] = v.phalim[0].to('deg').value
+            self['phamax'][k] = v.phalim[1].to('deg').value
+            self['latmin'][k] = v.latlim[0].to('deg').value
+            self['latmax'][k] = v.latlim[1].to('deg').value
+            self['lonmin'][k] = v.lonlim[0].to('deg').value
+            self['lonmax'][k] = v.lonlim[1].to('deg').value
+            self['masked'][k] = False
+            self['flushed'][k] = False
+            self['loaded'][k] = True
+        elif isinstance(self[k], PhotometricDataArray):
+            if isinstance(v, PhotometricData):
+                self._memory_dump()
+                for x in np.nditer(self[k], flags=['refs_ok'],
+                        op_flags=['readwrite']):
+                    recname = str(x['file'].copy())
+                    x[...] = (v.copy(),
+                              recname,
+                              len(v),
+                              v.inclim[0].to('deg').value,
+                              v.inclim[1].to('deg').value,
+                              v.emilim[0].to('deg').value,
+                              v.emilim[1].to('deg').value,
+                              v.phalim[0].to('deg').value,
+                              v.phalim[1].to('deg').value,
+                              v.latlim[0].to('deg').value,
+                              v.latlim[1].to('deg').value,
+                              v.lonlim[0].to('deg').value,
+                              v.lonlim[1].to('deg').value,
+                              False,
+                              True,
+                              False)
+            elif isinstance(v, PhotometricDataArray):
+                fields = list(self.dtype.names)
+                fields.remove('file')
+                self._memory_dump()
+                for f in fields:
+                    from copy import deepcopy
+                    self[f][k] = deepcopy(v[f])
+                for x in np.nditer(self[k], flags=['refs_ok'],
+                        op_flags=['readwrite']):
+                    if not x['masked']:
+                        x['flushed'] = False
+            else:
+                raise ValueError('Only `PhotometricData` or'
+                    ' `PhotometricDataArray` instance allowed.')
+        else:
+            raise ValueError('Only `PhotometricData` or `PhotometricDataArray`'
+                ' instance allowed.')
+        self._memory_dump()
