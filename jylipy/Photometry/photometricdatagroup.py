@@ -3,11 +3,56 @@
 import os
 import numpy as np
 from astropy.io import fits
+from .core import PhotometricData
 
-__all__ = ['PhotometricDataArray']
+__all__ = ['phoarr_info', 'PhotometricDataArray']
 
 
 _memory_size = lambda x: x*4.470348358154297e-08
+
+
+def phoarr_info(phoarr, shape=False, all=False):
+    """Return the information of photometric data group class instances
+
+
+    phoarr : str or `PhotometricDataArray`
+        The input `PhotometricDataArray` or the name of the file that contains
+        the `PhotometricDataArray`.
+    shape : bool
+        If `True` then return the shape of `PhotometricDataArray`.
+        If `False` then return the information table
+    all : bool
+        If `True`, then return everyting in a tuple
+
+    Return
+    info : `numpy.ndarray`
+        A record array containing the information table of
+        `PhotometricDataArray`
+    shape : tuple
+        The shape of `PhotometricDataArray`
+    """
+    if isinstance(phoarr, str):
+        infile, indir = PhotometricDataArray._path_name(phoarr)
+        inf = fits.open(infile)
+        if inf[0].header['version'] != '1.0.0':
+            raise IOError('Unrecognized version number.')
+        ndim = inf[0].header['ndim']
+        sp = tuple([inf[0].header['dim{}'.format(i+1)] \
+            for i in range(ndim)])
+        if shape:
+            return sp
+        elif all:
+            return inf['info'].data, sp
+        else:
+            return inf['info'].data
+    elif isinstance(phoarr, PhotometricDataArray):
+        if shape:
+            return phoarr.shape
+        elif all:
+            return phoarr.reshape(-1)[list(phoarr.dtype.names[1:-2])], \
+                phoarr.shape
+        else:
+            return phoarr.reshape(-1)[list(phoarr.dtype.names[1:-2])]
 
 
 class PhotometricDataArray(np.ndarray):
@@ -68,7 +113,8 @@ class PhotometricDataArray(np.ndarray):
             x['loaded'] = False
         return True
 
-    def _path_name(self, filename):
+    @staticmethod
+    def _path_name(filename):
         """Return the information file name and data file directory name
         """
         filename = os.path.splitext(filename)[0]
@@ -163,8 +209,7 @@ class PhotometricDataArray(np.ndarray):
         hdu_list.append(hdu)
         hdr = fits.Header()
         hdr['extname'] = 'INFO'
-        info_table = Table(self.info()['info'])
-        info_table.remove_columns(['loaded', 'flushed'])
+        info_table = self.info()
         hdu = fits.BinTableHDU(info_table, header=hdr)
         hdu_list.append(hdu)
         hdu_list.writeto(outfile, overwrite=True)
@@ -173,21 +218,10 @@ class PhotometricDataArray(np.ndarray):
         for x in np.nditer(self, flags=['refs_ok'], op_flags=['readwrite']):
             self._save_data(x, outdir=outdir, flush=flush)
 
-    def info(self, infile=None):
+    def info(self):
         """Print out the data information
         """
-        if infile is None:
-            return {'shape': self.shape,
-                    'info': self.reshape(-1)[list(self.dtype.names[1:])]}
-        else:
-            infile, indir = self._path_name(infile)
-            inf = fits.open(infile)
-            if inf[0].header['version'] != '1.0.0':
-                raise IOError('Unrecognized version number.')
-            ndim = inf[0].header['ndim']
-            shape = tuple([inf[0].header['dim{}'.format(i+1)] \
-                for i in range(ndim)])
-            return {'shape': shape, 'info': inf['info'].data}
+        return phoarr_info(self)
 
     def read(self, infile=None, verbose=False, load=False):
         '''Read data from a directory or a list of files
@@ -204,7 +238,7 @@ class PhotometricDataArray(np.ndarray):
                 infile = self.datafile
         if self.datafile is None:
             self.datafile = infile
-        info = self.info(infile)
+        info = phoarr_info(infile)
         infile, indir = self._path_name(infile)
 
         if not os.path.isfile(infile):
@@ -213,11 +247,11 @@ class PhotometricDataArray(np.ndarray):
             raise ValueError('Input directory {0} not found.'.format(indir))
 
         # set up data structure
-        if info['shape'] != self.shape:
+        if phoarr_info(infile, shape=True) != self.shape:
             raise IOError("Shape of PhotometricDataArray doesn't match input"
                 " data.")
-        for k in info['info'].dtype.names:
-            self._set_property(k, info['info'][k].reshape(self.shape))
+        for k in info.dtype.names:
+            self._set_property(k, info[k].reshape(self.shape))
 
     def _set_property(self, k, v):
         """Set the property fields of the record array
