@@ -1579,10 +1579,9 @@ class PhotometricDataArray(np.ndarray):
         obj.datafile = datafile
         n = '%i' % (np.floor(np.log10(obj.size))+1)
         fmt = '%'+n+'.'+n+'i'
-        obj.reshape(-1)['file'] = np.array(['phgrd_'+fmt % i+'.fits' \
-            for i in range(obj.size)])
-        obj['masked'] = True
-        obj['flushed'] = True
+        obj.reshape(-1)._set_property('file', np.array(['phgrd_'+fmt % i+'.fits' for i in range(obj.size)]))
+        obj._set_property('masked', True)
+        obj._set_property('flushed', True)
         obj.__version__ = '1.0.0'
         return obj
 
@@ -1770,6 +1769,11 @@ class PhotometricDataArray(np.ndarray):
         for k in self.dtype.names[1:]:
             self1d[k] = info['info'][k]
 
+    def _set_property(self, k, v):
+        """Set the property fields of the record array
+        """
+        super().__setitem__(k, v)
+
     def __getitem__(self, k):
         out = super(PhotometricDataArray, self).__getitem__(k)
         if isinstance(out, PhotometricDataArray):
@@ -1791,9 +1795,12 @@ class PhotometricDataArray(np.ndarray):
             return out['pho']
 
     def __setitem__(self, k, v):
+        if isinstance(k, str) or ((hasattr(k, '__iter__')) and \
+                np.any([isinstance(x, str) for x in k])):
+            raise ValueError('Setting property fields not allowed')
         if (self[k] is None) or (isinstance(self[k], PhotometricData)):
             if not isinstance(v, PhotometricData):
-                raise ValueError('`PhotometricData instance required.')
+                raise ValueError('`PhotometricData` instance required.')
             self['pho'][k] = v
             self['count'][k] = len(v)
             self['incmin'][k] = v.inclim[0].to('deg').value
@@ -1840,8 +1847,12 @@ class PhotometricDataArray(np.ndarray):
                         op_flags=['readwrite']):
                     if not x['masked']:
                         x[...]['flushed'] = False
+            else:
+                raise ValueError('Only `PhotometricData` or'
+                    ' `PhotometricDataArray` instance allowed.')
         else:
-            super().__setitem__(k, v)
+            raise ValueError('Only `PhotometricData` or `PhotometricDataArray`'
+                ' instance allowed.')
 
 class PhotometricDataGrid(object):
     '''Class for photometric data on a regular lat-lon grid
