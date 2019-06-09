@@ -1574,13 +1574,17 @@ class PhotometricDataArray(np.ndarray):
             float, float, float, float, float, bool, bool, bool]
         dtype = [(n, d) for n, d in zip(names, types)]
         obj = super().__new__(cls, *args, dtype=dtype, **kwargs)
+        obj1d = obj.reshape(-1)
         obj.maxmem = maxmem
         obj.datafile = datafile
         n = '%i' % (np.floor(np.log10(obj.size))+1)
         fmt = '%'+n+'.'+n+'i'
-        obj.reshape(-1)['file'] = np.array(['phgrd_'+fmt % i+'.fits' for i in range(obj.size)])
-        obj.reshape(-1)['masked'] = True
-        obj.reshape(-1)['flushed'] = True
+        obj.reshape(-1)['file'] = np.array(['phgrd_'+fmt % i+'.fits' \
+            for i in range(obj.size)])
+        obj['masked'] = True
+        obj['flushed'] = True
+#        for i in range(obj1d.size):
+#            obj1d[i]['pho'] = PhotometricData()
         obj.__version__ = '1.0.0'
         return obj
 
@@ -1788,6 +1792,58 @@ class PhotometricDataArray(np.ndarray):
                             format(f))
             return out['pho']
 
+    def __setitem__(self, k, v):
+        if (self[k] is None) or (isinstance(self[k], PhotometricData)):
+            if not isinstance(v, PhotometricData):
+                raise ValueError('`PhotometricData instance required.')
+            self['pho'][k] = v
+            self['count'][k] = len(v)
+            self['incmin'][k] = v.inclim[0].to('deg').value
+            self['incmax'][k] = v.inclim[1].to('deg').value
+            self['emimin'][k] = v.emilim[0].to('deg').value
+            self['emimax'][k] = v.emilim[1].to('deg').value
+            self['phamin'][k] = v.phalim[0].to('deg').value
+            self['phamax'][k] = v.phalim[1].to('deg').value
+            self['latmin'][k] = v.latlim[0].to('deg').value
+            self['latmax'][k] = v.latlim[1].to('deg').value
+            self['lonmin'][k] = v.lonlim[0].to('deg').value
+            self['lonmax'][k] = v.lonlim[1].to('deg').value
+            self['masked'][k] = False
+            self['flushed'][k] = False
+            self['loaded'][k] = True
+        elif isinstance(self[k], PhotometricDataArray):
+            if isinstance(v, PhotometricData):
+                for x in np.nditer(self[k], flags=['refs_ok'],
+                        op_flags=['readwrite']):
+                    recname = str(x['file'].copy())
+                    x[...] = (v.copy(),
+                              recname,
+                              len(v),
+                              v.inclim[0].to('deg').value,
+                              v.inclim[1].to('deg').value,
+                              v.emilim[0].to('deg').value,
+                              v.emilim[1].to('deg').value,
+                              v.phalim[0].to('deg').value,
+                              v.phalim[1].to('deg').value,
+                              v.latlim[0].to('deg').value,
+                              v.latlim[1].to('deg').value,
+                              v.lonlim[0].to('deg').value,
+                              v.lonlim[1].to('deg').value,
+                              False,
+                              False,
+                              True)
+            elif isinstance(v, PhotometricDataArray):
+                fields = list(self.dtype.names)
+                fields.remove('file')
+                for f in fields:
+                    from copy import deepcopy
+                    self[f][k] = deepcopy(v[f])
+                for x in np.nditer(self[k], flags=['refs_ok'],
+                        op_flags=['readwrite']):
+                    if not x['masked']:
+                        x[...]['flushed'] = False
+        else:
+            super().__setitem__(k, v)
 
 class PhotometricDataGrid(object):
     '''Class for photometric data on a regular lat-lon grid
