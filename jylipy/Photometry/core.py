@@ -1578,8 +1578,9 @@ class PhotometricDataArray(np.ndarray):
         obj.maxmem = maxmem
         obj.datafile = datafile
         n = '%i' % (np.floor(np.log10(obj.size))+1)
-        fmt = '%'+n+'.'+n+'i'
-        obj.reshape(-1)._set_property('file', np.array(['phgrd_'+fmt % i+'.fits' for i in range(obj.size)]))
+        fmt = '%0'+n+'i'
+        obj.reshape(-1)._set_property('file',
+            np.array(['phgrd_'+fmt % i+'.fits' for i in range(obj.size)]))
         obj._set_property('masked', True)
         obj._set_property('flushed', True)
         obj.__version__ = '1.0.0'
@@ -1599,27 +1600,21 @@ class PhotometricDataArray(np.ndarray):
         """Return str(self)"""
         return self.__repr__()
 
-    def _clean_memory(self, forced=False, verbose=False):
+    def _memory_dump(self, forced=False, verbose=False):
         """Check the size of object, free memory by deleting
         """
         if not forced:
             total_counts = (self['count']*self['loaded'].astype('i')).sum()
             sz = _memory_size(total_counts*1.2)
-            if sz<self.max_mem:
+            if sz<self.maxmem:
                 return False
         # free memory by deleting all PhotometricData instances
         if verbose:
             print('Cleaning memory...')
-        self1d = self.reshape(-1)
-        flushed1d = self._flushed.reshape(-1)
-        for i in range(self1d.size):
-            if (not self1d['masked'][i]) and \
-                    self1d[i]['loaded'] and \
-                    (not flushed1d[i]):
-                self._save_data(i)
-                self1d[i]['pho'] = None
-                self1d[i]['loaded'] = False
-                flushed1d[i] = True
+        for x in np.nditer(self, flags=['refs_ok'], op_flags=['readwrite']):
+            self._save_data(x)
+            x['pho'] = None
+            x['loaded'] = False
         return True
 
     def _path_name(self, filename):
@@ -1630,32 +1625,49 @@ class PhotometricDataArray(np.ndarray):
         infofile = filename+'.fits'
         return infofile, datadir
 
-    def _load_data(self, k):
-        """Load data for position `k` in the flattened array
+    def _load_data(self, x):
+        """Load photometric data record
+
+        x : one element in `PhotometricDataArray`
         """
-        if (not self[k]['masked']) and (not self[k]['loaded']):
+        if (not x['masked']) and (not x['loaded']):
             if self.datafile is None:
                 raise ValueError('Data file not specified.')
-            f = os.path.join(datadir, self[k]['file'])
+            f = os.path.join(datadir, x['file'])
             if os.path.isfile(f):
-                self[k]['pho'] = PhotometricData(f)
-                self[k]['loaded'] = True
-                self[k]['flushed'] = True
+                x['pho'] = PhotometricData(f)
+                x['loaded'] = True
+                x['flushed'] = True
             else:
-                raise IOError('Data record not found from file {}'.
-                        format(f))
+                raise IOError('Data record not found.')
+
+    def _save_data(self, x, outdir=None, flush=True):
+        """Save photometric data record
+
+        x : one element in `PhotometricDataArray`
+        outdir : str
+            The directory name of data record files
+        flush : bool
+            The value that the 'flushed' flag will be set
+        """
+        if self.datafile is None:
+            raise ValueError('Data file not specified.')
+        if outdir is None:
+            outfile, outdir = self._path_name(self.datafile)
+        f = os.path.join(outdir, x['file'])
+        if (x['masked']) and os.path.isfile(f):
+            os.remove(f)
+        elif x['loaded'] and ((not x['flushed']) or forced):
+            x['pho'].write(f, overwrite=True)
+            x['flushed'] = flush
 
     def write(self, outfile=None, overwrite=False):
         """Write data to disk.
 
-        If `outfile` is `None`, then this method flushes all data to disk
-        based on the location specified by `self.datafile`.  If
-        `self.datafile` is `None`, then it will throw an exception.
-
         outfile : str, optional
             Output file name.  If `None`, then the program does a memory
-            flush.  If `self.datafile` is `None`, then an exception will be
-            thrown.
+            flush.  If `self.datafile` is also `None`, then an exception will
+            be thrown.
             If a file name is provided via `outfile`, then this method saves
             all data to the specified output file.  In this case, if
             `self.datafile` is `None`, then the provided file name will be
@@ -1681,13 +1693,10 @@ class PhotometricDataArray(np.ndarray):
 
         outfile, outdir = self._path_name(outfile)
         ### This segment is to be checked
-        if os.path.isfile(outfile):
-            if overwrite:
-                os.remove(outfile)
-                if os.path.isdir(outdir):
-                    os.system('rm -rf '+outdir)
-            elif not flush:
-                raise IOError('output file {0} already exists'.format(outfile))
+        if (not flush) and (not overwrite) and os.path.isfile(outfile):
+            raise IOError('output file {0} already exists'.format(outfile))
+        if not os.path.isdir(outdir):
+            os.mkdir(outdir)
 
         # save envolope information
         hdu_list = fits.HDUList()
@@ -1702,27 +1711,15 @@ class PhotometricDataArray(np.ndarray):
         hdu_list.append(hdu)
         hdr = fits.Header()
         hdr['extname'] = 'INFO'
-        info_table = Table(self.reshape(-1)[list(self.dtype.names[1:])])
+        info_table = Table(self.info()['info'])
+        print(info_table)
         hdu = fits.BinTableHDU(info_table, header=hdr)
         hdu_list.append(hdu)
         hdu_list.writeto(outfile, overwrite=True)
 
-        # save data
-        if not os.path.isdir(outdir):
-            os.mkdir(outdir)
-        self1d = self.reshape(-1)
-        for i in range(self.size):
-            f = os.path.join(outdir,self1d[i]['file'])
-            if self1d[i]['masked']:
-                if os.path.isfile(f):
-                    os.remove(f)
-            else:
-                if flush:
-                    if not self1d[i]['flushed']:
-                        self1d[i]['pho'].write(f)
-                        self1d[i]['flushed'] = True
-                else:
-                    self1d[i]['pho'].write(f)
+        # save data records
+        for x in np.nditer(self, flags=['refs_ok'], op_flags=['readwrite']):
+            self._save_data(x, outdir=outdir, flush=flush)
 
     def info(self, infile=None):
         """Print out the data information
@@ -1765,9 +1762,10 @@ class PhotometricDataArray(np.ndarray):
             raise IOError("Shape of PhotometricDataArray doesn't match input"
                 " data.")
         self.datafile = infile
-        self1d = self.reshape(-1)
-        for k in self.dtype.names[1:]:
-            self1d[k] = info['info'][k]
+        for x in np.nditer(self, flags=['refs_ok'], op_flags=['readwrite']):
+            for k in info['info'].dtype.names:
+                x[k] = info['info'][k]
+            self._load_data(x)
 
     def _set_property(self, k, v):
         """Set the property fields of the record array
@@ -1846,7 +1844,7 @@ class PhotometricDataArray(np.ndarray):
                 for x in np.nditer(self[k], flags=['refs_ok'],
                         op_flags=['readwrite']):
                     if not x['masked']:
-                        x[...]['flushed'] = False
+                        x['flushed'] = False
             else:
                 raise ValueError('Only `PhotometricData` or'
                     ' `PhotometricDataArray` instance allowed.')
