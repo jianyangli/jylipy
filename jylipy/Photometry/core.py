@@ -1566,23 +1566,24 @@ class PhotometricDataArray(np.ndarray):
     def __new__(cls, *args, **kwargs):
         maxmem = kwargs.pop('maxmem', 10)
         datafile = kwargs.pop('datafile', None)
+        n = int((np.floor(np.log10(np.array(args[0]).prod()))+1))
+        fmt = '%0' + '%i' % n + 'i'
         dtype = kwargs.pop('dtype', None)
         names = tuple('pho file count incmin incmax emimin emimax'
             ' phamin phamax lonmin lonmax latmin latmax masked loaded'
             ' flushed'.split())
-        types = [object, object, int, float, float, float, float, float,
-            float, float, float, float, float, bool, bool, bool]
+        types = [object, 'U{}'.format(n+13), int, float, float, float, float,
+            float, float, float, float, float, float, bool, bool, bool]
         dtype = [(n, d) for n, d in zip(names, types)]
         obj = super().__new__(cls, *args, dtype=dtype, **kwargs)
-        obj1d = obj.reshape(-1)
         obj.maxmem = maxmem
         obj.datafile = datafile
-        n = '%i' % (np.floor(np.log10(obj.size))+1)
-        fmt = '%0'+n+'i'
-        obj.reshape(-1)._set_property('file',
-            np.array(['phgrd_'+fmt % i+'.fits' for i in range(obj.size)]))
-        obj._set_property('masked', True)
-        obj._set_property('flushed', True)
+        i = 0
+        for x in np.nditer(obj, flags=['refs_ok'], op_flags=['readwrite']):
+            x['file'] = 'phoarr_' + fmt % i + '.fits'
+            x['masked'] = True
+            x['flushed'] = True
+            i += 1
         obj.__version__ = '1.0.0'
         return obj
 
@@ -1625,21 +1626,22 @@ class PhotometricDataArray(np.ndarray):
         infofile = filename+'.fits'
         return infofile, datadir
 
-    def _load_data(self, x):
-        """Load photometric data record
-
-        x : one element in `PhotometricDataArray`
-        """
-        if (not x['masked']) and (not x['loaded']):
-            if self.datafile is None:
-                raise ValueError('Data file not specified.')
-            f = os.path.join(datadir, x['file'])
-            if os.path.isfile(f):
-                x['pho'] = PhotometricData(f)
-                x['loaded'] = True
-                x['flushed'] = True
-            else:
-                raise IOError('Data record not found.')
+#    def _load_data(self, x):
+#        """Load photometric data record
+#
+#        x : one element in `PhotometricDataArray`
+#        """
+#        if (not x['masked']) and (not x['loaded']):
+#            if self.datafile is None:
+#                raise ValueError('Data file not specified.')
+#            filename, datadir = self._path_name(self.datafile)
+#            f = os.path.join(datadir, x['file'].item())
+#            if os.path.isfile(f):
+#                x['pho'][()] = PhotometricData(f)
+#                x['loaded'] = True
+#                x['flushed'] = True
+#            else:
+#                raise IOError('Data record not found.')
 
     def _save_data(self, x, outdir=None, flush=True):
         """Save photometric data record
@@ -1654,11 +1656,11 @@ class PhotometricDataArray(np.ndarray):
             raise ValueError('Data file not specified.')
         if outdir is None:
             outfile, outdir = self._path_name(self.datafile)
-        f = os.path.join(outdir, x['file'])
+        f = os.path.join(outdir, x['file'].item())
         if (x['masked']) and os.path.isfile(f):
             os.remove(f)
-        elif x['loaded'] and ((not x['flushed']) or forced):
-            x['pho'].write(f, overwrite=True)
+        elif x['loaded'] and ((not x['flushed']) or not flush):
+            x['pho'].item().write(f, overwrite=True)
             x['flushed'] = flush
 
     def write(self, outfile=None, overwrite=False):
@@ -1712,7 +1714,7 @@ class PhotometricDataArray(np.ndarray):
         hdr = fits.Header()
         hdr['extname'] = 'INFO'
         info_table = Table(self.info()['info'])
-        print(info_table)
+        info_table.remove_columns(['loaded', 'flushed'])
         hdu = fits.BinTableHDU(info_table, header=hdr)
         hdu_list.append(hdu)
         hdu_list.writeto(outfile, overwrite=True)
@@ -1730,10 +1732,11 @@ class PhotometricDataArray(np.ndarray):
         else:
             infile, indir = self._path_name(infile)
             inf = fits.open(infile)
-            if inf[0].version != '1.0.0':
+            if inf[0].header['version'] != '1.0.0':
                 raise IOError('Unrecognized version number.')
-            ndim = inf[0]['ndim']
-            shape = tuple([inf[0]['dim{}'.format(i+1)] for i in range(ndim)])
+            ndim = inf[0].header['ndim']
+            shape = tuple([inf[0].header['dim{}'.format(i+1)] \
+                for i in range(ndim)])
             return {'shape': shape, 'info': inf['info'].data}
 
     def read(self, infile=None, verbose=False, load=False):
@@ -1749,6 +1752,9 @@ class PhotometricDataArray(np.ndarray):
                 raise ValueError('Input file not specified.')
             else:
                 infile = self.datafile
+        if self.datafile is None:
+            self.datafile = infile
+        info = self.info(infile)
         infile, indir = self._path_name(infile)
 
         if not os.path.isfile(infile):
@@ -1756,16 +1762,12 @@ class PhotometricDataArray(np.ndarray):
         if not os.path.isdir(indir):
             raise ValueError('Input directory {0} not found.'.format(indir))
 
-        # set up data structure and info array
-        info = self.info(infile)
+        # set up data structure
         if info['shape'] != self.shape:
             raise IOError("Shape of PhotometricDataArray doesn't match input"
                 " data.")
-        self.datafile = infile
-        for x in np.nditer(self, flags=['refs_ok'], op_flags=['readwrite']):
-            for k in info['info'].dtype.names:
-                x[k] = info['info'][k]
-            self._load_data(x)
+        for k in info['info'].dtype.names:
+            self._set_property(k, info['info'][k].reshape(self.shape))
 
     def _set_property(self, k, v):
         """Set the property fields of the record array
@@ -1773,7 +1775,7 @@ class PhotometricDataArray(np.ndarray):
         super().__setitem__(k, v)
 
     def __getitem__(self, k):
-        out = super(PhotometricDataArray, self).__getitem__(k)
+        out = super().__getitem__(k)
         if isinstance(out, PhotometricDataArray):
             if (out.dtype.names is None) or (len(out.dtype.names) < 16):
                 return np.asarray(out)
@@ -1782,6 +1784,7 @@ class PhotometricDataArray(np.ndarray):
             if (not out['masked']) and (not out['loaded']):
                 if self.datafile is None:
                     raise ValueError('Data file not specified.')
+                datafile, datadir = self._path_name(self.datafile)
                 f = os.path.join(datadir, out['file'])
                 if os.path.isfile(f):
                     out['pho'] = PhotometricData(f)
