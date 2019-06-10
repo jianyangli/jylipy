@@ -547,9 +547,9 @@ def add_sample_site(ax, size):
 class OCAMS_Photometry():
 
     def __init__(self, datadir=None, filter=['v', 'w', 'b', 'x', 'pan'],
-        match_map=True, binsize=None, pho_datafile=None, grid_datafile=None,
-        model_file=None, mesh_size=1, suffix='', model=None, overwrite=False,
-        maxmem=10, verbose=True, **kwargs):
+        match_map=True, exclude_poly=False, binsize=None, pho_datafile=None,
+        grid_datafile=None, model_file=None, mesh_size=1, suffix='',
+        model=None, overwrite=False, maxmem=10, verbose=True, **kwargs):
         """
         datadir : str
             Directory of input data
@@ -557,6 +557,8 @@ class OCAMS_Photometry():
             The filters to be processed
         match_map : bool
             Bin PolyCam images by 5x5 to match the resolution of MapCam
+        exclude_poly : bool
+            Exclude PolyCam images
         binsize : num
             The spatial bin size in pixels for images in ingestion
         pho_datafile : str
@@ -586,6 +588,7 @@ class OCAMS_Photometry():
         self.datadir = datadir
         self.filter = filter
         self.match_map = match_map
+        self.exclude_poly = exclude_poly
         self.binsize = binsize
         self.pho_datafile = pho_datafile
         self.grid_datafile = grid_datafile
@@ -670,8 +673,8 @@ class OCAMS_Photometry():
             self._model_file = os.path.splitext(v)[0]
 
     def ingest_phodata(self, datadir=None, filter=None, pho_datafile=None,
-        match_map=None, binsize=None, overwrite=None, suffix=None,
-        verbose=None):
+        match_map=None, exclude_poly=None, binsize=None, overwrite=None,
+        suffix=None, verbose=None):
         """Ingest photometric data from images and backplanes
 
         See `.__init__()` for arguments.
@@ -696,6 +699,8 @@ class OCAMS_Photometry():
             self._pho_datafile = tmp
         if match_map is None:
             match_map = self.match_map
+        if exclude_poly is None:
+            exclude_poly = self.exclude_poly
         if binsize is None:
             binsize = self.binsize
         if overwrite is None:
@@ -718,6 +723,8 @@ class OCAMS_Photometry():
                 print(f'Processing filter {flt}: {len(fs)} files found.')
             pho_all = PhotometricData()
             for f in fs:
+                if exclude_poly and (f.find('_pol_') != -1):
+                    continue
                 iof = readfits(f, verbose=False)
                 if isfile(f.replace('.dn.', '.linc.')):
                     inc = readfits(f.replace('.dn.', '.linc.'), verbose=False)
