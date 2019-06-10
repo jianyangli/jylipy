@@ -1247,3 +1247,35 @@ class OVIRS_Photometry():
             fit.model.write(model_file[i])
         return fit
 
+
+def calcalb(model_file, overwrite=False):
+    """Calculate albedo quantity maps from Hapke model maps.
+
+    The albedo quantites calculated include geometric albedo, Bond albedo,
+    and normal albedo.
+
+    model_file : str
+        The file genrated by `ModelSet.write()`.
+    """
+    from jylipy.Photometry.Hapke import geoalb, bondalb, RADF
+    fpar = fits.open(model_file)
+    geoalb_arr = np.zeros(fpar['mask'].shape)
+    bondalb_arr = np.zeros_like(geoalb_arr)
+    normalb_arr = np.zeros_like(geoalb_arr)
+    it = np.nditer(geoalb_arr, flags=['multi_index'])
+    while not it.finished:
+        par = {'w': fpar['w'].data[it.multi_index],
+               'g': fpar['g'].data[it.multi_index],
+               'theta': fpar['theta'].data[it.multi_index],
+               'shoe': (fpar['b0'].data[it.multi_index],
+                        fpar['h'].data[it.multi_index])}
+        geoalb_arr[it.multi_index] = geoalb(par)
+        bondalb_arr[it.multi_index] = bondalb(par)
+        normalb_arr[it.multi_index] = RADF((0,0,0), par)
+        it.iternext()
+
+    outfile = model_file.replace('.fits', '_albs.fits')
+    writefits(outfile, geoalb_arr, overwrite=overwrite)
+    writefits(outfile, bondalb_arr, append=True)
+    writefits(outfile, normalb_arr, append=True)
+
