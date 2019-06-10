@@ -2479,7 +2479,7 @@ class PhotometricGridFitter(object):
         njj = len(jj)
 
         def fit_ij(i, j):
-            if isinstance(data[i,j], PhotometricData):
+            if (not data._info['masked'][i,j]) and isinstance(data[i,j], PhotometricData):
                 d = data[i,j].copy()
                 d.validate()
                 d.trim(ilim=ilim, elim=elim, alim=alim, rlim=rlim)
