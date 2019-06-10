@@ -510,9 +510,9 @@ class Catalog(Table):
         plot(score,'o')
 
 
-def show_map(ax, data, title='Map', vmin=None, vmax=None, origin='down', cmap='jet', colorbarticks=None):
+def show_map(ax, data, title='Map', vmin=None, vmax=None, origin='down', cmap='jet', colorbarticks=None, norm=None):
 #    plt.figure(figsize=(8,3.3))
-    im = ax.imshow(data,vmin=vmin,vmax=vmax,cmap=cmap,aspect='auto',origin=origin)
+    im = ax.imshow(data,vmin=vmin,vmax=vmax,cmap=cmap,aspect='auto',origin=origin,norm=norm)
     sz = data.shape
     pplot(ax,xticks=np.linspace(0,sz[1],7),title=title,xlim=[0,sz[1]],ylim=[0,sz[0]])
 #    ax.yticks(np.linspace(0,180,7),[str(x) for x in range(-90,91,30)])
@@ -1246,4 +1246,59 @@ class OVIRS_Photometry():
         if model_file is not None:
             fit.model.write(model_file[i])
         return fit
+
+
+def calcalb(model_file, overwrite=False):
+    """Calculate albedo quantity maps from Hapke model maps.
+
+    The albedo quantites calculated include geometric albedo, Bond albedo,
+    and normal albedo.
+
+    model_file : str
+        The file genrated by `ModelSet.write()`.
+    """
+    from jylipy.Photometry.Hapke import geoalb, bondalb, RADF
+    fpar = fits.open(model_file)
+    geoalb_arr = np.zeros(fpar['mask'].shape)
+    bondalb_arr = np.zeros_like(geoalb_arr)
+    normalb_arr = np.zeros_like(geoalb_arr)
+    it = np.nditer(geoalb_arr, flags=['multi_index'])
+    while not it.finished:
+        par = {'w': fpar['w'].data[it.multi_index],
+               'g': fpar['g'].data[it.multi_index],
+               'theta': fpar['theta'].data[it.multi_index],
+               'shoe': (fpar['b0'].data[it.multi_index],
+                        fpar['h'].data[it.multi_index])}
+        geoalb_arr[it.multi_index] = geoalb(par)
+        bondalb_arr[it.multi_index] = bondalb(par)
+        normalb_arr[it.multi_index] = RADF((0,0,0), par)
+        it.iternext()
+
+    outfile = model_file.replace('.fits', '_albs.fits')
+    writefits(outfile, geoalb_arr, overwrite=overwrite)
+    writefits(outfile, bondalb_arr, append=True)
+    writefits(outfile, normalb_arr, append=True)
+
+
+def mark_rois(roifile, ax=None, name=False, **kwargs):
+    """Mark ROIs in the map
+
+    roifile : str
+        ROI file list name
+    ax : axis instance
+        The axis where ROIs will be marked
+    """
+
+    color = kwargs.pop('color', 'blue')
+    rois = Table.read(roifile)
+
+    if ax is None:
+        ax = plt.gca()
+    for r in rois:
+        lon = r['Lon']
+        lat = r['Lat']
+        ax.plot(lon, lat+90, 'o', markerfacecolor=color, **kwargs)
+        if name:
+            t = ax.text(lon, lat+90-5,r['Name'],ha='center',va='top',color=color,name='Arial')#, size='x-large')
+        #t.set_bbox(dict(facecolor='black',alpha=0.2,edgecolor='none'))
 
