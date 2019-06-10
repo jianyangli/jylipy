@@ -510,9 +510,9 @@ class Catalog(Table):
         plot(score,'o')
 
 
-def show_map(ax, data, title='Map', vmin=None, vmax=None, origin='down', cmap='jet', colorbarticks=None):
+def show_map(ax, data, title='Map', vmin=None, vmax=None, origin='down', cmap='jet', colorbarticks=None, norm=None):
 #    plt.figure(figsize=(8,3.3))
-    im = ax.imshow(data,vmin=vmin,vmax=vmax,cmap=cmap,aspect='auto',origin=origin)
+    im = ax.imshow(data,vmin=vmin,vmax=vmax,cmap=cmap,aspect='auto',origin=origin,norm=norm)
     sz = data.shape
     pplot(ax,xticks=np.linspace(0,sz[1],7),title=title,xlim=[0,sz[1]],ylim=[0,sz[0]])
 #    ax.yticks(np.linspace(0,180,7),[str(x) for x in range(-90,91,30)])
@@ -1278,4 +1278,27 @@ def calcalb(model_file, overwrite=False):
     writefits(outfile, geoalb_arr, overwrite=overwrite)
     writefits(outfile, bondalb_arr, append=True)
     writefits(outfile, normalb_arr, append=True)
+
+
+def mark_rois(roifile, ax=None, name=False, **kwargs):
+    """Mark ROIs in the map
+
+    roifile : str
+        ROI file list name
+    ax : axis instance
+        The axis where ROIs will be marked
+    """
+
+    color = kwargs.pop('color', 'blue')
+    rois = Table.read(roifile)
+
+    if ax is None:
+        ax = plt.gca()
+    for r in rois:
+        lon = r['Lon']
+        lat = r['Lat']
+        ax.plot(lon, lat+90, 'o', markerfacecolor=color, **kwargs)
+        if name:
+            t = ax.text(lon, lat+90-5,r['Name'],ha='center',va='top',color=color,name='Arial')#, size='x-large')
+        #t.set_bbox(dict(facecolor='black',alpha=0.2,edgecolor='none'))
 
