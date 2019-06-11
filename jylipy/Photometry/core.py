@@ -2554,8 +2554,8 @@ class PhotometricGridFitter(object):
                     process_fit(fitter, m, n, verbose=verbose)
 
         self.fitted = True
-        self.model.extra['RMS'] = self.RMS.astype(float)
-        self.model.extra['RRMS'] = self.RRMS.astype(float)
+        self.model.extra['RMS'] = self.RMS
+        self.model.extra['RRMS'] = self.RRMS
         return self.model
 
 
@@ -2784,7 +2784,31 @@ class ModelGrid(object):
         if len(ex_keys) > 0:
             out[0].header['extra'] = str(tuple(ex_keys))
             for k in ex_keys:
-                hdu = fits.ImageHDU(self.extra[k], name=k)
+                try:
+                    data = self.extra[k].astype(float)
+                except ValueError:
+                    len_arr = np.zeros(self.extra[k].shape, dtype=int)
+                    it = np.nditer(self.extra[k], flags=['multi_index',
+                        'refs_ok'])
+                    while not it.finished:
+                        try:
+                            len_arr[it.multi_index] = \
+                                len(self.extra[k][it.multi_index])
+                        except TypeError:
+                            pass
+                        it.iternext()
+                    sz = len_arr.max()
+                    data = np.zeros(self.extra[k].shape+(sz,))
+                    it = np.nditer(self.extra[k], flags=['multi_index',
+                        'refs_ok'])
+                    while not it.finished:
+                        if len_arr[it.multi_index] == 0:
+                            data[it.multi_index] = np.zeros(sz)
+                        else:
+                            data[it.multi_index] = \
+                                self.extra[k][it.multi_index]
+                        it.iternext()
+                hdu = fits.ImageHDU(data, name=k)
                 out.append(hdu)
         out.writeto(filename, overwrite=overwrite)
 
