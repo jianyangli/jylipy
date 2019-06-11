@@ -510,9 +510,9 @@ class Catalog(Table):
         plot(score,'o')
 
 
-def show_map(ax, data, title='Map', vmin=None, vmax=None, origin='down', cmap='jet', colorbarticks=None):
+def show_map(ax, data, title='Map', vmin=None, vmax=None, origin='down', cmap='jet', colorbarticks=None, norm=None):
 #    plt.figure(figsize=(8,3.3))
-    im = ax.imshow(data,vmin=vmin,vmax=vmax,cmap=cmap,aspect='auto',origin=origin)
+    im = ax.imshow(data,vmin=vmin,vmax=vmax,cmap=cmap,aspect='auto',origin=origin,norm=norm)
     sz = data.shape
     pplot(ax,xticks=np.linspace(0,sz[1],7),title=title,xlim=[0,sz[1]],ylim=[0,sz[0]])
 #    ax.yticks(np.linspace(0,180,7),[str(x) for x in range(-90,91,30)])
@@ -547,9 +547,9 @@ def add_sample_site(ax, size):
 class OCAMS_Photometry():
 
     def __init__(self, datadir=None, filter=['v', 'w', 'b', 'x', 'pan'],
-        match_map=True, binsize=None, pho_datafile=None, grid_datafile=None,
-        model_file=None, mesh_size=1, suffix='', model=None, overwrite=False,
-        maxmem=10, verbose=True, **kwargs):
+        match_map=True, exclude_poly=False, binsize=None, pho_datafile=None,
+        grid_datafile=None, model_file=None, mesh_size=1, suffix='',
+        model=None, overwrite=False, maxmem=10, verbose=True, **kwargs):
         """
         datadir : str
             Directory of input data
@@ -557,6 +557,8 @@ class OCAMS_Photometry():
             The filters to be processed
         match_map : bool
             Bin PolyCam images by 5x5 to match the resolution of MapCam
+        exclude_poly : bool
+            Exclude PolyCam images
         binsize : num
             The spatial bin size in pixels for images in ingestion
         pho_datafile : str
@@ -586,6 +588,7 @@ class OCAMS_Photometry():
         self.datadir = datadir
         self.filter = filter
         self.match_map = match_map
+        self.exclude_poly = exclude_poly
         self.binsize = binsize
         self.pho_datafile = pho_datafile
         self.grid_datafile = grid_datafile
@@ -670,8 +673,8 @@ class OCAMS_Photometry():
             self._model_file = os.path.splitext(v)[0]
 
     def ingest_phodata(self, datadir=None, filter=None, pho_datafile=None,
-        match_map=None, binsize=None, overwrite=None, suffix=None,
-        verbose=None):
+        match_map=None, exclude_poly=None, binsize=None, overwrite=None,
+        suffix=None, verbose=None):
         """Ingest photometric data from images and backplanes
 
         See `.__init__()` for arguments.
@@ -696,6 +699,8 @@ class OCAMS_Photometry():
             self._pho_datafile = tmp
         if match_map is None:
             match_map = self.match_map
+        if exclude_poly is None:
+            exclude_poly = self.exclude_poly
         if binsize is None:
             binsize = self.binsize
         if overwrite is None:
@@ -718,6 +723,8 @@ class OCAMS_Photometry():
                 print(f'Processing filter {flt}: {len(fs)} files found.')
             pho_all = PhotometricData()
             for f in fs:
+                if exclude_poly and (f.find('_pol_') != -1):
+                    continue
                 iof = readfits(f, verbose=False)
                 if isfile(f.replace('.dn.', '.linc.')):
                     inc = readfits(f.replace('.dn.', '.linc.'), verbose=False)
@@ -1246,4 +1253,59 @@ class OVIRS_Photometry():
         if model_file is not None:
             fit.model.write(model_file[i])
         return fit
+
+
+def calcalb(model_file, overwrite=False):
+    """Calculate albedo quantity maps from Hapke model maps.
+
+    The albedo quantites calculated include geometric albedo, Bond albedo,
+    and normal albedo.
+
+    model_file : str
+        The file genrated by `ModelSet.write()`.
+    """
+    from jylipy.Photometry.Hapke import geoalb, bondalb, RADF
+    fpar = fits.open(model_file)
+    geoalb_arr = np.zeros(fpar['mask'].shape)
+    bondalb_arr = np.zeros_like(geoalb_arr)
+    normalb_arr = np.zeros_like(geoalb_arr)
+    it = np.nditer(geoalb_arr, flags=['multi_index'])
+    while not it.finished:
+        par = {'w': fpar['w'].data[it.multi_index],
+               'g': fpar['g'].data[it.multi_index],
+               'theta': fpar['theta'].data[it.multi_index],
+               'shoe': (fpar['b0'].data[it.multi_index],
+                        fpar['h'].data[it.multi_index])}
+        geoalb_arr[it.multi_index] = geoalb(par)
+        bondalb_arr[it.multi_index] = bondalb(par)
+        normalb_arr[it.multi_index] = RADF((0,0,0), par)
+        it.iternext()
+
+    outfile = model_file.replace('.fits', '_albs.fits')
+    writefits(outfile, geoalb_arr, overwrite=overwrite)
+    writefits(outfile, bondalb_arr, append=True)
+    writefits(outfile, normalb_arr, append=True)
+
+
+def mark_rois(roifile, ax=None, name=False, **kwargs):
+    """Mark ROIs in the map
+
+    roifile : str
+        ROI file list name
+    ax : axis instance
+        The axis where ROIs will be marked
+    """
+
+    color = kwargs.pop('color', 'blue')
+    rois = Table.read(roifile)
+
+    if ax is None:
+        ax = plt.gca()
+    for r in rois:
+        lon = r['Lon']
+        lat = r['Lat']
+        ax.plot(lon, lat+90, 'o', markerfacecolor=color, **kwargs)
+        if name:
+            t = ax.text(lon, lat+90-5,r['Name'],ha='center',va='top',color=color,name='Arial')#, size='x-large')
+        #t.set_bbox(dict(facecolor='black',alpha=0.2,edgecolor='none'))
 
