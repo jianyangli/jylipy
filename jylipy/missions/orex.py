@@ -903,7 +903,7 @@ class OCAMS_Photometry():
         for i,p in enumerate(phodata):
             fit = p.fit(model, **fitting_kwargs)
             if model_file is not None:
-                fit.model.write(model_file[i])
+                fit.model.write(model_file[i], overwrite=overwrite)
             out.append(fit)
         return out
 
