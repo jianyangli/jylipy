@@ -96,6 +96,97 @@ class PhotometricDataArray(np.ndarray):
         """Return str(self)"""
         return self.__repr__()
 
+    def __getitem__(self, k):
+        out = super().__getitem__(k)
+        if isinstance(out, PhotometricDataArray):
+            if (out.dtype.names is None) or (len(out.dtype.names) < 16):
+                return np.asarray(out)
+            return out
+        else:
+            if (not out['masked']) and (not out['loaded']):
+                if self.datafile is None:
+                    raise ValueError('Data file not specified.')
+                datafile, datadir = self._path_name(self.datafile)
+                f = os.path.join(datadir, out['file'])
+                if os.path.isfile(f):
+                    self._memory_dump()
+                    out['pho'] = PhotometricData(f)
+                    out['loaded'] = True
+                    out['flushed'] = True
+                else:
+                    raise IOError('Data record not found from file {}'.
+                            format(f))
+            return out['pho']
+
+    def __setitem__(self, k, v):
+        if isinstance(k, str) or ((hasattr(k, '__iter__')) and \
+                np.any([isinstance(x, str) for x in k])):
+            raise ValueError('Setting property fields not allowed')
+        if (self[k] is None) or (isinstance(self[k], PhotometricData)):
+            if not isinstance(v, PhotometricData):
+                raise ValueError('`PhotometricData` instance required.')
+            self._memory_dump()
+            self['pho'][k] = v
+            self['count'][k] = len(v)
+            self['incmin'][k] = v.inclim[0].to('deg').value
+            self['incmax'][k] = v.inclim[1].to('deg').value
+            self['emimin'][k] = v.emilim[0].to('deg').value
+            self['emimax'][k] = v.emilim[1].to('deg').value
+            self['phamin'][k] = v.phalim[0].to('deg').value
+            self['phamax'][k] = v.phalim[1].to('deg').value
+            self['latmin'][k] = v.latlim[0].to('deg').value
+            self['latmax'][k] = v.latlim[1].to('deg').value
+            self['lonmin'][k] = v.lonlim[0].to('deg').value
+            self['lonmax'][k] = v.lonlim[1].to('deg').value
+            self['masked'][k] = False
+            self['flushed'][k] = False
+            self['loaded'][k] = True
+        elif isinstance(self[k], PhotometricDataArray):
+            if isinstance(v, PhotometricData):
+                self._memory_dump()
+                for x in np.nditer(self[k], flags=['refs_ok'],
+                        op_flags=['readwrite']):
+                    recname = str(x['file'].copy())
+                    x[...] = (v.copy(),
+                              recname,
+                              len(v),
+                              v.inclim[0].to('deg').value,
+                              v.inclim[1].to('deg').value,
+                              v.emilim[0].to('deg').value,
+                              v.emilim[1].to('deg').value,
+                              v.phalim[0].to('deg').value,
+                              v.phalim[1].to('deg').value,
+                              v.latlim[0].to('deg').value,
+                              v.latlim[1].to('deg').value,
+                              v.lonlim[0].to('deg').value,
+                              v.lonlim[1].to('deg').value,
+                              False,
+                              True,
+                              False)
+            elif isinstance(v, PhotometricDataArray):
+                fields = list(self.dtype.names)
+                fields.remove('file')
+                self._memory_dump()
+                for f in fields:
+                    from copy import deepcopy
+                    self[f][k] = deepcopy(v[f])
+                for x in np.nditer(self[k], flags=['refs_ok'],
+                        op_flags=['readwrite']):
+                    if not x['masked']:
+                        x['flushed'] = False
+            else:
+                raise ValueError('Only `PhotometricData` or'
+                    ' `PhotometricDataArray` instance allowed.')
+        else:
+            raise ValueError('Only `PhotometricData` or `PhotometricDataArray`'
+                ' instance allowed.')
+        self._memory_dump()
+
+    def _set_property(self, k, v):
+        """Set the property fields of the record array
+        """
+        super().__setitem__(k, v)
+
     def _memory_dump(self, forced=False, verbose=False):
         """Check the size of object, free memory by deleting
         """
@@ -252,97 +343,6 @@ class PhotometricDataArray(np.ndarray):
                 " data.")
         for k in info.dtype.names:
             self._set_property(k, info[k].reshape(self.shape))
-
-    def _set_property(self, k, v):
-        """Set the property fields of the record array
-        """
-        super().__setitem__(k, v)
-
-    def __getitem__(self, k):
-        out = super().__getitem__(k)
-        if isinstance(out, PhotometricDataArray):
-            if (out.dtype.names is None) or (len(out.dtype.names) < 16):
-                return np.asarray(out)
-            return out
-        else:
-            if (not out['masked']) and (not out['loaded']):
-                if self.datafile is None:
-                    raise ValueError('Data file not specified.')
-                datafile, datadir = self._path_name(self.datafile)
-                f = os.path.join(datadir, out['file'])
-                if os.path.isfile(f):
-                    self._memory_dump()
-                    out['pho'] = PhotometricData(f)
-                    out['loaded'] = True
-                    out['flushed'] = True
-                else:
-                    raise IOError('Data record not found from file {}'.
-                            format(f))
-            return out['pho']
-
-    def __setitem__(self, k, v):
-        if isinstance(k, str) or ((hasattr(k, '__iter__')) and \
-                np.any([isinstance(x, str) for x in k])):
-            raise ValueError('Setting property fields not allowed')
-        if (self[k] is None) or (isinstance(self[k], PhotometricData)):
-            if not isinstance(v, PhotometricData):
-                raise ValueError('`PhotometricData` instance required.')
-            self._memory_dump()
-            self['pho'][k] = v
-            self['count'][k] = len(v)
-            self['incmin'][k] = v.inclim[0].to('deg').value
-            self['incmax'][k] = v.inclim[1].to('deg').value
-            self['emimin'][k] = v.emilim[0].to('deg').value
-            self['emimax'][k] = v.emilim[1].to('deg').value
-            self['phamin'][k] = v.phalim[0].to('deg').value
-            self['phamax'][k] = v.phalim[1].to('deg').value
-            self['latmin'][k] = v.latlim[0].to('deg').value
-            self['latmax'][k] = v.latlim[1].to('deg').value
-            self['lonmin'][k] = v.lonlim[0].to('deg').value
-            self['lonmax'][k] = v.lonlim[1].to('deg').value
-            self['masked'][k] = False
-            self['flushed'][k] = False
-            self['loaded'][k] = True
-        elif isinstance(self[k], PhotometricDataArray):
-            if isinstance(v, PhotometricData):
-                self._memory_dump()
-                for x in np.nditer(self[k], flags=['refs_ok'],
-                        op_flags=['readwrite']):
-                    recname = str(x['file'].copy())
-                    x[...] = (v.copy(),
-                              recname,
-                              len(v),
-                              v.inclim[0].to('deg').value,
-                              v.inclim[1].to('deg').value,
-                              v.emilim[0].to('deg').value,
-                              v.emilim[1].to('deg').value,
-                              v.phalim[0].to('deg').value,
-                              v.phalim[1].to('deg').value,
-                              v.latlim[0].to('deg').value,
-                              v.latlim[1].to('deg').value,
-                              v.lonlim[0].to('deg').value,
-                              v.lonlim[1].to('deg').value,
-                              False,
-                              True,
-                              False)
-            elif isinstance(v, PhotometricDataArray):
-                fields = list(self.dtype.names)
-                fields.remove('file')
-                self._memory_dump()
-                for f in fields:
-                    from copy import deepcopy
-                    self[f][k] = deepcopy(v[f])
-                for x in np.nditer(self[k], flags=['refs_ok'],
-                        op_flags=['readwrite']):
-                    if not x['masked']:
-                        x['flushed'] = False
-            else:
-                raise ValueError('Only `PhotometricData` or'
-                    ' `PhotometricDataArray` instance allowed.')
-        else:
-            raise ValueError('Only `PhotometricData` or `PhotometricDataArray`'
-                ' instance allowed.')
-        self._memory_dump()
 
     @classmethod
     def from_file(cls, infile):
