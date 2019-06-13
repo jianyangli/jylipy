@@ -5,7 +5,7 @@ import numpy as np
 from astropy.io import fits
 from .core import PhotometricData
 
-__all__ = ['phoarr_info', 'PhotometricDataArray']
+__all__ = ['phoarr_info', 'PhotometricDataArray', 'PhotometricModelArray']
 
 
 _memory_size = lambda x: x*4.470348358154297e-08
@@ -350,4 +350,105 @@ class PhotometricDataArray(np.ndarray):
         obj = cls(shape)
         obj.read(infile)
         return obj
+
+
+class PhotometricModelArray(np.ndarray):
+    """Photometric model array
+
+    This class is to support the modeling of `PhotometricDataArray` class.  It
+    contains an array of the same photometric model.
+    """
+
+    def __new__(cls, shape, model):
+        """
+        shape : array-like int
+            Shape of array
+        model : class name
+            The model class
+        """
+        names = ('masked',)
+        names = names + model.param_names
+        types = [bool] + [object] * len(model.param_names)
+        dtype = [(n, d) for n, d in zip(names, types)]
+        obj = super().__new__(cls, shape, dtype=dtype)
+        for x in np.nditer(obj, flags=['refs_ok'], op_flags=['readwrite']):
+            x['masked'] = True
+        obj.__version__ = '1.0.0'
+        obj._model_class = model
+        obj._param_names = model.param_names
+        return obj
+
+    def __array_finalize__(self, obj):
+        if obj is None: return
+        self.__version__ = getattr(obj, '__version__', '1.0.0')
+
+    @property
+    def param_names(self):
+        """Parameter names"""
+        return self._param_names
+
+    @property
+    def model_class(self):
+        """Model class"""
+        return self._model_class
+
+    @property
+    def mask(self):
+        """Model grid mask, where invalide models are masked (True)"""
+        return self['masked']
+
+    def __repr__(self):
+        """Return repr(self)."""
+        return f'<{self.__class__.__name__} {self.shape}>'
+
+    def __str__(self):
+        """Return str(self)"""
+        return self.__repr__()
+
+    def __getitem__(self, k):
+        out = super().__getitem__(k)
+        if isinstance(out, PhotometricModelArray):
+            if (out.dtype.names is None) or (len(out.dtype.names) < len(self.param_names)+1):
+                return np.asarray(out)
+            else:
+                return out
+        if not out['masked']:
+            parms = [out[k] for k in self.param_names]
+            if hasattr(parms[0], '__iter__'):
+                n_models = len(parms[0])
+            else:
+                n_models = 1
+            return self.model_class(*parms, n_models=n_models)
+        else:
+            return None
+
+    def __setitem__(self, k, v):
+        if isinstance(k, str) or ((hasattr(k, '__iter__')) and \
+                np.any([isinstance(x, str) for x in k])):
+            raise ValueError('Setting property fields not allowed')
+        if (self[k] is None) or (isinstance(self[k], self.model_class)):
+            if not isinstance(v, self.model_class):
+                raise ValueError('`{}` instance required.'.
+                    format(self.model_class.__class__.__name__))
+            self['masked'][k] = False
+            for p in self.param_names:
+                self[p][k] = getattr(v, p).value
+        elif isinstance(self[k], PhotometricModelArray):
+            if isinstance(v, self.model_class):
+                for x in np.nditer(self[k], flags=['refs_ok'],
+                        op_flags=['readwrite']):
+                    pars = tuple([getattr(v, p).value for p in self.param_names])
+                    x[...] = (False,) + pars
+            elif isinstance(v, PhotometricModelArray):
+                for f in list(self.dtype.names):
+                    from copy import deepcopy
+                    self[f][k] = deepcopy(v[f])
+            else:
+                raise ValueError('Only `{}` or `PhotometricModelArray`'
+                    ' instance allowed.'.format(self.model_class.__class__.
+                    __name__))
+        else:
+            raise ValueError('Only `{}` or `PhotometricModelArray`'
+                    ' instance allowed.'.format(self.model_class.__class__.
+                    __name__))
 

@@ -12,8 +12,6 @@ import astropy.units as u
 from astropy.modeling import FittableModel, Fittable1DModel, Fittable2DModel, Parameter
 import os
 
-from .photometricdatagroup import *
-
 
 recipi = 1/np.pi  # reciprocal pi
 
