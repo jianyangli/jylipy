@@ -716,7 +716,6 @@ class OCAMS_Photometry():
             datadir = [datadir]
         files = np.concatenate([findfile(x,'dn.fits') for x in datadir])
 
-        out = []
         for i,flt in enumerate(filter):
             fs = [x for x in files if x.find('L2'+flt)!=-1]
             if verbose:
@@ -768,12 +767,8 @@ class OCAMS_Photometry():
                 pho_all.append(pho)
                 if verbose:
                     print(f'    {basename(f)}, {len(pho)} data points')
-            out.append(pho_all)
             if pho_datafile is not None:
                 pho_all.write(pho_datafile[i], overwrite=overwrite)
-        if len(out) == 1:
-            out = out[0]
-        return out
 
     def mesh_phodata(self, phodata=None, pho_datafile=None, mesh_size=None,
         grid_datafile=None, overwrite=None, verbose=None, maxmem=None):
@@ -833,16 +828,11 @@ class OCAMS_Photometry():
                 raise ValueError('Input data not specified.')
             phodata = [PhotometricData(f) for f in phofiles]
 
-        out = []
         for p, o in zip(phodata, grid_datafile):
             pg = PhotometricDataGrid(lat=lat,lon=lon, maxmem=maxmem)
             pg.file = o
             pg.port(p, verbose=verbose)
             pg.write(overwrite=True)
-            out.append(pg)
-        if len(out) == 1:
-            out = out[0]
-        return out
 
     def fit_phomesh(self, phodata=None, grid_datafile=None, model_file=None,
         model=None, verbose=None, overwrite=None, **kwargs):
@@ -897,15 +887,12 @@ class OCAMS_Photometry():
                 raise ValueError('Input data not specified.')
             phodata = [PhotometricDataGrid(datafile=f) for f in grid_datafile]
 
-        out = []
         fitting_kwargs = self.fitting_kwargs.copy()
         fitting_kwargs.update(kwargs)
         for i,p in enumerate(phodata):
             fit = p.fit(model, **fitting_kwargs)
             if model_file is not None:
                 fit.model.write(model_file[i], overwrite=overwrite)
-            out.append(fit)
-        return out
 
     def cube_model_pars(self, models=None, outfile=None, type='all',
         overwrite=None):
