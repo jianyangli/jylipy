@@ -652,7 +652,8 @@ class OCAMS_Photometry():
             model_suffix = self.model.__class__.__name__
         if self._model_file is None:
             if self.grid_datafile is not None:
-                out = [os.path.splitext(x)[0] for x in self.grid_datafile]
+                tmpstr = [x.replace('/Data/','/') for x in self.grid_datafile]
+                out = [os.path.splitext(x)[0] for x in tmpstr]
                 if self.suffix:
                     out = ['_'.join(x.split('_')[:-1]) for x in out]
             else:
@@ -1079,6 +1080,7 @@ class OVIRS_Photometry():
         if self._model_file is None:
             if self.grid_datafile is not None:
                 out = self.grid_datafile
+                out = out.replace('/Data/', '/')
                 out = os.path.splitext(out)[0]
                 if self.suffix:
                     out = '_'.join(out.split('_')[:-1])
