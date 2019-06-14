@@ -452,3 +452,44 @@ class PhotometricModelArray(np.ndarray):
                     ' instance allowed.'.format(self.model_class.__class__.
                     __name__))
 
+    def _init_model_params(self):
+        """Initialize model class using default parameters of self.model_class
+        """
+        for p in self.param_names:
+            self.__dict__[p] = self[p]
+            len_arr = np.ma.zeros(self.shape, dtype=int)
+            len_arr.mask = self.mask
+            it = np.nditer(self, flags=['multi_index', 'refs_ok'])
+            while not it.finished:
+                if not len_arr.mask[it.multi_index]:
+                    par = self[self.param_names[0]][it.multi_index]
+                    if hasattr(par, '__iter__'):
+                        len_arr[it.multi_index] = np.size(par)
+                    else:
+                        len_arr[it.multi_index] = 1
+                it.iternext()
+            len_max = len_arr.max()
+            if len_max == 1:
+                # single model
+                self.__dict__[p] = np.ma.array(self[p], mask=self.mask, \
+                    dtype=float)
+            elif (len_arr == len_max).all():
+                # homogeneous number of models
+                par = self[p]
+                non_masked = np.where(~self.mask.flatten())[0].min()
+                shape = np.shape(par.flatten()[non_masked])
+                it = np.nditer(par, flags=['multi_index', 'refs_ok'])
+                while not it.finished:
+                    if self.mask[it.multi_index]:
+                        par[it.multi_index] = np.zeros(shape)
+                    it.iternext()
+                par = np.vstack(par.reshape(-1))
+                par = par.reshape(self.shape+shape).astype(float)
+                mask = np.broadcast_to(self.mask, shape+self.shape)
+                ndim = len(mask.shape)
+                for i in range(ndim - len(self.shape)):
+                    mask = np.rollaxis(mask, 0, ndim)
+                self.__dict__[p] = np.ma.array(par, mask=mask)
+            else:
+                # variable number of models
+                self.__dict__[p] = np.ma.array(self[p], mask=self.mask)
