@@ -754,14 +754,16 @@ class OCAMS_Photometry():
                         pha = rebin(pha, [5, 5], mean=True)
                         lat = rebin(lat, [5, 5], mean=True)
                         lon = rebin(lon, [5, 5], mean=True)
-                if binsize is not None:
+                if binsize is not None
+                    mask = (pha == 0).astype(float)
+                    mask = rebin(mask, [binsize, binsize], mean=True)
                     iof = rebin(iof, [binsize, binsize], mean=True)
                     inc = rebin(inc, [binsize, binsize], mean=True)
                     emi = rebin(emi, [binsize, binsize], mean=True)
                     pha = rebin(pha, [binsize, binsize], mean=True)
                     lat = rebin(lat, [binsize, binsize], mean=True)
                     lon = rebin(lon, [binsize, binsize], mean=True)
-                good = (inc<90) & (inc>0) & (emi<90) & (emi>0)
+                good = (inc<90) & (inc>0) & (emi<90) & (emi>0) & (mask==0)
                 pho = PhotometricData(iof=iof[good], inc=inc[good],
                     emi=emi[good], pha=pha[good], geolat=lat[good],
                     geolon=lon[good])
