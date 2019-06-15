@@ -754,7 +754,7 @@ class OCAMS_Photometry():
                         pha = rebin(pha, [5, 5], mean=True)
                         lat = rebin(lat, [5, 5], mean=True)
                         lon = rebin(lon, [5, 5], mean=True)
-                if binsize is not None
+                if binsize is not None:
                     mask = (pha == 0).astype(float)
                     mask = rebin(mask, [binsize, binsize], mean=True)
                     iof = rebin(iof, [binsize, binsize], mean=True)
