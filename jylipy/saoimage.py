@@ -183,12 +183,12 @@ class DS9(pyds9.DS9):
         else:
             return float(x)-1, float(y)-1
 
-    def get_arr2np(self):
+    #def get_arr2np(self):
         '''Replacement of the original pyds9.DS9.get_arr2np(), which seems
         to return a float32 array with bytes swapped, and the image size
         corrected.'''
-        im = super(DS9, self).get_arr2np().byteswap()
-        return im.reshape(*im.shape[::-1])
+        #im = super(DS9, self).get_arr2np().byteswap()
+        #return im.reshape(*im.shape[::-1])
 
     def xpa(self):
         '''Interactive XPA command session
