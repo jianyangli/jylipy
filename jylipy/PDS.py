@@ -154,7 +154,7 @@ class Header(CaseInsensitiveOrderedDict):
                     u = 'degree'
                 elif u == 'degC':
                     u = 'deg_C'
-                elif u in ['w','v']:
+                elif u in ['w','v', 'W', 'V']:
                     u = u.upper()
                 else:
                     u = u.lower()
