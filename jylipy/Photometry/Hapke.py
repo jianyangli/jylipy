@@ -10,7 +10,8 @@ Written by Jian-Yang Li (Planetary Science Institute)
 from ..core import *
 from .core import PhotometricModel, HG1
 from ..plotting import *
-import numpy as np
+from .. import mesh
+import numpy as np, copy
 from astropy.modeling import Fittable1DModel, Fittable2DModel, FittableModel, Parameter
 
 
@@ -487,7 +488,7 @@ def calc_psi(i, e, alpha, cos=False):
     cospsi = (np.cos(ph_cp*np.pi/180)-mu0*mu)/sise
 
     # When cos(psi) is too close to 1 or -1, set it to 1 or -1
-    ww = np.abs(1-np.abs(cospsi)) < 1e-6
+    ww = np.abs(1-np.abs(cospsi)) < 1e-4
     cospsi[ww] = np.sign(cospsi[ww])
     psi = np.rad2deg(np.arccos(cospsi))
     psi[zeros] = 0.  # if i or e is 0, set the angle to be 0
@@ -2376,6 +2377,16 @@ class DiskInt5(Fittable1DModel):
         return [dravgdw, dravgdg, dravgdtheta, dravgdb0, dravgdh]
 
 
+class DiskInt5Log(DiskInt5):
+    @staticmethod
+    def evaluate(*args):
+        return np.log10(DiskInt5.evaluate(*args))
+
+    @staticmethod
+    def fit_deriv(*args):
+        return DiskInt5.fit_deriv(*args)/DiskInt5.evaluate(*args)
+
+
 class DiskInt6(Fittable1DModel):
     '''
  Hapke disk-integrated phase function model of a spherical shape with
@@ -2398,6 +2409,12 @@ class DiskInt6(Fittable1DModel):
     @staticmethod
     def evaluate(pha, w, b, c, theta, B0, h):
         return phasefunc(pha, {'w': w, 'g': (b, c), 'theta': theta, 'shoe': (B0, h)}, normalize=None)
+
+
+class DiskInt6Log(DiskInt6):
+    @staticmethod
+    def evaluate(*args):
+        return np.log10(DiskInt6.evaluate(*args))
 
 
 class Hapke5P(PhotometricModel):
@@ -2426,7 +2443,7 @@ class Hapke6P(PhotometricModel):
         return bdr((i, e, a), {'w': w, 'g': (b, c), 'shoe': (B0, h), 'theta': theta})
 
 
-def fitDiskInt5(alpha, measure, error=None, w=0.2, g=-0.3, theta=20., B0=1.0, h=0.01, covar=False, maxiter=1000, **kwarg):
+def fitDiskInt5(alpha, measure, error=None, w=0.2, g=-0.3, theta=20., B0=1.0, h=0.01, covar=False, maxiter=1000, log=False, **kwarg):
     '''Fit 5-parameter disk-integrated Hapke model
 
  Parameters
@@ -2463,11 +2480,17 @@ def fitDiskInt5(alpha, measure, error=None, w=0.2, g=-0.3, theta=20., B0=1.0, h=
     if error is not None and error.shape[0] != alpha.shape[0]:
         raise RuntimeError('Error array must have the same number of element as data')
 
+    parms = {'w': w, 'g': g, 'theta': theta, 'B0': B0, 'h': h}
     fixed = kwarg.pop('fixed', None)
-    if fixed is None:
-        model0 = DiskInt5(w=w, g=g, theta=theta, B0=B0, h=h)
+    if fixed is not None:
+        parms['fixed'] = fixed
+    if log:
+        model_class = DiskInt5Log
+        measure = np.log10(measure)
     else:
-        model0 = DiskInt5(w=w, g=g, theta=theta, B0=B0, h=h, fixed=fixed)
+        model_class = DiskInt5
+    model0 = model_class(**parms)
+
     f = MPFitter()
     #f = MPFitter()
     model = f(model0, alpha, measure, weights=weights, maxiter=maxiter, **kwarg)
@@ -2486,7 +2509,7 @@ def fitDiskInt5(alpha, measure, error=None, w=0.2, g=-0.3, theta=20., B0=1.0, h=
     return model
 
 
-def fitDiskInt6(alpha, measure, error=None, w=0.2, b=0.3, c=0.4, theta=20., B0=1.0, h=0.01, covar=False, maxiter=1000, **kwarg):
+def fitDiskInt6(alpha, measure, error=None, w=0.2, b=0.3, c=0.4, theta=20., B0=1.0, h=0.01, covar=False, maxiter=1000, log=False, **kwarg):
     '''Fit 6-parameter disk-integrated Hapke model
 
  Parameters
@@ -2523,11 +2546,17 @@ def fitDiskInt6(alpha, measure, error=None, w=0.2, b=0.3, c=0.4, theta=20., B0=1
     if error is not None and error.shape[0] != alpha.shape[0]:
         raise RuntimeError('Error array must have the same number of element as data')
 
+    parms = {'w': w, 'b': b, 'c': c, 'theta': theta, 'B0': B0, 'h': h}
     fixed = kwarg.pop('fixed', None)
-    if fixed is None:
-        model0 = DiskInt6(w=w, b=b, c=c, theta=theta, B0=B0, h=h)
+    if fixed is not None:
+        parms['fixed'] = fixed
+    if log:
+        model_class = DiskInt6Log
+        measure = np.log10(measure)
     else:
-        model0 = DiskInt6(w=w, b=b, c=c, theta=theta, B0=B0, h=h, fixed=fixed)
+        model_class = DiskInt6
+    model0 = model_class(**parms)
+
     #f = LevMarLSQFitter()
     f = MPFitter()
     model = f(model0, alpha, measure, weights=weights, maxiter=maxiter, **kwarg)
@@ -2615,3 +2644,72 @@ def create_pvl(par, outfile, **kwarg):
     f.write('  EndGroup\n')
     f.write('EndObject\n')
     f.close()
+
+
+
+class DiskInt():
+    """Disk-integrated phase function class for a sphere
+    """
+    def __init__(self, par, obs_dist=np.inf, light_dist=np.inf):
+        """
+        par: dict
+            Hapke model parameters
+        obs_dist, light_dist: number, optional
+            The observer distance and light source distance to body center
+        """
+        self.par = copy.deepcopy(par)
+        self.obs_dist = obs_dist
+        self.light_dist = light_dist
+
+    def __call__(self, obj, pha, normalized=False, return_all=False, **kwarg):
+        """Calculate disk-integrated phase function of a sphere numerically
+        obj: object mesh class
+            The object for which the phase function is calculated.  It must
+            have a method `.backplanes` that returns a tuple of
+            (inc_map, emi_map, pha_map, mask)
+        pha: number or array_like of number
+            Phase angles in rad
+        normalized: bool, optional
+            Returned phase function normalized or not
+        **kwarg: optional keywords
+            see `mesh.Sphere` for **kwarg
+
+        Return: ndarray of number
+            Phase function at `pha`
+        """
+        if hasattr(pha, '__iter__'):
+            out = np.zeros_like(pha)
+            if return_all:
+                imaps = []
+                emaps = []
+                amaps = []
+                masks = []
+                imgs = []
+            for i,p in enumerate(pha):
+                tmp = copy.copy(self)(obj, p, return_all=return_all, **kwarg)
+                if return_all:
+                    out[i] = tmp[0]
+                    imaps.append(tmp[1])
+                    emaps.append(tmp[2])
+                    amaps.append(tmp[3])
+                    masks.append(tmp[4])
+                    imgs.append(tmp[5])
+                else:
+                   out[i] = tmp
+            if return_all:
+                return out, imaps, emaps, amaps, masks, imgs
+            else:
+                return out
+        else:
+            isz = kwarg.pop('isz', 300)
+            imap, emap, amap, mask = obj.backplanes(pha, obs_dist=self.obs_dist, light_dist=self.light_dist, isz=isz)
+            img = np.zeros_like(imap)
+            vis_ill = mask == 2
+            sca = np.rad2deg(imap[vis_ill]), np.rad2deg(emap[vis_ill]), np.rad2deg(amap[vis_ill])
+            img[vis_ill] = bdr(sca, self.par, **kwarg)
+            xsec = len(np.where(mask != 0)[0])
+            out = img.sum()/xsec
+            if return_all:
+                return out, imap, emap, amap, mask, img
+            else:
+                return out

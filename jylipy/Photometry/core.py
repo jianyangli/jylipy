@@ -8,6 +8,7 @@ import numpy as np, numbers
 from ..core import ulen, condition
 from ..plotting import density, pplot
 from ..apext import units, Table, table, MPFitter, Column, fits
+import astropy.units as u
 from astropy.modeling import FittableModel, Fittable1DModel, Fittable2DModel, Parameter
 
 
@@ -586,7 +587,11 @@ class ScatteringGeometry(object):
 
     def is_valid(self):
         '''Check the validity of geometry, returns a bool array'''
-        return np.isfinite(self.inc) & np.isfinite(self.emi) & np.isfinite(self.pha) & np.isfinite(self.lon) & np.isfinite(self.lat) & np.isfinite(self.psi)
+        return np.isfinite(self.inc) & np.isfinite(self.emi) & \
+            np.isfinite(self.pha) & np.isfinite(self.lon) & \
+            np.isfinite(self.lat) & np.isfinite(self.psi) & \
+            (self.inc+self.emi >= self.pha) & \
+            (abs(self.inc-self.emi) <= self.pha)
 
     def validate(self):
         good = self.is_valid()
@@ -1159,6 +1164,10 @@ class PhotometricData(object):
         rt = indata[rk]
         gk = [x for x in indata.colnames if x in geo_keys]
         gt = indata[gk]
+        if 'geolat' in gt.keys():
+            gt.rename_column('geolat', 'lat')
+        if 'geolon' in gt.keys():
+            gt.rename_column('geolon', 'lon')
         if 'TUNIT1' in infits.header:
             unit = infits.header['TUNIT1'].strip()
         else:
@@ -1388,13 +1397,15 @@ class PhotometricData(object):
             self.geo.remove_row(*args, **kwargs)
         self._set_properties()
 
-    def trim(self, ilim=None, elim=None, alim=None, rlim=None):
+    def trim(self, ilim=None, elim=None, alim=None, rlim=None,
+        latlim=None, lonlim=None):
         '''Trim photometric data based on the limits in (i, e, a).
 
         v1.0.0 : 1/11/2016, JYL @PSI
         '''
         rm = np.zeros(len(self), dtype=bool)
-        for data,lim in zip([self.inc,self.emi,self.pha],[ilim, elim, alim]):
+        for data,lim in zip([self.inc, self.emi, self.pha, self.geolat,
+                self.geolon],[ilim, elim, alim, latlim, lonlim]):
             if lim is not None:
                 if hasattr(lim[0],'unit'):
                     l1 = lim[0].to('deg').value
@@ -1634,10 +1645,13 @@ class PhotometricDataGrid(object):
         if verbose:
             print('Cleaning memory...')
         for i in range(self.size):
-            if self._info1d['loaded'][i]:
+            if (self._info1d['loaded'][i]) and \
+                    (not self._info1d['masked'][i]) and \
+                    (not self._flushed1d[i]):
                 self._save_data(i)
                 self._data1d[i] = None
                 self._info1d['loaded'][i] = False
+                self._flushed1d[i] = True
         return True
 
     @property
@@ -1671,7 +1685,8 @@ class PhotometricDataGrid(object):
     def __len__(self):
         return len(self._data)
 
-    def __getitem__(self, key):
+    def _process_key(self, key):
+        """Process index key and return lists of indices"""
         if hasattr(key,'__iter__'):
             if len(key)!=2:
                 raise KeyError('invalid index')
@@ -1686,6 +1701,11 @@ class PhotometricDataGrid(object):
             i = key
             j = list(range(len(self.lon)-1))
         y, x = np.meshgrid(i, j)
+        return y, x
+
+    def __getitem__(self, key):
+        """Return value ``self[key]``"""
+        y, x = self._process_key(key)
         # check whether the data to be loaded are too large
         if _memory_size(self._info['count'][y,x].sum())>self.max_mem:
             raise MemoryError('insufficient memory to load all data requested')
@@ -1700,6 +1720,34 @@ class PhotometricDataGrid(object):
         out = self._data[key]
         return out
 
+    def __setitem__(self, key, value):
+        """Assign value ``value`` to ``self[key]``"""
+        # process input
+        valid_v = False
+        if isinstance(value, (PhotometricData, int)):
+            valid_v = True
+            value_shape = (1,1)
+        elif isinstance(value, (list, tuple, np.ndarray)):
+            if np.array([isinstance(v, (PhotometricData, int)) for v in np.asanyarray(value).flatten()]).all():
+                valid_v = True
+                value_shape = np.shape(value)
+        if not valid_v:
+            raise ValueError('Only ``PhotometricData`` or array of it can be assigned.')
+        y, x = self._process_key(key)
+        if x.shape != value_shape:
+            raise ValueError('Values to be assigned must have the same shape.')
+        # assign values
+        self._data[key] = value
+        self._info['loaded'][key] = True
+        self._info['masked'][key] = (value == 0)
+        self._flushed[key] = self._info['masked'][key] | False
+        for i,j in zip(y.flatten(), x.flatten()):
+            self._update_property(i,j)
+        # free memory if needed
+        loaded = self._info['loaded']
+        if _memory_size((self._info['count']*loaded.astype('i')).sum())>self.max_mem:
+            self._clean_memory(forced=True)
+
     def _load_data(self, *args):
         '''Load data for position [i,j] or position [i] for flattened case'''
         import os
@@ -1709,43 +1757,76 @@ class PhotometricDataGrid(object):
         cleaned = self._clean_memory()
         if len(args) == 2:
             i, j = args
-            f = path+'/'+self._info['file'][i,j]
-            if os.path.isfile(f):
-                self._data[i,j] = PhotometricData(f)
-                self._info['loaded'][i,j] = True
-                self._info['masked'][i,j] = False
-                self._flushed[i,j] = True
+            if not self._info['masked'][i,j]:
+                f = path+'/'+self._info['file'][i,j]
+                if os.path.isfile(f):
+                    self._data[i,j] = PhotometricData(f)
+                else:
+                    raise IOError('Data record not found for position ({}, {}'
+                        ') from file {}'.format(i,j,f))
+            self._info['loaded'][i,j] = True
+            self._flushed[i,j] = True
         elif len(args) == 1:
             i = args[0]
-            f = path+'/'+self._info1d['file'][i]
-            if os.path.isfile(f):
-                self._data1d[i] = PhotometricData(f)
-                self._info1d['loaded'][i] = True
-                self._info1d['masked'][i] = False
-                self._flushed1d[i] = True
+            if not self._info1d['masked'][i]:
+                f = path+'/'+self._info1d['file'][i]
+                if os.path.isfile(f):
+                    self._data1d[i] = PhotometricData(f)
+                else:
+                    raise IOError('Data record not found for flattened '
+                        'position ({}) from file {}'.format(i,f))
+            self._info1d['loaded'][i] = True
+            self._flushed1d[i] = True
         else:
             raise ValueError('2 or 3 arguments expected, {0} received'.format(len(args)+1))
         return cleaned
 
-    def _save_data(self, *args, **kwargs):
+    def _save_data(self, *args, outfile=None, update_flush_flag=True, **kwargs):
+        """Save data at specified position to output file
+
+        If ``outfile`` is set, then data will be directly saved to the
+        specified file.
+
+        If ``outfile`` is not set, then the output file will be inferred from
+        ``self.file``.
+
+        If ``update_flush_flag`` is True, then the corresponding
+        ``self._flushed`` flag will be updated to True after saving data.
+        Otherwise this flag is not updated.
+        """
         import os
-        if self.file is None:
-            raise ValueError('data file not specified')
-        infofile, path = self._path_name(self.file)
-        if not os.path.isdir(path):
-            os.mkdir(path)
+        if outfile is None:
+            if self.file is None:
+                raise ValueError('data file not specified')
+            infofile, path = self._path_name(self.file)
+            if not os.path.isdir(path):
+                os.mkdir(path)
+        else:
+            path = None
         if len(args) == 2:
             i, j = args
-            if (not self._info['masked'][i,j]) and (not self._flushed[i,j]):
-                f = path+'/'+self._info['file'][i,j]
+            if not self._info['masked'][i,j]:
+                if path is None:
+                    f = outfile
+                else:
+                    f = path+'/'+self._info['file'][i,j]
+                if not self._info['loaded'][i,j]:
+                    self._load_data(i,j)
                 self._data[i,j].write(f, overwrite=True)
-                self._flushed[i,j] = True
+                if update_flush_flag:
+                    self._flushed[i,j] = True
         elif len(args) == 1:
             i = args[0]
-            if (not self._info1d['masked'][i]) and (not self._flushed1d[i]):
-                f = path+'/'+self._info1d['file'][i]
+            if not self._info1d['masked'][i]:
+                if path is None:
+                    f = outfile
+                else:
+                    f = path+'/'+self._info1d['file'][i]
+                if not self._info1d['loaded'][i]:
+                    self._load_data(i)
                 self._data1d[i].write(f, overwrite=True)
-                self._flushed1d[i] = True
+                if update_flush_flag:
+                    self._flushed1d[i] = True
         else:
             raise ValueError('2 or 3 arguments expected, {0} received'.format(len(args)+1))
 
@@ -1758,7 +1839,18 @@ class PhotometricDataGrid(object):
         return outfile, outdir
 
     def write(self, outfile=None, overwrite=False):
-        '''Write data to disk
+        '''Write data to disk.
+
+        If ``outfile is None``, then this method flushes all data to disk
+        based on the location specified by ``self.file``.  If
+        ``self.file is None``, then it will throw an exception.
+
+        If a file name is provided via ``outfile``, then this method saves all
+        data to the specified output file.  If ``self.file == None`` before
+        calling this smethod, then the provided file name will be associated
+        to class object for operations.  Otherwise ``self.file`` will not be
+        changed, and the location specified by ``outfile`` is just an extra
+        copy of the data.
 
         outfile : str, optional
           Output file name.  If omitted, then the program does a memory flush,
@@ -1780,46 +1872,47 @@ class PhotometricDataGrid(object):
         else:
             if self.file is None:
                 self.file = outfile
-            flush = False
+                flush = True
+            else:
+                flush = False
 
         outfile, outdir = self._path_name(outfile)
         if os.path.isfile(outfile):
-            if not flush:
-                if overwrite:
-                    os.remove(outfile)
-                    if os.path.isdir(outdir):
-                        os.system('rm -rf '+outdir)
-                else:
-                    raise IOError('output file {0} already exists'.format(outfile))
+            if overwrite:
+                os.remove(outfile)
+                if os.path.isdir(outdir):
+                    os.system('rm -rf '+outdir)
+            elif not flush:
+                raise IOError('output file {0} already exists'.format(outfile))
+
+        # save envolope information
+        hdr0 = fits.Header()
+        hdr0['version'] = self.version
+        primary_hdu = fits.PrimaryHDU(header=hdr0)
+        hdr1 = fits.Header()
+        hdr1['extname'] = 'INFO'
+        table_hdu = fits.BinTableHDU(Table(self._info1d), header=hdr1)
+        lon_hdu = fits.ImageHDU(self.lon.value, name='lon')
+        lon_hdu.header['bunit'] = str(self.lon.unit)
+        lat_hdu = fits.ImageHDU(self.lat.value, name='lat')
+        lat_hdu.header['bunit'] = str(self.lat.unit)
+        hdu_list = fits.HDUList([primary_hdu, table_hdu, lon_hdu, lat_hdu])
+        hdu_list.writeto(outfile, overwrite=True)
 
         # save data
         if not os.path.isdir(outdir):
             os.mkdir(outdir)
         for i in range(self.size):
+            f = outdir+'/'+self._info1d['file'][i]
             if self._info1d['masked'][i]:
-                f = outdir+'/'+self._info1d['file'][i]
                 if os.path.isfile(f):
                     os.remove(f)
             else:
                 if flush:
                     if not self._flushed1d[i]:
-                        self._save_data(i)
+                        self._save_data(i, outfile=f)
                 else:
-                    self._save_data(i)
-
-        # save information
-        lst = Table(self._info1d)
-        lst.write(outfile, overwrite=True)
-        hdus = fits.open(outfile)
-        hdus[0].header['version'] = self.version
-        hdus[1].header['extname'] = 'INFO'
-        lonhdu = fits.ImageHDU(self.lon.value, name='lon')
-        lonhdu.header['bunit'] = str(self.lon.unit)
-        hdus.append(lonhdu)
-        lathdu = fits.ImageHDU(self.lat.value, name='lat')
-        lathdu.header['bunit'] = str(self.lat.unit)
-        hdus.append(lathdu)
-        hdus.writeto(outfile, clobber=True)
+                    self._save_data(i, outfile=f, update_flush_flag=False)
 
     def read(self, infile=None, verbose=False, load=False):
         '''Read data from a directory or a list of files
@@ -1906,23 +1999,16 @@ class PhotometricDataGrid(object):
                 self._flushed[j,i] = False
                 self._clean_memory(verbose=verbose)
 
-    def _update_property(self,j,i,masked=False,loaded=True):
-        data = self[j,i]
-        if len(data)>0:
-            self._info['count'][j,i] = len(data)
-            self._info['latmin'][j,i] = data.latlim[0]
-            self._info['latmax'][j,i] = data.latlim[1]
-            self._info['lonmin'][j,i] = data.lonlim[0]
-            self._info['lonmax'][j,i] = data.lonlim[1]
-            self._info['incmin'][j,i] = data.inclim[0]
-            self._info['incmax'][j,i] = data.inclim[1]
-            self._info['emimin'][j,i] = data.emilim[0]
-            self._info['emimax'][j,i] = data.emilim[1]
-            self._info['phamin'][j,i] = data.phalim[0]
-            self._info['phamax'][j,i] = data.phalim[1]
+    def _update_property(self,j,i,masked=None,loaded=None):
+        if masked is not None:
             self._info['masked'][j,i] = masked
+        if loaded is not None:
             self._info['loaded'][j,i] = loaded
+        if self._info['masked'][j,i]:
+            data = 0
         else:
+            data = self[j,i]
+        if isinstance(data, int) or len(data) <= 0:
             self._info['count'][j,i] = 0.
             self._info['latmin'][j,i] = 0.
             self._info['latmax'][j,i] = 0.
@@ -1934,8 +2020,74 @@ class PhotometricDataGrid(object):
             self._info['emimax'][j,i] = 0.
             self._info['phamin'][j,i] = 0.
             self._info['phamax'][j,i] = 0.
-            self._info['masked'][j,i] = True
-            self._info['loaded'][j,i] = loaded
+            if masked is None:
+                self._info['masked'][j,i] = True
+        else:
+            self._info['count'][j,i] = len(data)
+            if data.latlim is None:
+                self._info['latmin'][j,i] = 0 * u.deg
+                self._info['latmax'][j,i] = 0 * u.deg
+            else:
+                self._info['latmin'][j,i] = data.latlim[0]
+                self._info['latmax'][j,i] = data.latlim[1]
+            if data.lonlim is None:
+                self._info['lonmin'][j,i] = 0 * u.deg
+                self._info['lonmax'][j,i] = 0 * u.deg
+            else:
+                self._info['lonmin'][j,i] = data.lonlim[0]
+                self._info['lonmax'][j,i] = data.lonlim[1]
+            self._info['incmin'][j,i] = data.inclim[0]
+            self._info['incmax'][j,i] = data.inclim[1]
+            self._info['emimin'][j,i] = data.emilim[0]
+            self._info['emimax'][j,i] = data.emilim[1]
+            self._info['phamin'][j,i] = data.phalim[0]
+            self._info['phamax'][j,i] = data.phalim[1]
+
+    def _update_property_1d(self,i,masked=None,loaded=None):
+        if masked is not None:
+            self._info1d['masked'][i] = masked
+        if loaded is not None:
+            self._info1d['loaded'][i] = loaded
+        if self._info1d['masked'][i]:
+            data = 0
+        else:
+            if not self._info1d['loaded'][i]:
+                self._load_data(i)
+            data = self._data1d[i]
+        if isinstance(data, int) or len(data) <= 0:
+            self._info1d['count'][i] = 0.
+            self._info1d['latmin'][i] = 0.
+            self._info1d['latmax'][i] = 0.
+            self._info1d['lonmin'][i] = 0.
+            self._info1d['lonmax'][i] = 0.
+            self._info1d['incmin'][i] = 0.
+            self._info1d['incmax'][i] = 0.
+            self._info1d['emimin'][i] = 0.
+            self._info1d['emimax'][i] = 0.
+            self._info1d['phamin'][i] = 0.
+            self._info1d['phamax'][i] = 0.
+            if masked is None:
+                self._info1d['masked'][i] = True
+        else:
+            self._info1d['count'][i] = len(data)
+            if data.latlim is None:
+                self._info1d['latmin'][i] = 0 * u.deg
+                self._info1d['latmax'][i] = 0 * u.deg
+            else:
+                self._info1d['latmin'][i] = data.latlim[0]
+                self._info1d['latmax'][i] = data.latlim[1]
+            if data.lonlim is None:
+                self._info1d['lonmin'][i] = 0 * u.deg
+                self._info1d['lonmax'][i] = 0 * u.deg
+            else:
+                self._info1d['lonmin'][i] = data.lonlim[0]
+                self._info1d['lonmax'][i] = data.lonlim[1]
+            self._info1d['incmin'][i] = data.inclim[0]
+            self._info1d['incmax'][i] = data.inclim[1]
+            self._info1d['emimin'][i] = data.emilim[0]
+            self._info1d['emimax'][i] = data.emilim[1]
+            self._info1d['phamin'][i] = data.phalim[0]
+            self._info1d['phamax'][i] = data.phalim[1]
 
     def populate(self, *args, **kwargs):
         '''Populate photometric data grid.
@@ -2126,70 +2278,315 @@ class PhotometricDataGrid(object):
                 out.append(self._data1d[i])
         return out
 
+    def bin(self, outfile, **kwargs):
+        """Bin photometric data in all grid.
 
-class PhotometricGridFitter(object):
+        See `Binner` for parameters.
+
+        Returns a `PhotometricDataGrid` object associated with output file
+        ``outfile``.
+        """
+        import os
+        out = PhotometricDataGrid(lon=self.lon.copy(), lat=self.lat.copy())
+        if os.path.isfile(outfile):
+            raise IOError('Output file already exists.')
+        out.file = outfile
+        out._info1d['masked'] = self._info1d['masked']
+        for i in range(len(out._data1d)):
+            if self._info1d['masked'][i]:
+                out._data1d[i] = 0
+            else:
+                if not self._info1d['loaded'][i]:
+                    self._load_data(i)
+                out._data1d[i] = self._data1d[i].bin(**kwargs)
+            out._update_property_1d(i, loaded=True)
+        return out
+
+
+class PhotometricModelFitter(object):
+    '''Base class for fitting photometric data to model
+
+    v1.0.0 : 2015, JYL @PSI
+    v1.0.1 : 1/11/2016, JYL @PSI
+      Removed the default fitter definition and leave it for inherited class
+      Add `fitter` keyword to `__call__`.
+    '''
+
     def __init__(self):
         self.fitted = False
 
-    def __call__(self, model, data, fitter=None, ilim=None, elim=None, alim=None, rlim=None, **kwargs):
-        if fitter is not None:
-            f = fitter()
+    def __call__(self, model, pho, ilim=None, elim=None, alim=None, rlim=None, **kwargs):
+        '''
+        Parameters:
+        -----------
+        model : PhotometricModel instance
+      The initial model to fit to data
+        pho : PhotometricData instance
+      The data to be fitted
+        fitter : Any Fitter-like class
+      The fitter to be used.  If this keyword is present, then the
+      fitter class defined in this class is overrided.  If not specified,
+      and no fitter class is defined in this class or its inherited class,
+      an error will be thrown.
+        **kwargs: Other keywords accepted by the fitter.
+
+        v1.0.0 : 2015, JYL @PSI
+        v1.0.1 : 1/11/2016, JYL @PSI
+          Added fitter keywords
+        '''
+        if 'fitter' in kwargs:
+            f = kwargs.pop('fitter')()
         else:
             if not hasattr(self, 'fitter'):
                 raise ValueError('fitter not defined')
             else:
                 f = self.fitter()
+
+        self.data = pho.copy()
+        self.data.validate()
+        self.data.trim(ilim=ilim, elim=elim, alim=alim, rlim=rlim)
+        inputs = []
+        for k in model.inputs:
+            inputs.append(getattr(self.data.sca,k).to('deg').value)
+        bdr = self.data.BDR
+        if bdr.ndim == 1:
+            self.model = f(model, inputs[0], inputs[1], inputs[2], bdr, **kwargs)
+            self.fit_info = f.fit_info
+            self.fit = self.model(*inputs)
+            self.RMS = np.sqrt(((self.fit-self.data.BDR)**2).mean())
+            self.RRMS = self.RMS/self.data.BDR.mean()
+            self.fitted = True
+            return self.model
+        else:
+            self.model = []
+            self.fit_info = []
+            self.fit = []
+            self.RMS = []
+            self.RRMS = []
+            self.fitted = []
+            for r in bdr.T:
+                self.model.append(f(model, inputs[0], inputs[1], inputs[2], r, **kwargs))
+                self.fit_info.append(f.fit_info)
+                self.fit.append(self.model[-1](*inputs))
+                self.RMS.append(np.sqrt(((self.fit[-1]-r)**2).mean()))
+                self.RRMS.append(self.RMS[-1]/r.mean())
+                self.fitted.append(True)
+            return self.model
+
+    def plot(self, index=None):
+        if hasattr(self.model, '__iter__'):
+            if index is None:
+                raise ValueError('Index is not specified.')
+            fitted = self.fitted[index]
+            data = self.data.BDR[:,index]
+            fit = self.fit[index]
+        else:
+            fitted = self.fitted
+            data = self.data.BDR
+            fit = self.fit
+        if fitted == False:
+            print('No model has been fitted.')
+            return
+        from matplotlib import pyplot as plt
+        ratio = data/fit
+        figs = []
+        figs.append(plt.figure(100))
+        plt.clf()
+        f, ax = plt.subplots(3, 1, num=100)
+        for i, v, xlbl in zip(list(range(3)), [self.data.inc.value, self.data.emi.value, self.data.pha.value], ['Incidence', 'Emission', 'Phase']):
+            ax[i].plot(v, ratio, 'o')
+            ax[i].hlines(1, v.min(), v.max())
+            pplot(ax[i], xlabel=xlbl+' ('+str(self.data.inc.unit)+')', ylabel='Measured/Modeled')
+        figs.append(plt.figure(101))
+        plt.clf()
+        plt.plot(data, fit, 'o')
+        tmp1 = data
+        if isinstance(data, units.Quantity):
+            tmp1 = data.value
+        tmp2 = fit
+        if isinstance(fit, units.Quantity):
+            tmp2 = fit.value
+        tmp = np.concatenate((tmp1, tmp2))
+        lim = [tmp.min(),tmp.max()]
+        plt.plot(lim, lim)
+        pplot(xlabel='Measured BDR',ylabel='Modeled BDR')
+        return figs
+
+
+class PhotometricMPFitter(PhotometricModelFitter):
+    '''Photometric model fitter using MPFit'''
+    fitter = MPFitter
+
+
+class PhotometricGridFitter(object):
+    def __init__(self):
+        self.fitted = False
+
+    def __call__(self, model, data, fitter=None, ilim=None, elim=None,
+        alim=None, rlim=None, latlim=None, lonlim=None, multi=None, **kwargs):
+        """Fit PhotometricDataGrid to model
+
+        model : `~astropy.modeling.Model` instance
+            Model to be fitted
+        data : `PhotometricDataGrid`
+            Data to be fitted
+        fitter : astropy fitter class instance
+            Fitter used to fit the data
+        ilim : 2-element array like number or `astropy.units.Quantity`
+            Limit of incidence angle
+        elim : 2-element array like number or `astropy.units.Quantity`
+            Limit of emission angle
+        alim : 2-element array like number or `astropy.units.Quantity`
+            Limit of phase angle
+        rlim : 2-element array like number or `astropy.units.Quantity`
+            Limit of bidirectional reflectance
+        latlim : 2-element array like number of `astropy.units.Quantity`
+            Latitude range to be fitted
+        lonlim : 2-element array like number of `astropy.units.Quantity`
+            Longitude range to be fitted
+        multi : number
+            Number of multiple processes to run
+        **kwargs : dict
+            Keyword arguments accepted by `PhotometricData.fit()`
+
+        Return : `ModelGrid` instance
+        """
+        verbose = kwargs.pop('verbose', True)
+        if latlim is None:
+            latlim = [-90, 90]
+        if lonlim is None:
+            lonlim = [0, 360]
+        if fitter is not None:
+            self.fitter = fitter
+        if not hasattr(self, 'fitter'):
+            raise ValueError('Fitter not defined.')
         nlat, nlon = data.shape
         self.model = ModelGrid(type(model), nlon, nlat)
-        self.fit_info = np.zeros((nlat,nlon),dtype=dict)
+        self.fit_info = np.zeros((nlat,nlon),dtype=object)
         self.fit = np.zeros((nlat,nlon),dtype=np.ndarray)
-        self.RMS = np.zeros((nlat,nlon))
+        self.RMS = np.zeros((nlat,nlon),dtype=object)
+        self.RRMS = np.zeros((nlat,nlon),dtype=object)
         self.mask = np.ones((nlat,nlon),dtype=bool)
-        for i in range(nlat):
-            for j in range(nlon):
-                print('data ({0}, {1}) of ({2}, {3})'.format(i,j,nlat,nlon))
-                if isinstance(data[i,j], PhotometricData):
-                    d = data[i,j].copy()
-                    d.validate()
-                    d.trim(ilim=ilim, elim=elim, alim=alim, rlim=rlim)
-                    inputs = []
-                    for k in model.inputs:
-                        inputs.append(getattr(d.sca,k).to('deg').value)
-                    bdr = d.BDR
-                    if len(inputs[0])>len(model)+3:  # no idea why this line!!!
-                        self.model[i,j] = f(model, inputs[0], inputs[1], inputs[2], bdr, **kwargs)
-                        self.fit_info[i,j] = f.fit_info.copy()
-                        self.fit[i,j] = self.model[i,j](*inputs)
-                        self.RMS[i,j] = np.sqrt(((self.fit[i,j]-bdr)**2).mean())/bdr.mean()
-                    else:
-                        self.mask[i,j] = False
+        index_boundary = (np.asarray(latlim)+90)/180*nlat
+        i1 = int(np.floor(index_boundary[0]))
+        i2 = int(np.ceil(index_boundary[1]))
+        ii = range(i1, i2, 1)
+        nii = len(ii)
+        index_boundary = np.asarray(lonlim)/360*nlon
+        j1 = int(np.floor(index_boundary[0]))
+        j2 = int(np.ceil(index_boundary[1]))
+        jj = range(j1, j2, 1)
+        njj = len(jj)
+
+        def fit_ij(i, j):
+            if (not data._info['masked'][i,j]) and isinstance(data[i,j], PhotometricData):
+                d = data[i,j].copy()
+                d.validate()
+                d.trim(ilim=ilim, elim=elim, alim=alim, rlim=rlim)
+                if len(d) > 10:
+                    fitter = d.fit(model, fitter=self.fitter(), verbose=False,
+                        **kwargs)
+                    return fitter, i, j
+            return None, i, j
+
+        def process_fit(fitter, i, j, verbose=False):
+            if fitter is not None:
+                # assemble to a model set
+                if hasattr(fitter.model, '__iter__'):
+                    params = np.array([m.parameters for m in fitter.model])
+                    model_set = type(fitter.model[0])(*params.T,
+                        n_models=params.shape[0])
                 else:
-                    self.mask[i,j] = False
+                    model_set = fitter.model
+                self.model[i,j] = model_set
+                self.fit_info[i,j] = fitter.fit_info
+                self.fit[i,j] = fitter.fit
+                self.RMS[i,j] = fitter.RMS
+                self.RRMS[i,j] = fitter.RRMS
+                self.mask[i,j] = False
+            if verbose:
+                print('Grid ({0}, {1}) of ({2}-{3}, {4}-{5})'.format(i,j,i1,i2,
+                    j1,j2), end=': ')
+                if not self.mask[i,j]:
+                    if len(model_set) == 1:
+                        print(model_set.__repr__())
+                    else:
+                        print(model_set)
+                else:
+                    print('not fitted.')
+
+        def worker(ii, jj, out_q):
+            results = []
+            for i, j in zip(ii, jj):
+                results.append(fit_ij(i, j))
+            out_q.put(results)
+
+        if multi is not None:
+            if verbose:
+                print(f'Multiprocessing with {multi} workers')
+            import multiprocessing
+            from time import sleep
+            iis, jjs = np.meshgrid(ii, jj, indexing='ij')
+            iis = iis.flatten()
+            jjs = jjs.flatten()
+            niis = len(iis)
+            boundaries = [int(x) for x in np.round(np.linspace(0, niis+1,
+                multi+1))]
+            procs = []
+            out_q = multiprocessing.Queue()
+            for b1,b2 in zip(boundaries[:-1], boundaries[1:]):
+                p = multiprocessing.Process(target=worker,
+                    args=(iis[b1:b2], jjs[b1:b2], out_q))
+                procs.append(p)
+                p.start()
+            for i in range(multi):
+                results = out_q.get()
+                for r in results:
+                    if r is not None:
+                        process_fit(r[0], r[1], r[2], verbose=verbose)
+            for p in procs:
+                p.join()
+
+        else:
+            for i in ii:
+                for j in jj:
+                    fitter, m, n = fit_ij(i, j)
+                    process_fit(fitter, m, n, verbose=verbose)
+
         self.fitted = True
+        self.model.extra['RMS'] = self.RMS
+        self.model.extra['RRMS'] = self.RRMS
         return self.model
 
 
 class PhotometricGridMPFitter(PhotometricGridFitter):
-    fitter = MPFitter
+    fitter = PhotometricMPFitter
 
 
 class ModelGrid(object):
-    '''The longitude-latitude model grid corresponding to
-    `PhotometricDataGrid` data
+    """The longitude-latitude model grid class
 
- v1.0.0 : Jan 18, 2016, JYL @PSI
-    '''
+    This class is to support the modeling of `PhotometricDataGrid` class.  It
+    contains a grid of the same photometric model.
+    """
 
     _version = '1.0.0'
 
     def __init__(self, m0=None, nlon=None, nlat=None, datafile=None):
-        '''Initialization
+        """Initialization
 
- m0 : A model class
-   The class name of model to be fitted to the photometric data grid
-
- v1.0.0 : Jan 18, 2016, JYL @PSI
- '''
+        m0 : Model class
+            The class name of model.
+        nlon : number
+            The number of longitude grid points.  Non-integer will be rounded
+            to integer.
+        nlat : number
+            The number of latitude grid points.  Non-integer will be rounded
+            to integer.
+        datafile : str
+            Name of data file to initialize class.
+       """
+        self.extra = {}
         if datafile is not None:
             self.read(datafile)
             return
@@ -2197,18 +2594,15 @@ class ModelGrid(object):
         self._model_class = None
         self._model_grid = None
         self._param_names = None
-        self._nlon = None
-        self._nlat = None
-        self._mask = None
-        self.model_class = m0
-        self.reset_grid(nlon, nlat)
-
-    def reset_grid(self, nlon, nlat):
         self._nlon = nlon
         self._nlat = nlat
+        self._mask = None
+        self.model_class = m0
         self._init_model_params()
 
     def _init_model_params(self):
+        """Initialize model class using default parameters of self.model_class
+        """
         if self.model_class is not None:
             m = self.model_class()
             self._param_names = m.param_names
@@ -2216,30 +2610,36 @@ class ModelGrid(object):
                 self._model_grid = np.repeat(m, self.nlat*self.nlon).reshape(self.nlat,self.nlon)
                 self._mask = np.ones((self.nlat,self.nlon),dtype=bool)
                 for k in m.param_names:
-                    self.__dict__[k] = np.repeat(getattr(m, k), self.nlat*self.nlon).reshape(self.nlat,self.nlon)
+                    self.__dict__[k] = np.repeat(getattr(m, k), self.nlat*self.nlon).reshape(self.nlat,self.nlon).tolist()
 
     @property
     def param_names(self):
+        """Parameter names"""
         return self._param_names
 
     @property
     def model_grid(self):
+        """A numpy array contains the model grid"""
         return self._model_grid
 
     @property
     def nlon(self):
+        """Number of longitude grid points"""
         return self._nlon
 
     @property
     def nlat(self):
+        """Number of latitude grid points"""
         return self._nlat
 
     @property
     def model_class(self):
+        """Model class"""
         return self._model_class
 
     @model_class.setter
     def model_class(self, m0):
+        """Set model class"""
         if m0 is None:
             self._model_class = None
             self._model_grid = None
@@ -2250,10 +2650,12 @@ class ModelGrid(object):
 
     @property
     def mask(self):
+        """Model grid mask, where invalide models are masked (True)"""
         return self._mask
 
     @property
     def shape(self):
+        """Shape of model grid"""
         if self._model_grid is None:
             return ()
         else:
@@ -2263,10 +2665,12 @@ class ModelGrid(object):
         return len(self._model_grid)
 
     def __getitem__(self, k):
+        """Return model at specified index"""
         if self._model_grid is not None:
             return self._model_grid[k]
 
     def __setitem__(self, k, v):
+        """Set model at specified index"""
         if self._model_grid is None:
             raise ValueError('model grid not defined yet')
         if isinstance(v, self.model_class):
@@ -2279,7 +2683,22 @@ class ModelGrid(object):
         self.mask[k] = False
         self.update_params(*k)
 
-    def update_params(self, lat=None, lon=None, key=None):
+    def update_params(self, lat=None, lon=None, key=None, grid=True):
+        """Update model parameter attribute from model grid
+
+        lat : array-like int
+            Indices of latitudes to be updated.  Default is all latitude grid
+            points
+        lon : array-like int
+            Indices of longitudes to be updated.  Default is all longitude
+            grid points
+        key : array-like str
+            Names of parameters to be updated.  Default is all parameters
+        grid : bool
+            If `True` (defult), then `lat`, `lon` will be used to generate a
+            grid for the update.  Otherwise the update will be performed at
+            the coordinates of each pair of elements in `lat`, `lon`.
+        """
         if lat is None:
             lat = list(range(self.nlat))
         elif isinstance(lat,slice):
@@ -2301,13 +2720,41 @@ class ModelGrid(object):
         else:
             if not hasattr(key,'__iter__'):
                 key = np.asarray(key)
-        for i in lat:
-            for j in lon:
+        if grid:
+            for i in lat:
+                for j in lon:
+                    if not self.mask[i,j]:
+                        for k in key:
+                            self.__dict__[k][i][j] = getattr(self.model_grid[i,j],k).value
+        else:
+            for i, j in zip(lat, lon):
                 if not self.mask[i,j]:
                     for k in key:
-                        self.__dict__[k][i,j] = getattr(self.model_grid[i,j],k).value
+                        self.__dict__[k][i][j] = getattr(self.model_grid[i,j],k).value
 
     def write(self, filename, overwrite=False):
+        """Write model grid to a FITS file
+
+        filename : str
+            The output file name
+        overwrite : bool
+            Overwrite existing file
+
+        The output file is a multi-extension FITS file.
+
+        Primary extension:
+            `.header['model']` = str : model name
+            `.header['parnames'] = str : tuple of model parameters
+            No data
+        Secondary extension has a name 'MASK'
+            2D int array of shape (nlat, nlon) : model mask
+        Other extensions stores the model parameters, one parameter in each
+            extension, corresponding to the parameter names stored in the
+            primary header `.header['parnames']`.  The extension names are
+            parameter names.  The shape of data is (nlat, nlon) if the model
+            at all grid points are single model, or (nlat, nlon, n_models) if
+            model set.
+        """
         out = fits.HDUList()
         hdu = fits.PrimaryHDU()
         hdu.header['model'] = self.model_class.name
@@ -2315,28 +2762,96 @@ class ModelGrid(object):
         out.append(hdu)
         hdu = fits.ImageHDU(self.mask.astype('i'), name='mask')
         out.append(hdu)
-        for k in self.param_names:
-            hdu = fits.ImageHDU(getattr(self, k), name=k)
-            out.append(hdu)
-        out.writeto(filename, clobber=overwrite)
+        indx = np.where(~self.mask.flatten())[0][0]
+        n_models = len(self._model_grid.flatten()[indx])
+        if n_models == 1:
+            for k in self.param_names:
+                hdu = fits.ImageHDU(getattr(self, k), name=k)
+                out.append(hdu)
+        else:
+            for k in self.param_names:
+                v = getattr(self, k)
+                par = np.zeros((self.nlat, self.nlon, n_models))
+                for i in range(self.nlat):
+                    for j in range(self.nlon):
+                        if self.mask[i,j]:
+                            par[i,j] = np.repeat(v[i][j], n_models)
+                        else:
+                            par[i,j] = v[i][j]
+                hdu = fits.ImageHDU(par, name=k)
+                out.append(hdu)
+        ex_keys = self.extra.keys()
+        if len(ex_keys) > 0:
+            out[0].header['extra'] = str(tuple(ex_keys))
+            for k in ex_keys:
+                try:
+                    data = self.extra[k].astype(float)
+                except ValueError:
+                    len_arr = np.zeros(self.extra[k].shape, dtype=int)
+                    it = np.nditer(self.extra[k], flags=['multi_index',
+                        'refs_ok'])
+                    while not it.finished:
+                        try:
+                            len_arr[it.multi_index] = \
+                                len(self.extra[k][it.multi_index])
+                        except TypeError:
+                            pass
+                        it.iternext()
+                    sz = len_arr.max()
+                    data = np.zeros(self.extra[k].shape+(sz,))
+                    it = np.nditer(self.extra[k], flags=['multi_index',
+                        'refs_ok'])
+                    while not it.finished:
+                        if len_arr[it.multi_index] == 0:
+                            data[it.multi_index] = np.zeros(sz)
+                        else:
+                            data[it.multi_index] = \
+                                self.extra[k][it.multi_index]
+                        it.iternext()
+                hdu = fits.ImageHDU(data, name=k)
+                out.append(hdu)
+        out.writeto(filename, overwrite=overwrite)
 
     def read(self, filename):
+        """Read model grid from input FITS file
+
+        filename : str
+            The name of input FITS file
+        """
         hdus = fits.open(filename)
         self._model_class = eval(hdus['primary'].header['model'])
         self._param_names = eval(hdus['primary'].header['parnames'])
         self._mask = hdus['mask'].data.astype(bool)
         self._nlat, self._nlon = self.mask.shape
-        for k in self.param_names:
-            self.__dict__[k] = hdus[k].data.copy()
+        if hdus[self._param_names[0]].data.ndim == 2:
+            for k in self.param_names:
+                self.__dict__[k] = hdus[k].data.copy()
+        elif hdus[self._param_names[0]].data.ndim == 3:
+            for k in self.param_names:
+                self.__dict__[k] = [[hdus[k].data[i,j] for j in
+                    range(self.nlon)] for i in range(self.nlat)]
+            ii, jj = np.where(self.mask)
+            for i,j in zip(ii,jj):
+                for k in self.param_names:
+                    self.__dict__[k][i][j] = self.__dict__[k][i][j][0]
         self._model_grid = np.zeros((self.nlat, self.nlon), dtype=self.model_class)
         for i in range(self.nlat):
             for j in range(self.nlon):
                 if not self.mask[i,j]:
                     parms = {}
                     for k in self.param_names:
-                        parms[k] = getattr(self,k)[i,j]
+                        parms[k] = getattr(self,k)[i][j]
+                    if hasattr(parms[self.param_names[0]], '__iter__'):
+                        parms['n_models'] = len(parms[self.param_names[0]])
+                    else:
+                        parms['n_models'] = 1
                     self._model_grid[i,j] = self.model_class(**parms)
-
+                else:
+                    self._model_grid[i,j] = self.model_class()
+        if 'extra' in hdus['primary'].header:
+            keys = eval(hdus['primary'].header['extra'])
+            for k in keys:
+                self.extra[k] = hdus[k].data
 
 class PhaseFunction(FittableModel):
 
@@ -3126,12 +3641,16 @@ class Binner(object):
                             e_idx = i_idx & (data[2] >= e1) & (data[2] < e2)
                             if e_idx.any():
                                 data_in = [data[i][e_idx] for i in range(4)]
-                                [binned[i].append(data_in[i].mean()) for i in range(4)]
+                                [binned[i].append(data_in[i].mean(axis=0)) for i in range(4)]
                                 count.append(len(data_in[0]))
                                 if count[-1] > 1:
-                                    [error[i].append(data_in[i].std()) for i in range(4)]
+                                    [error[i].append(data_in[i].std(axis=0)) for i in range(4)]
                                 else:
-                                    [error[i].append(0.) for i in range(4)]
+                                    [error[i].append(0.) for i in range(3)]
+                                    if data[3].ndim == 1:
+                                        error[3].append(0.)
+                                    else:
+                                        error[3].append(np.zeros_like(data_in[3][0]))
 
         parms = {'dims': self.dims, 'bins': self.bins, 'boundary': self.boundary, 'count': np.array(count)}
         keys = {}
@@ -3147,94 +3666,6 @@ class Binner(object):
 
     def __call__(self, pho, verbose=False):
         return self.bin(pho, verbose=verbose)
-
-
-class PhotometricModelFitter(object):
-    '''Base class for fitting photometric data to model
-
-    v1.0.0 : 2015, JYL @PSI
-    v1.0.1 : 1/11/2016, JYL @PSI
-      Removed the default fitter definition and leave it for inherited class
-      Add `fitter` keyword to `__call__`.
-    '''
-
-    def __init__(self):
-        self.fitted = False
-
-    def __call__(self, model, pho, ilim=None, elim=None, alim=None, rlim=None, **kwargs):
-        '''
-    Parameters:
-    -----------
-    model : PhotometricModel instance
-      The initial model to fit to data
-    pho : PhotometricData instance
-      The data to be fitted
-    fitter : Any Fitter-like class
-      The fitter to be used.  If this keyword is present, then the
-      fitter class defined in this class is overrided.  If not specified,
-      and no fitter class is defined in this class or its inherited class,
-      an error will be thrown.
-    **kwargs: Other keywords accepted by the fitter.
-
-    v1.0.0 : 2015, JYL @PSI
-    v1.0.1 : 1/11/2016, JYL @PSI
-      Added fitter keywords
-        '''
-        if 'fitter' in kwargs:
-            f = kwargs.pop('fitter')()
-        else:
-            if not hasattr(self, 'fitter'):
-                raise ValueError('fitter not defined')
-            else:
-                f = self.fitter()
-
-        self.data = pho.copy()
-        self.data.validate()
-        self.data.trim(ilim=ilim, elim=elim, alim=alim, rlim=rlim)
-        inputs = []
-        for k in model.inputs:
-            inputs.append(getattr(self.data.sca,k).to('deg').value)
-        bdr = self.data.BDR
-        self.model = f(model, inputs[0], inputs[1], inputs[2], bdr, **kwargs)
-        self.fit_info = f.fit_info
-        self.fit = self.model(*inputs)
-        self.RMS = np.sqrt(((self.fit-self.data.BDR)**2).mean())
-        self.fitted = True
-        return self.model
-
-    def plot(self):
-        if self.fitted == False:
-            print('No model has been fitted.')
-            return
-        from matplotlib import pyplot as plt
-        ratio = self.data.BDR/self.fit
-        figs = []
-        figs.append(plt.figure(100))
-        plt.clf()
-        f, ax = plt.subplots(3, 1, num=100)
-        for i, v, xlbl in zip(list(range(3)), [self.data.inc.value, self.data.emi.value, self.data.pha.value], ['Incidence', 'Emission', 'Phase']):
-            ax[i].plot(v, ratio, 'o')
-            ax[i].hlines(1, v.min(), v.max())
-            pplot(ax[i], xlabel=xlbl+' ('+str(self.data.inc.unit)+')', ylabel='Measured/Modeled')
-        figs.append(plt.figure(101))
-        plt.clf()
-        plt.plot(self.data.BDR, self.fit, 'o')
-        tmp1 = self.data.BDR
-        if isinstance(self.data.BDR, units.Quantity):
-            tmp1 = self.data.BDR.value
-        tmp2 = self.fit
-        if isinstance(self.fit, units.Quantity):
-            tmp2 = self.fit.value
-        tmp = np.concatenate((tmp1, tmp2))
-        lim = [tmp.min(),tmp.max()]
-        plt.plot(lim, lim)
-        pplot(xlabel='Measured BDR',ylabel='Modeled BDR')
-        return figs
-
-
-class PhotometricMPFitter(PhotometricModelFitter):
-    '''Photometric model fitter using MPFit'''
-    fitter = MPFitter
 
 
 class ROLOModelFitter(PhotometricModelFitter):
