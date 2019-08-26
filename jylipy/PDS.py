@@ -165,8 +165,10 @@ class Header(CaseInsensitiveOrderedDict):
                 self[k] = [x.replace('\\', '/') for x in self[k]]
 
 
-pds_types = {'LSB_UNSIGNED_INTEGER': 'uint', \
-             'MSB_UNSIGNED_INTEGER': 'uint', \
+pds_types = {'LSB_UNSIGNED_INTEGER': 'uint',
+             'MSB_UNSIGNED_INTEGER': 'uint',
+             'LSB_INTEGER': 'int',
+             'MSB_INTEGER': 'int',
              'PC_REAL': 'float'} #, \
              # 'IEEE_REAL': 'float'}
 
