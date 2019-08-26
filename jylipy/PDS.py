@@ -148,16 +148,15 @@ class Header(CaseInsensitiveOrderedDict):
                 v, u = self[k].strip().split('<')
                 v = num(v)
                 u = u.strip('<>')
+                u = u.lower()
                 if u == 'kelvin':
                     u = 'Kelvin'
                 elif u == 'degrees':
                     u = 'degree'
-                elif u == 'degC':
+                elif u == 'degc':
                     u = 'deg_C'
-                elif u in ['w','v', 'W', 'V']:
+                elif u in ['w','v']:
                     u = u.upper()
-                else:
-                    u = u.lower()
                 if isinstance(v, numbers.Number):
                     self[k] = v*units.Unit(u)
             else:
