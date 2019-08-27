@@ -3903,9 +3903,9 @@ class Measurement(np.ndarray):
         self['error'] = temp.error
         return self
 
-    def __div__(self, other):
+    def __truediv__(self, other):
         if self.fields is None:
-            return super(Measurement, self).__div__(other)
+            return super(Measurement, self).__truediv__(other)
         else:
             d1, e1 = self.data, self.error
             d2, e2 = self._get_data(other), self._get_error(other)
@@ -3916,9 +3916,9 @@ class Measurement(np.ndarray):
                 out = Measurement(s)
             return self._carryover_fields(other, out)
 
-    def __rdiv__(self, other):
+    def __rtruediv__(self, other):
         if self.fields is None:
-            return super(Measurement, self).__rdiv__(other)
+            return super(Measurement, self).__rtruediv__(other)
         else:
             d1, e1 = self.data, self.error
             d2, e2 = self._get_data(other), self._get_error(other)
@@ -3929,8 +3929,8 @@ class Measurement(np.ndarray):
                 out = Measurement(s)
             return self._carryover_fields(other, out)
 
-    def __idiv__(self, other):
-        temp = self.__div__(other)
+    def __itruediv__(self, other):
+        temp = self.__truediv__(other)
         self['data'] = temp.data
         self['error'] = temp.error
         return self
@@ -4121,7 +4121,7 @@ def imageclean(im, threshold=3., pos=None, box=20, step=None, untouch=None, mask
  v1.0.0 : 4/29/2015, JYL @PSI
     '''
 
-    box2 = box/2
+    box2 = box//2
     if step is None:
         step = box2
     if pos is None:
@@ -4140,7 +4140,7 @@ def imageclean(im, threshold=3., pos=None, box=20, step=None, untouch=None, mask
         subim = im[y-box2:y+box2,x-box2:x+box2]#*(1-mask[y-box2:y+box2,x-box2:x+box2])
         submsk = np.zeros_like(subim,dtype=int)
         m,std = resmean(subim,threshold,std=True)
-        submsk[abs(subim-m) > std*3] = 1
+        submsk[abs(subim-m) > std*threshold] = 1
         mask[y-box2:y+box2,x-box2:x+box2] = submsk
         im1[y-box2:y+box2,x-box2:x+box2][submsk==1] = m
 

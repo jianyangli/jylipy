@@ -10,18 +10,28 @@ from .vector import *
 
 __all__ = ['load_generic_kernels', 'subcoord', 'obsgeom']
 
+generic_kernel_dir = '/Users/jyli/work/naif/generic_kernels/'
+
 def load_generic_kernels(kernel_dir=None):
     '''
  Load generic SPICE kernels
     '''
     if kernel_dir is None:
-        kerdir = '/Users/jyli/work/naif/generic_kernels/'
-    else:
-        kerdir = kernel_dir
-    spice.furnsh(kerdir+'lsk/naif0011.tls')
-    spice.furnsh(kerdir+'spk/planets/de430.bsp')
-    spice.furnsh(kerdir+'pck/pck00010.tpc')
-    spice.furnsh(kerdir+'names.ker')
+        kernel_dir = generic_kernel_dir
+    spice.furnsh(kernel_dir+'lsk/naif0011.tls')
+    spice.furnsh(kernel_dir+'spk/planets/de430.bsp')
+    spice.furnsh(kernel_dir+'pck/pck00010.tpc')
+    spice.furnsh(kernel_dir+'names.ker')
+
+
+def unload_generic_kernels(kernel_dir=None):
+    '''Unload generic SPICE kernels'''
+    if kernel_dir is None:
+        kernel_dir = generic_kernel_dir
+    spice.unload(kernel_dir+'lsk/naif0011.tls')
+    spice.unload(kernel_dir+'spk/planets/de430.bsp')
+    spice.unload(kernel_dir+'pck/pck00010.tpc')
+    spice.unload(kernel_dir+'names.ker')
 
 
 def subcoord(time, target, observer='earth', bodyframe=None, saveto=None, planetographic=False):

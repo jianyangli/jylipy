@@ -1280,13 +1280,15 @@ def calcalb(model_file, overwrite=False):
     writefits(outfile, normalb_arr, append=True)
 
 
-def mark_rois(roifile, ax=None, name=False, **kwargs):
+def mark_rois(roifile, ax=None, name=False, mesh_size=1, fmt='o', **kwargs):
     """Mark ROIs in the map
 
     roifile : str
         ROI file list name
     ax : axis instance
         The axis where ROIs will be marked
+    mesh_size : int
+        The size of lat-lon mesh in degrees
     """
 
     color = kwargs.pop('color', 'blue')
@@ -1297,8 +1299,10 @@ def mark_rois(roifile, ax=None, name=False, **kwargs):
     for r in rois:
         lon = r['Lon']
         lat = r['Lat']
-        ax.plot(lon, lat+90, 'o', markerfacecolor=color, **kwargs)
+        xx = lon/mesh_size
+        yy = (lat+90)/mesh_size
+        ax.plot(xx, yy, fmt, markerfacecolor=color, **kwargs)
         if name:
-            t = ax.text(lon, lat+90-5,r['Name'],ha='center',va='top',color=color,name='Arial')#, size='x-large')
+            t = ax.text(xx, yy-5/mesh_size,r['Name'],ha='center',va='top',color=color,name='Arial')#, size='x-large')
         #t.set_bbox(dict(facecolor='black',alpha=0.2,edgecolor='none'))
 

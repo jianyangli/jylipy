@@ -344,6 +344,11 @@ def load_pam(aperture=None, filter=None):
     if aperture.upper() not in load_aperture()['Aperture']:
         raise ValueError('invalid aperture {0}'.format(aperture))
 
+    amps = [['FQ387N','FQ437N','FQ508N','FQ619N','FQ889N'],
+            ['FQ378N','FQ492N','FQ674N','FQ750N','FQ937N'],
+            ['FQ232N','FQ422M','FQ575N','FQ634N','FQ906N'],
+            ['FQ243N','FQ436N','FQ672N','FQ727N','FQ924N']]
+
     pamfits = [wfc3dir+'Pixel_Area_Map/UVIS'+str(x)+'wfc3_map.fits' for x in [1,2]]
     if aperture.find('uvis1') != -1:
         pams = readfits(pamfits[0],ext=1,verbose=False)
@@ -352,7 +357,10 @@ def load_pam(aperture=None, filter=None):
     elif aperture.find('quad') != -1:
         if filter == None:
             raise ValueError('`filter'' has to be specified for ''QUAR'' apertures')
-        # TBD
+        if (filter in amps[0]) or (filter in amps[1]):
+            pams = readfits(pamfits[0],ext=1,verbose=False)
+        elif (filter in amps[2]) or (filter in amps[3]):
+            pams = readfits(pamfits[1],ext=1,verbose=False)
     else:
         pams = np.concatenate([readfits(x,ext=1,verbose=False) for x in pamfits][::-1])
     if aperture.find('c1k1c') != -1:
@@ -360,13 +368,18 @@ def load_pam(aperture=None, filter=None):
     if aperture.find('c512c') != -1:
         return pams[:512,:512]
     if aperture.find('m1k1c') != -1:
-        return pams[-1024:,-1025]
+        return pams[-1024:,-1025:]
     if aperture.find('m512c') != -1:
         return pams[-512:,-512:]
     if (aperture.find('2k2a') != -1) or (aperture.find('2k2c') != -1):
         return pams[1:,:2047]
     if (aperture.find('2k2b') != -1) or (aperture.find('2k2d') != -1):
         return pams[1:,2049:]
+    if aperture.find('quad') != -1:
+        if (filter in amps[0]) or (filter in amps[2]):
+            return pams[1:,:2047]
+        else:
+            return pams[1:,2049:]
     return pams
 
 
