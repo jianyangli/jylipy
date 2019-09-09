@@ -33,7 +33,7 @@ class LS(pho.PhotometricModel):
     def evaluate(inc, emi, pha, A0, b, c, d):
         disk = ls_disk(inc, emi)
         f = expoly(pha, b, c, d)
-        return np.pi * A0 * f * disk
+        return A0 * f * disk
 
 
 class ROLO(pho.PhotometricModel):
@@ -50,9 +50,9 @@ class ROLO(pho.PhotometricModel):
     def evaluate(inc, emi, pha, C0, C1, A0, A1, A2, A3, A4):
         opsur = C0 * np.exp(-C1 * pha)
         alpha2 = pha * pha
-        f = opsur + A0 + A1*alpha + A2*alpha2 + A3*pha*alpha2 + A4*alpha2*alpha2
+        f = opsur + A0 + A1*pha + A2*alpha2 + A3*pha*alpha2 + A4*alpha2*alpha2
         d = ls_disk(inc, emi)
-        return f * d
+        return f * d / np.pi
 
 
 class Minnaert(pho.PhotometricModel):
@@ -73,7 +73,7 @@ class Minnaert(pho.PhotometricModel):
         mu0 = np.cos(inc)
         mu = np.cos(emi)
         disk = (mu0 * mu)**(k-1) * mu0
-        return np.pi * Am * f * disk
+        return Am * f * disk
 
 
 class McEwen(pho.PhotometricModel):
@@ -92,7 +92,7 @@ class McEwen(pho.PhotometricModel):
         L = expoly(pha, b, c, d)
         disk = ls_disk(inc, emi)
         inc = _2rad(inc)
-        return np.pi * Amc * f * (2*L*disk + (1-L)*np.cos(inc))
+        return Amc * f * (2*L*disk + (1-L)*np.cos(inc))
 
 
 class Akimov(pho.PhotometricModel):
@@ -122,6 +122,6 @@ class Akimov_Linear(pho.PhotometricModel):
 
     @staticmethod
     def evaluate(pha, lat, lon, ALak, b):
-        f = 10**(b*pha)
+        f = 10**(0.4*b*pha)
         disk = pho.AkimovDisk(ALak)
-        return np.pi * ALak * f * disk(pha, lat, lon)
+        return np.pi * f * disk(pha, lat, lon)
