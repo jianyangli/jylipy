@@ -764,7 +764,7 @@ def coma(azind, azfth, size=(300,300), center=None, ns=200, core=(2,2), r=None, 
 
 
     ys, xs = size
-    if center == None:
+    if center is None:
         yc, xc = (ys-1.)/2., (xs-1.)/2.
     else:
         yc, xc = center
@@ -797,8 +797,8 @@ def coma(azind, azfth, size=(300,300), center=None, ns=200, core=(2,2), r=None, 
 
     # revise core region
     if ns > 1:
-        x1, x2 = round(xc)-core[0], round(xc)+core[0]+1
-        y1, y2 = round(yc)-core[1], round(yc)+core[1]+1
+        x1, x2 = int(round(xc)-core[0]), int(round(xc)+core[0]+1)
+        y1, y2 = int(round(yc)-core[1]), int(round(yc)+core[1]+1)
         coresize = (core[1]*2+1)*ns, (core[0]*2+1)*ns
         center = ns*(core[1]+0.5+xc-round(xc))-0.5, ns*(core[0]+0.5+yc-round(yc))-0.5
         coma_center = coma(azind,azfth,size=coresize, center=center, ns=-ns)
@@ -1154,6 +1154,7 @@ def enhance_1overrho(im, ext=0, center=None, centroid=False, div=True):
             ct = centroiding(img, refine=True, newframe=False, verbose=False)
         else:
             ct = center[i]
+        ct = int(ct[0]), int(ct[1])
 
         # Generate 1/rho model
         sz = img.shape
@@ -1241,7 +1242,7 @@ def azavg(im, ext=0, center=None, centroid=False):
         sz = img.shape
         ct = np.asarray(ct)
         rmax = int(np.ceil(np.linalg.norm([np.asarray([0,0])-ct, np.asarray([0,sz[1]-1])-ct, np.asarray([sz[0]-1,0])-ct, np.asarray([sz[0]-1,sz[1]-1])-ct],axis=1).max()))
-        azimg = xy2rt(img, center=ct, ramax=rmax, rabin=rmax*2+1, azbin=720, method='splinef2d')
+        azimg = xy2rt(img, center=ct, ramax=rmax, rastep=rmax*2+1, azstep=720, method='splinef2d')
         radprof = interp1d(np.linspace(0,rmax,rmax*2+1), np.median(azimg,axis=1))
         dst = dist(-ct[0], sz[0]-ct[0]-1, sz[0], -ct[1], sz[1]-ct[1]-1, sz[1])
         avgim = radprof(dst.reshape(-1)).reshape(sz)
@@ -1745,7 +1746,7 @@ def rot(im, ang, mag=1.0, center=None, missing=0., pivot=False, order=3, method=
         return interpn(points, im, xi, method=method, bounds_error=False, fill_value=np.asarray(missing).astype(im.dtype)).reshape(sz)
 
 
-def xy2rt(im, xxx_todo_changeme2, rastep=1., ramax=None, azstep=1., order=3, missing=0., method='linear', version='1.1'):
+def xy2rt(im, center, rastep=1., ramax=None, azstep=1., order=3, missing=0., method='linear', version='1.1'):
     '''
  Reproject the input image from rectangular coordinates to polar
  coordinates (theta, r)
@@ -1754,7 +1755,7 @@ def xy2rt(im, xxx_todo_changeme2, rastep=1., ramax=None, azstep=1., order=3, mis
  ----------
  im : array-like, number
    Input image
- (yc, xc) : sequence of two numbers
+ center : sequence of two numbers
    The center of input image, in vertical and horizontal directions
  rastep, azstep : number, optional
    The step sizes in radial and azimuthal directions.  Default is 1
@@ -1790,7 +1791,7 @@ def xy2rt(im, xxx_todo_changeme2, rastep=1., ramax=None, azstep=1., order=3, mis
  v1.1.1 : JYL @PSI, 5/6/2016
    Removed keywords `rabin' and `azbin', replace by `rastep' and `azstep'.
     '''
-    (yc, xc) = xxx_todo_changeme2
+    (yc, xc) = center
     im0 = np.asarray(im)
     sz = im0.shape
 
