@@ -119,7 +119,7 @@ def plot_model_quality(datafile):
     nm = len(q)-1
     mnames = [q[i].header['extname'] for i in range(1,1+nm)]
     plt.clf()
-    f, ax = plt.subplots(nm, 1, sharex=True, num=plt.gcf().number)
+    f, ax = plt.subplots(4, 1, sharex=True, num=plt.gcf().number)
     lbl = ['SLOPE','SLOPE_PHA','SLOPE_INC','SLOPE_EMI']
     for j in range(len(lbl)):
         for i in range(nm):
@@ -130,7 +130,7 @@ def plot_model_quality(datafile):
     ax[0].legend(mnames,loc='lower center',ncol=nm//2)
     pdf.savefig()
     plt.clf()
-    f, ax = plt.subplots(nm, 1, sharex=True, num=plt.gcf().number)
+    f, ax = plt.subplots(4, 1, sharex=True, num=plt.gcf().number)
     lbl = ['CORR','CORR_PHA','CORR_INC','CORR_EMI']
     for j in range(len(lbl)):
         for i in range(nm):
