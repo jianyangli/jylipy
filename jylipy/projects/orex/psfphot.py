@@ -1,9 +1,11 @@
 # PSF photometry submodule
 
 import numpy as np
+from copy import copy
 from astropy.modeling import Fittable2DModel, Parameter
 from astropy.modeling.fitting import LevMarLSQFitter
 from scipy.special import erf
+from ...apext import Table, Column
 
 
 _sqrt2recip = 1/np.sqrt(2)
@@ -98,7 +100,72 @@ class SmearedGaussian2D(Fittable2DModel):
     def flux(self):
         # flux derived and verified on 11/14/2019
         if self.smear == 0:
-            return self.amplitude * 2 * pi * self.sigma**2
+            return self.amplitude * 2 * np.pi * self.sigma**2
         else:
             return self.amplitude * np.sqrt(2*np.pi) * self.sigma \
                 * self.smear / erf(0.5 * self.smear / self.sigma * _sqrt2recip)
+
+
+
+class PSFPhot():
+    """Class to perform PSF photometry for given locations
+    """
+
+    def __init__(self, image, locations, box=11, fitter=None):
+        self.image = copy(image)
+        self.locations = copy(locations)
+        self.box = box
+        if fitter is None:
+            fitter = LevMarLSQFitter()
+        self.fitter = fitter
+        self.nloc = len(self.locations)
+
+    def __call__(self, m0):
+        """
+        model : astropy.modelig.Model instance
+        """
+        if self.image is None:
+            raise ValueError('No image is specified.')
+        if self.locations is None:
+            raise ValueError('No locations are specified.')
+
+        width = self.box//2
+        m0.x0 = width
+        m0.y0 = width
+
+        sz = self.image.shape
+        subims = np.zeros(self.nloc, dtype=object)
+        models = np.zeros(self.nloc, dtype=object)
+        regions = np.zeros((self.nloc, 4))
+        flux = np.zeros(self.nloc)
+        ct = np.zeros((self.nloc, 2))
+        for i, loc in enumerate(self.locations):
+            # extract sub-image
+            yc, xc = [int(round(x)) for x in loc]
+            x1 = np.clip(xc - width, 0, sz[0])
+            x2 = np.clip(xc + width + 1, 0, sz[0])
+            y1 = np.clip(yc - width, 0, sz[1])
+            y2 = np.clip(yc + width + 1, 0, sz[1])
+            subim = self.image[y1:y2,x1:x2].copy()
+            regions[i] = np.array([x1, y1, x2, y2])
+            subims[i] = subim
+            subsz = subim.shape
+            xx, yy = np.meshgrid(range(subsz[0]), range(subsz[1]))
+
+            # fit PSF to sub-image
+            m0.amplitude = subim.max()
+            m = self.fitter(m0, xx, yy, subim)
+            xc = xc - width + m.x0
+            yc = yc - width + m.y0
+
+            models[i] = m
+            flux[i] = m.flux
+            ct[i] = np.array([xc, yc])
+
+        parms = [m.parameters for m in models]
+        parm_tbl = Table(np.array(parms).T.tolist(),
+                names=models[0].param_names)
+        parm_tbl.add_column(Column(flux, name='flux'))
+        self.phot = parm_tbl
+        self.sub_images = subims
+        return parm_tbl
