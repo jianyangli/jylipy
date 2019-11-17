@@ -55,7 +55,7 @@ class SmearedGaussian2D(Fittable2DModel):
     sigma : Standard deviation of the Gaussian, S
     smear : Smearing length, M
     x0, y0 : Center position
-    position_angle : Position angle (deg) of the smearing direction, measured
+    position_angle : Position angle (rad) of the smearing direction, measured
             ccw from up, T
     background : Background level, C
 
@@ -75,7 +75,7 @@ class SmearedGaussian2D(Fittable2DModel):
     smear = Parameter(default=0., min=0.)
     x0 = Parameter(default=0.)
     y0 = Parameter(default=0.)
-    position_angle = Parameter(default=0., min=0., max=360.)
+    position_angle = Parameter(default=0., min=0., max=np.pi)
     background = Parameter(default=0.)
 
     @staticmethod
@@ -83,7 +83,7 @@ class SmearedGaussian2D(Fittable2DModel):
         # formula form verified on 11/14/2019
         dx = x - x0
         dy = y - y0
-        angle1 = angle+np.pi/2
+        angle1 = (angle + np.pi/2) % np.pi
         xx = dx*np.cos(angle1) + dy*np.sin(angle1)
         yy = -dx*np.sin(angle1) + dy*np.cos(angle1)
         if smear == 0:
@@ -168,4 +168,6 @@ class PSFPhot():
         parm_tbl.add_column(Column(flux, name='flux'))
         self.phot = parm_tbl
         self.sub_images = subims
+        self.models = models
+        self.regions = regions
         return parm_tbl
