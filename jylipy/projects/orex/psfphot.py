@@ -134,40 +134,60 @@ class PSFPhot():
         m0.y0 = width
 
         sz = self.image.shape
-        subims = np.zeros(self.nloc, dtype=object)
-        models = np.zeros(self.nloc, dtype=object)
+        mod_full = np.zeros_like(self.image)
+        xx0, yy0 = np.meshgrid(range(sz[1]), range(sz[0]))
+
+        subims = np.zeros(self.nloc, dtype=object)  # sub images
+        models = np.zeros(self.nloc, dtype=object)  # model objects
+        modims = np.zeros(self.nloc, dtype=object)  # model images
+        resims = np.zeros(self.nloc, dtype=object)  # residual images
         regions = np.zeros((self.nloc, 4))
         flux = np.zeros(self.nloc)
-        ct = np.zeros((self.nloc, 2))
+        pos = np.zeros((self.nloc, 2))  # position in original image
         for i, loc in enumerate(self.locations):
             # extract sub-image
             yc, xc = [int(round(x)) for x in loc]
-            x1 = np.clip(xc - width, 0, sz[0])
-            x2 = np.clip(xc + width + 1, 0, sz[0])
-            y1 = np.clip(yc - width, 0, sz[1])
-            y2 = np.clip(yc + width + 1, 0, sz[1])
+            x1 = np.clip(xc - width, 0, sz[1])
+            x2 = np.clip(xc + width + 1, 0, sz[1])
+            y1 = np.clip(yc - width, 0, sz[0])
+            y2 = np.clip(yc + width + 1, 0, sz[0])
             subim = self.image[y1:y2,x1:x2].copy()
             regions[i] = np.array([x1, y1, x2, y2])
             subims[i] = subim
             subsz = subim.shape
-            xx, yy = np.meshgrid(range(subsz[0]), range(subsz[1]))
+            xx, yy = np.meshgrid(range(subsz[1]), range(subsz[0]))
 
             # fit PSF to sub-image
             m0.amplitude = subim.max()
             m = self.fitter(m0, xx, yy, subim)
+
+            # position in original image
             xc = xc - width + m.x0
             yc = yc - width + m.y0
+            pos[i] = np.array([xc, yc])
 
+            # record model results
             models[i] = m
             flux[i] = m.flux
-            ct[i] = np.array([xc, yc])
+            modims[i] = m(xx, yy)
+            resims[i] = subim - modims[i]
+
+            # calculate full frame model
+            m1 = m.copy()
+            m1.x0, m1.y0 = pos[i]
+            mod_full += m(xx0, yy0)
 
         parms = [m.parameters for m in models]
         parm_tbl = Table(np.array(parms).T.tolist(),
                 names=models[0].param_names)
         parm_tbl.add_column(Column(flux, name='flux'))
         self.phot = parm_tbl
-        self.sub_images = subims
+        self.subims = subims
         self.models = models
+        self.submod = modims
+        self.subres = resims
+        self.spos = pos
         self.regions = regions
+        self.residual = self.image - mod_full
+
         return parm_tbl
