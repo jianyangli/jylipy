@@ -5,7 +5,13 @@ from copy import copy
 from astropy.modeling import Fittable2DModel, Parameter
 from astropy.modeling.fitting import LevMarLSQFitter
 from scipy.special import erf
+import astropy.units as u
 from ...apext import Table, Column
+from ...core import ascii_read
+from sbpy.bib import cite
+from sbpy import photometry
+from sbpy.calib import solar_fluxd
+import sbpy.units as sbu
 
 
 _sqrt2recip = 1/np.sqrt(2)
@@ -190,3 +196,86 @@ class PSFPhot():
         self.residual = self.image - mod_full
 
         return parm_tbl
+
+
+class Geometry():
+    """Observing geometry class"""
+    def __init__(self, rh, delta, phase):
+        """
+        rh: heliocentric distance, in au or Quantity
+        delta: observer distance, in km or Quantity
+        phase: phase angle, in deg or Quantity
+        """
+        if not isinstance(rh, u.Quantity):
+            rh = rh * u.au
+        if not isinstance(delta, u.Quantity):
+            delta = delta * u.km
+        if not isinstance(phase, u.Quantity):
+            phase = phase * u.deg
+        self.rh = rh
+        self.delta = delta
+        self.phase = phase
+
+
+class BennuPhaseFunc():
+    """Bennu phase function class
+
+    Default is the v-band phase function derived from approach data as
+    published in Hergenrother et al. (2019)
+    """
+    @cite({'Default Bennu V-band phase function': '2019NatCo..10.1291H',
+           'Bennu radius': '2019Natur.568...55L'})
+    def __init__(self, model=None):
+        """
+        model : str
+            File name, ASCII file store the phase function model
+        """
+        if model is None:
+            self.model = '/Users/jyli/Work/OSIRIS-REx/Publications/201903_Nature/AWG/model_phasefunc.txt'
+        else:
+            self.model = model
+
+        # equivalent radius of Bennu in km (Lauretta et al. 2019)
+        r_bennu = 0.24503 * u.km
+
+        phase_model = ascii_read(self.model)
+        with solar_fluxd.set({'V': -26.77 * u.mag}):
+            iof = (phase_model['HG12'] * u.mag).to('1/sr', sbu.reflectance('V',
+                    cross_section=np.pi * r_bennu**2)).value * np.pi
+        from scipy.interpolate import interp1d
+        self.func = interp1d(phase_model['phase'], iof)
+
+    def __call__(self, phase):
+        return self.func(phase)
+
+
+class Dust():
+    """Dust class"""
+    def __init__(self, radius=None, phasefunc=None):
+        """
+        radius: the radius of dust
+        phasefunc: the phase function of dust, where the <I/F> at phase angle
+            a is `phasefunc(a)`
+        """
+        self.radius = radius
+        self.phasefunc = phasefunc
+
+    @property
+    def diameter(self):
+        return 2 * self.radius
+
+    @classmethod
+    def from_counts(cls, counts, geom, phasefunc=BennuPhaseFunc()):
+        """Calculate dust radius from count rate
+
+        counts: The count rate in DN/s
+        geom: Geometry class object, observing geometry for `counts`
+        phasefunc: The phase function of dust, where the <I/F> at phase angle
+            a is `phasefunc(a)`
+        """
+        pixscl = 2.8e-4  # NAVCAM1 pixel scale in rad number from Hergenrother
+        iofcal = 2.12e-8   # I/F calibration constant at 1 au
+        iof = counts * iofcal * geom.rh.to('au').value**2
+        fill_fac = iof / phasefunc(geom.phase.to('deg').value)
+        radius = pixscl * geom.delta * np.sqrt(fill_fac / np.pi)
+        return cls(radius=radius, phasefunc=phasefunc)
