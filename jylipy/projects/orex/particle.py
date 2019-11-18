@@ -180,7 +180,8 @@ class PSFPhot():
             # calculate full frame model
             m1 = m.copy()
             m1.x0, m1.y0 = pos[i]
-            mod_full += m(xx0, yy0)
+            m1.background = 0.
+            mod_full += m1(xx0, yy0)
 
         parms = [m.parameters for m in models]
         parm_tbl = Table(np.array(parms).T.tolist(),
