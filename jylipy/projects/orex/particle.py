@@ -116,7 +116,7 @@ class PSFPhot():
     """Class to perform PSF photometry for given locations
     """
 
-    def __init__(self, image, locations, box=11, fitter=None):
+    def __init__(self, image, locations, box=11, fitter=None, mask=None):
         self.image = copy(image)
         self.locations = copy(locations)
         self.box = box
@@ -124,6 +124,7 @@ class PSFPhot():
             fitter = LevMarLSQFitter()
         self.fitter = fitter
         self.nloc = len(self.locations)
+        self.mask = mask
 
     def __call__(self, m0):
         """
@@ -164,6 +165,11 @@ class PSFPhot():
 
             # fit PSF to sub-image
             m0.amplitude = subim.max()
+            if self.mask is not None:
+                gdpix = ~self.mask[y1:y2,x1:x2]
+                xx = xx[gdpix]
+                yy = yy[gdpix]
+                subim = subim[gdpix]
             m = self.fitter(m0, xx, yy, subim)
 
             # position in original image
@@ -174,8 +180,14 @@ class PSFPhot():
             # record model results
             models[i] = m
             flux[i] = m.flux
-            modims[i] = m(xx, yy)
-            resims[i] = subim - modims[i]
+            if self.mask is None:
+                modims[i] = m(xx, yy)
+                resims[i] = subim - modims[i]
+            else:
+                modims[i] = np.zeros(subsz)
+                modims[i][gdpix] = m(xx, yy)
+                resims[i] = np.zeros(subsz)
+                resims[i][gdpix] = subim - modims[i][gdpix]
 
             # calculate full frame model
             m1 = m.copy()
