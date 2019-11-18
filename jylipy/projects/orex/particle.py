@@ -50,7 +50,6 @@ class RoundGaussian2D(Fittable2DModel):
         return 2*np.pi*self.sigma**2*self.amplitude
 
 
-# Allowing smearing in arbitrary orientation
 class SmearedGaussian2D(Fittable2DModel):
     """
     Round 2D Gaussian with a 1-D linear smearing
@@ -63,11 +62,10 @@ class SmearedGaussian2D(Fittable2DModel):
     x0, y0 : Center position
     position_angle : Position angle (rad) of the smearing direction, measured
             ccw from up, T
-    background : Background level, C
 
     Model formula
     -------------
-        G(x, y) = A * exp(-0.5 * (x' / S)**2) * Y + C
+        G(x, y) = A * exp(-0.5 * (x' / S)**2) * Y
         Y(y) = (erf((M/2 - y') / (sqrt(2)*S)) + erf((M/2 + y') / (sqrt(2)*S)))
                     / norm
         norm = 2 * erf(M / (2 * S * sqrt(2)))
@@ -82,10 +80,9 @@ class SmearedGaussian2D(Fittable2DModel):
     x0 = Parameter(default=0.)
     y0 = Parameter(default=0.)
     position_angle = Parameter(default=0., min=0., max=np.pi)
-    background = Parameter(default=0.)
 
     @staticmethod
-    def evaluate(x, y, amplitude, sigma, smear, x0, y0, angle, background):
+    def evaluate(x, y, amplitude, sigma, smear, x0, y0, angle):
         # formula form verified on 11/14/2019
         dx = x - x0
         dy = y - y0
@@ -100,7 +97,7 @@ class SmearedGaussian2D(Fittable2DModel):
             zx = (erf((d-xx)/sigma*_sqrt2recip)
                     + erf((d+xx)/sigma*_sqrt2recip))/norm
         zy = np.exp(-0.5* (yy/sigma)**2)
-        return amplitude * zx * zy + background
+        return amplitude * zx * zy
 
     @property
     def flux(self):
@@ -110,6 +107,83 @@ class SmearedGaussian2D(Fittable2DModel):
         else:
             return self.amplitude * np.sqrt(2*np.pi) * self.sigma \
                 * self.smear / erf(0.5 * self.smear / self.sigma * _sqrt2recip)
+
+    def BGFree(self):
+        """Return a background-free version of the model
+        """
+        return SmearedGaussian2D(self.amplitude, self.sigma, self.smear,
+                self.x0, self.y0, self.position_angle)
+
+
+class SmearedGaussian2D_ConstantBG(SmearedGaussian2D):
+    """
+    Round 2D Gaussian with a 1-D linear smearing with a constant background
+
+    Model parameters
+    ----------------
+    amplitude : Amplitude of the Gaussian, A
+    sigma : Standard deviation of the Gaussian, S
+    smear : Smearing length, M
+    x0, y0 : Center position
+    position_angle : Position angle (rad) of the smearing direction, measured
+            ccw from up, T
+    background : Background level, C
+
+    Model formula
+    -------------
+        G(x, y) = G0(x, y) + C
+        where G0(x, y) is background-free SmearedGaussian2D model
+    """
+    amplitude = Parameter(default=1., min=0.)
+    sigma = Parameter(default=1., min=0.)
+    smear = Parameter(default=0., min=0.)
+    x0 = Parameter(default=0.)
+    y0 = Parameter(default=0.)
+    position_angle = Parameter(default=0., min=0., max=np.pi)
+    background = Parameter(default=0.)
+
+    @staticmethod
+    def evaluate(x, y, amplitude, sigma, smear, x0, y0, angle, background):
+        return SmearedGaussian2D.evaluate(x, y, amplitude, sigma, smear, x0,
+                y0, angle) + background
+
+
+class SmearedGaussian2D_LinearBG(SmearedGaussian2D):
+    """
+    Round 2D Gaussian with a 1-D linear smearing with a constant background
+
+    Model parameters
+    ----------------
+    amplitude : Amplitude of the Gaussian, A
+    sigma : Standard deviation of the Gaussian, S
+    smear : Smearing length, M
+    x0, y0 : Center position
+    position_angle : Position angle (rad) of the smearing direction, measured
+            ccw from up, T
+    a : Background slope along x
+    b : Background slope along y
+    c : Background constant c
+
+    Model formula
+    -------------
+        G(x, y) = G0(x, y) + BG(x, y)
+        BG(x, y) = a*x + b*y + c
+        where G0(x, y) is background-free SmearedGaussian2D model
+    """
+    amplitude = Parameter(default=1., min=0.)
+    sigma = Parameter(default=1., min=0.)
+    smear = Parameter(default=0., min=0.)
+    x0 = Parameter(default=0.)
+    y0 = Parameter(default=0.)
+    position_angle = Parameter(default=0., min=0., max=np.pi)
+    a = Parameter(default=0.)
+    b = Parameter(default=0.)
+    c = Parameter(default=0.)
+
+    @staticmethod
+    def evaluate(x, y, amplitude, sigma, smear, x0, y0, angle, a, b, c):
+        return SmearedGaussian2D.evaluate(x, y, amplitude, sigma, smear, x0,
+                y0, angle) + a*x + b*y + c
 
 
 class PSFPhot():
@@ -181,18 +255,17 @@ class PSFPhot():
             models[i] = m
             flux[i] = m.flux
             if self.mask is None:
-                modims[i] = m(xx, yy)
+                modims[i] = m.BGFree()(xx, yy)
                 resims[i] = subim - modims[i]
             else:
                 modims[i] = np.zeros(subsz)
-                modims[i][gdpix] = m(xx, yy)
+                modims[i][gdpix] = m.BGFree()(xx, yy)
                 resims[i] = np.zeros(subsz)
                 resims[i][gdpix] = subim - modims[i][gdpix]
 
             # calculate full frame model
-            m1 = m.copy()
+            m1 = m.BGFree()
             m1.x0, m1.y0 = pos[i]
-            m1.background = 0.
             mod_full += m1(xx0, yy0)
 
         parms = [m.parameters for m in models]
