@@ -106,7 +106,6 @@ class SmearedGaussian2D(Fittable2DModel):
                 * self.smear / erf(0.5 * self.smear / self.sigma * _sqrt2recip)
 
 
-
 class PSFPhot():
     """Class to perform PSF photometry for given locations
     """
