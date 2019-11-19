@@ -35,15 +35,14 @@ class RoundGaussian2D(Fittable2DModel):
     sigma = Parameter(default=1., min=0.)
     x0 = Parameter(default=0.)
     y0 = Parameter(default=0.)
-    background = Parameter(default=0.)
 
     @staticmethod
-    def evaluate(x, y, amplitude, sigma, x0, y0, background):
+    def evaluate(x, y, amplitude, sigma, x0, y0):
         xx = x - x0
         yy = y - y0
         zx = np.exp(-0.5* (xx/sigma)**2)
         zy = np.exp(-0.5* (yy/sigma)**2)
-        return amplitude * zx * zy + background
+        return amplitude * zx * zy
 
     @property
     def flux(self):
