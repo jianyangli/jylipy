@@ -2,7 +2,7 @@
 
 import numpy as np
 from copy import copy
-from astropy.modeling import Fittable2DModel, Parameter
+from astropy.modeling import Fittable2DModel, Parameter, FittableModel
 from astropy.modeling.fitting import LevMarLSQFitter
 from scipy.special import erf
 import astropy.units as u
@@ -365,3 +365,95 @@ class Dust():
         fill_fac = iof / phasefunc(geom.phase.to('deg').value)
         radius = pixscl * geom.delta * np.sqrt(fill_fac / np.pi)
         return cls(radius=radius, phasefunc=phasefunc)
+
+
+class OpenCVDistortion(FittableModel):
+    """Open CV distortion model
+
+    Model inputs
+    ------------
+    (x, y) : numbers or iterables of numbers
+        The coordinate of scene in the undistorted frame, in angular units
+        radians.
+
+    Model outputs
+    -------------
+    (x1, y1) : numbers or iterables of numbers
+        The pixel coordinates in the distorted frame, in pixels.
+
+    Model parameters
+    ----------------
+    k1, k2, k3 : numbers
+        Radial distortion parameters, dimensionless
+    p1, p2 : numbers
+        Tangential distortion parameters, dimensionless
+    fx, fy : numbers
+        Focal lengths in x and y direction, in pixels
+    cx, cy : numbers
+        Pixel coordinates of origin, or boresight on the detector, in pixels
+
+    Model description
+    -----------------
+    x_radial = x * (1 + k1*r**2 + k2*r**4 + k3*r**6)
+    y_radial = y * (1 + k1*r**2 + k2*r**4 + k3*r**6)
+    x_tang = x + 2*p1*x*y + p2*(r**2 + 2*x**2)
+    y_tang = y + p1*(r**2 + 2*y**2) + 2*p2*x*y
+    x1 = (x_radial + x_tang) * fx + cx
+    y1 = (y_radial + y_rang) * fy + cy
+
+    where (x, y) are inputs, (x1, y1) are outputs, r**2 = x**2 + y**2.
+    """
+    inputs = ('x', 'y')
+    outputs = ('x1', 'y1')
+
+    k1 = Parameter()
+    k2 = Parameter()
+    k3 = Parameter()
+    p1 = Parameter()
+    p2 = Parameter()
+    fx = Parameter()
+    fy = Parameter()
+    cx = Parameter()
+    cy = Parameter()
+
+    @staticmethod
+    def evaluate(x, y, k1, k2, k3, p1, p2, fx, fy, cx, cy):
+        x2 = x*x
+        y2 = y*y
+        xy = x*y
+        r2 = x2 + y2
+        r4 = r2 * r2
+        radial = 1 + k1*r2 + k2*r4 + k3*r2*r4
+        x1 = radial*x + 2*p1*xy + p2*(r2 + 2*x2)
+        y1 = radial*y + p1*(r2+2*y2) + 2*p2*xy
+        x1 = x1*fx + cx
+        y1 = y1*fy + cy
+        return x1, y1
+
+    def ifov(self, x, y):
+        """Calculate pixel scale iFOV.
+
+        Parameters
+        ----------
+        (x, y) : numbers or interables of numbers
+            The coordinate of scene in the undistorted frame, in angular units
+        radians.
+
+        Returns
+        -------
+        (dx/dx1, dy/dy1) : numpy arrays
+            The ifov along x and y direction in unit of radian/pixel.
+        """
+        x2 = x*x
+        y2 = y*y
+        xy = x*y
+        r2 = x2 + y2
+        r4 = r2 * r2
+        radial = 1 + self.k1*r2 + self.k2*r4 + self.k3*r2*r4
+        radial1 = 2*(self.k1 + 2*self.k2*r2 + 3*self.k3*r4)
+        tang = 2*(self.p1*y + self.p2*x)
+        sumterm = radial + tang
+        dx = (sumterm + x2*radial1 + 4*self.p2*x) * self.fx
+        dy = (sumterm + y2*radial1 + 4*self.p1*y) * self.fy
+        return 1/dx, 1/dy
+
