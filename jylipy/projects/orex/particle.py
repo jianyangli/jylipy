@@ -456,3 +456,30 @@ class OpenCVDistortion(FittableModel):
         dy = (sumterm + y2*radial1 + 4*self.p1*y) * self.fy
         return 1/dx, 1/dy
 
+
+
+class PSF_Corr():
+    """Correction to PSF photometry
+    """
+    def __init__(self, corr, xs=2752, ys=2004, kind='cubic'):
+        """
+        corr : 2D array
+            Correction factor array, assuming uniformly distributed across the
+            FOV.
+        xs, ys : int
+            The size of image in x and y directions
+        """
+        self.corr = corr
+        self.shape = xs, ys
+        self.kind = kind
+        sz = corr.shape
+        xx, yy = np.linspace(0, xs, sz[1]*2+1)[1::2], \
+                 np.linspace(0, ys, sz[0]*2+1)[1::2]
+        from scipy.interpolate import interp2d
+        self.func = interp2d(xx, yy, corr, kind=kind)
+
+    def __call__(self, x, y, grid=False):
+        out = self.func(x, y)
+        if (not grid) and out.ndim > 1:
+            out = out.diagonal()
+        return out
