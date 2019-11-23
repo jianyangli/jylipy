@@ -189,96 +189,144 @@ class PSFPhot():
     """Class to perform PSF photometry for given locations
     """
 
-    def __init__(self, image, locations, box=11, fitter=None, mask=None):
-        self.image = copy(image)
-        self.locations = copy(locations)
+    def __init__(self, image, catalog, box=11, fitter=None, mask=None):
+        """
+        Parameters
+        ----------
+        image : 2d array
+            Image to be processed
+        catalog : astropy.table.Table instance
+            The catalog of sources.  It has to contain at least two columns,
+            `x0` and `y0` that contain the approximate centroid (x, y) of the
+            source.  If `catalog` contains a column `flux`, then this column
+            will be used to sort the source from the brightest to the faintest
+            for PSF fitting.
+        box : number
+            The box size within which PSF fitting is performed
+        fitter : astropy.modeing.fitting.Fitter class object
+            Fitter used to perform PSF fitting.  Default is
+            `astropy.modeling.fitting.LevMarLSQFitter`
+        mask : 2d array of bool
+            Image mask with True to mask out bad pixels that will not be used
+            to fit PSF.
+        """
+        self.image = image.copy()
+        self.catalog = catalog.copy()
         self.box = box
         if fitter is None:
             fitter = LevMarLSQFitter()
         self.fitter = fitter
-        self.nloc = len(self.locations)
+        self.len = len(self.catalog)
         self.mask = mask
 
-    def __call__(self, m0):
+    def __call__(self, m0, flux0=None, niter=1):
         """
-        model : astropy.modelig.Model instance
+        m0 : astropy.modelig.Model instance
+            The PSF model to be fitted.  The model has to have three
+            parameters: `xc`, `yc` for the center position, and `amplitude` as
+            an overall scaling factor.
+        flux0 : array
+            The initial estimate of fluxes for sources, used to sort the PSF
+            fitting process from the brightest source to the faintest source
+        niter : number
+            Number of iteration
         """
-        if self.image is None:
-            raise ValueError('No image is specified.')
-        if self.locations is None:
-            raise ValueError('No locations are specified.')
+        #pre-process catalog
+        ordered = None
+        if flux0 is not None:
+            ordered = np.asanyarray(flux0).argsort()
+            if 'flux' not in self.catalog.keys():
+                self.catalog.add_column(Column(flux0, name='flux'))
+        elif 'flux' in self.catalog.keys():
+            ordered = self.catalog.argsort('flux')
+        if ordered is not None:
+            self.catalog = self.catalog[ordered[::-1]]
 
-        width = self.box//2
-        m0.x0 = width
-        m0.y0 = width
+        for n in range(niter):
 
-        sz = self.image.shape
-        mod_full = np.zeros_like(self.image)
-        xx0, yy0 = np.meshgrid(range(sz[1]), range(sz[0]))
+            if 'psf_flux' in self.catalog.keys():
+                self.catalog.sort('psf_flux')
+                self.catalog.reverse()
 
-        subims = np.zeros(self.nloc, dtype=object)  # sub images
-        models = np.zeros(self.nloc, dtype=object)  # model objects
-        modims = np.zeros(self.nloc, dtype=object)  # model images
-        resims = np.zeros(self.nloc, dtype=object)  # residual images
-        regions = np.zeros((self.nloc, 4))
-        flux = np.zeros(self.nloc)
-        pos = np.zeros((self.nloc, 2))  # position in original image
-        for i, loc in enumerate(self.locations):
-            # extract sub-image
-            yc, xc = [int(round(x)) for x in loc]
-            x1 = np.clip(xc - width, 0, sz[1])
-            x2 = np.clip(xc + width + 1, 0, sz[1])
-            y1 = np.clip(yc - width, 0, sz[0])
-            y2 = np.clip(yc + width + 1, 0, sz[0])
-            subim = self.image[y1:y2,x1:x2].copy()
-            regions[i] = np.array([x1, y1, x2, y2])
-            subims[i] = subim
-            subsz = subim.shape
-            xx, yy = np.meshgrid(range(subsz[1]), range(subsz[0]))
+            width = self.box//2
+            m0.x0 = width
+            m0.y0 = width
 
-            # fit PSF to sub-image
-            m0.amplitude = subim.max()
-            if self.mask is not None:
-                gdpix = ~self.mask[y1:y2,x1:x2]
-                xx = xx[gdpix]
-                yy = yy[gdpix]
-                subim = subim[gdpix]
-            m = self.fitter(m0, xx, yy, subim)
+            sz = self.image.shape
+            mod_full = np.zeros_like(self.image)
+            xx0, yy0 = np.meshgrid(range(sz[1]), range(sz[0]))
 
-            # position in original image
-            xc = xc - width + m.x0
-            yc = yc - width + m.y0
-            pos[i] = np.array([xc, yc])
+            subims = np.zeros(self.len, dtype=object)  # sub images
+            models = np.zeros(self.len, dtype=object)  # model objects
+            modims = np.zeros(self.len, dtype=object)  # model images
+            resims = np.zeros(self.len, dtype=object)  # residual images
+            regions = np.zeros((self.len, 4))
+            flux = np.zeros(self.len)
+            pos = np.zeros((self.len, 2))  # position in original image
+            image = self.image.copy()
+            for i, loc in enumerate(self.catalog['xc', 'yc']):
+                # extract sub-image
+                xc, yc = [int(round(x)) for x in loc]
+                x1 = np.clip(xc - width, 0, sz[1])
+                x2 = np.clip(xc + width + 1, 0, sz[1])
+                y1 = np.clip(yc - width, 0, sz[0])
+                y2 = np.clip(yc + width + 1, 0, sz[0])
+                subim = image[y1:y2,x1:x2].copy()
+                regions[i] = np.array([x1, y1, x2, y2])
+                subims[i] = subim
 
-            # record model results
-            models[i] = m
-            flux[i] = m.flux
-            if self.mask is None:
-                modims[i] = m.BGFree()(xx, yy)
-                resims[i] = subim - modims[i]
+                # fit PSF to sub-image
+                subsz = subim.shape
+                xx, yy = np.meshgrid(range(subsz[1]), range(subsz[0]))
+                m0.amplitude = subim.max()
+                if self.mask is not None:
+                    gdpix = ~self.mask[y1:y2,x1:x2]
+                    xx = xx[gdpix]
+                    yy = yy[gdpix]
+                    subim = subim[gdpix]
+                m = self.fitter(m0, xx, yy, subim)
+
+                # position in original image
+                xc = xc - width + m.x0
+                yc = yc - width + m.y0
+                pos[i] = np.array([xc, yc])
+
+                # record model results
+                models[i] = m
+                flux[i] = m.flux
+                if self.mask is None:
+                    modims[i] = m.BGFree()(xx, yy)
+                    resims[i] = self.image[y1:y2,x1:x2].copy() - modims[i]
+                else:
+                    modims[i] = np.zeros(subsz)
+                    modims[i][gdpix] = m.BGFree()(xx, yy)
+                    resims[i] = np.zeros(subsz)
+                    resims[i][gdpix] = self.image[y1:y2,x1:x2].copy()[gdpix] \
+                            - modims[i][gdpix]
+
+                # calculate full frame model
+                m1 = m.BGFree()
+                m1.x0, m1.y0 = pos[i]
+                image -= m1(xx0, yy0)
+
+            if 'psf_flux' in self.catalog.keys():
+                self.catalog['psf_flux'] = flux
             else:
-                modims[i] = np.zeros(subsz)
-                modims[i][gdpix] = m.BGFree()(xx, yy)
-                resims[i] = np.zeros(subsz)
-                resims[i][gdpix] = subim - modims[i][gdpix]
-
-            # calculate full frame model
-            m1 = m.BGFree()
-            m1.x0, m1.y0 = pos[i]
-            mod_full += m1(xx0, yy0)
+                self.catalog.add_column(Column(flux, name='psf_flux'))
 
         parms = [m.parameters for m in models]
         parm_tbl = Table(np.array(parms).T.tolist(),
                 names=models[0].param_names)
+        parm_tbl['x0'] = pos[:,0]
+        parm_tbl['y0'] = pos[:,1]
         parm_tbl.add_column(Column(flux, name='flux'))
         self.phot = parm_tbl
         self.subims = subims
         self.models = models
         self.submod = modims
         self.subres = resims
-        self.spos = pos
         self.regions = regions
-        self.residual = self.image - mod_full
+        self.residual = image
 
         return parm_tbl
 
@@ -455,7 +503,6 @@ class OpenCVDistortion(FittableModel):
         dx = (sumterm + x2*radial1 + 4*self.p2*x) * self.fx
         dy = (sumterm + y2*radial1 + 4*self.p1*y) * self.fy
         return 1/dx, 1/dy
-
 
 
 class PSF_Corr():
