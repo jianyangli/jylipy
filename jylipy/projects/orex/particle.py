@@ -377,6 +377,7 @@ class PSFPhot():
         self.regions = []
         self.residual = []
         self.image = []
+        self.imname = []
 
         for f in imgs:
             im = self._load_image(f)
@@ -399,7 +400,8 @@ class PSFPhot():
             self.subres.append(resims)
             self.regions.append(regions)
             self.residual.append(residual)
-            self.image.append(f)
+            self.imname.append(f)
+            self.image.append(im)
 
         # post-processing
         self.catalog = table.vstack(cats)
