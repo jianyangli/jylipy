@@ -185,6 +185,310 @@ class SmearedGaussian2D_LinearBG(SmearedGaussian2D):
                 y0, angle) + a*x + b*y + c
 
 
+class PSFSource():
+    """PSF source class
+
+    Attributes
+    ----------
+    ID : whatever
+        The ID of the source
+    center : (y, x), numbers
+        The center pixel coordinate
+    model : `astropy.modeling.Model` instance
+        The model describe the source
+    flux : number
+        The total flux of source
+    image : 2D array
+        The image of the source
+    """
+    def __init__(self, center, image, mask=None, ID=None, model=None,
+                flux=None, meta=None):
+        self.center = center
+        self.image = image
+        self._mask = mask
+        self.ID = ID
+        self.model = model
+        self._flux = flux
+        self.meta = None
+
+    @property
+    def mask(self):
+        if self._mask is None:
+            return np.zeros_like(self.image).astype(bool)
+        else:
+            return self._mask
+
+    @mask.setter
+    def mask(self, msk):
+        self._mask = msk
+
+    def model_image(self, nobg=True):
+        """Return model image"""
+        self._check_model()
+        if np.allclose(self.model.parameters, 0):
+            return np.zeros_like(self.image)
+        else:
+            imsz = self.image.shape
+            xx0, yy0 = np.meshgrid(range(imsz[1]), range(imsz[0]))
+            if nobg and hasattr(self.model, 'BGFree'):
+                return self.model.BGFree()(xx0, yy0)
+            else:
+                return self.model(xx0, yy0)
+
+    def residual(self, nobg=True):
+        """Return residual image"""
+        self._check_model()
+        res = self.image - self.model_image(nobg=nobg)
+        if np.any(self.mask):
+            res[self.mask] = 0
+        return res
+
+    @property
+    def flux(self):
+        if (self.model is None) or np.allclose(self.model.parameters, 0):
+            return self._flux
+        else:
+            if not hasattr(self.model, 'flux'):
+                raise AttributeError('`flux` attribute is not available in'
+                    ' model.')
+            return self.model.flux
+
+    def _check_model(self):
+        if self.model is None:
+            raise ValueError('Model not specified for fitting.')
+
+    def fit(self, fitter=None):
+        """Fit the source to a PSF model
+        """
+        self._check_model()
+
+        if fitter is None:
+            fitter = LevMarLSQFitter()
+
+        imsz = self.image.shape
+        xx0, yy0 = np.meshgrid(range(imsz[1]), range(imsz[0]))
+        if np.all(self.mask):
+            self.model.parameters[:] = 0.
+        else:
+            xx = xx0[~self.mask].astype('float32')
+            yy = yy0[~self.mask].astype('float32')
+            data = self.image[~self.mask].astype('float32')
+            self.model.amplitude = data.max()
+            self.model = fitter(self.model, xx, yy, data)
+            self.center = self.model.y0, self.model.x0
+
+
+class PSFSourceGroup():
+    """A group of PSF sources that are from the same source image.
+
+    Attributes
+    ----------
+    image_file : str
+        The name of image file
+    image : 2d array
+        The image
+    catalog : `astropy.table.Table` instance
+        The catalog of PSF sources.  Columns are:
+        cx, cy : center pixel coordinates
+        bx, by : box size in pixels
+        flux : total flux
+        model : str, name of model
+    """
+    def __init__(self, image, catalog, bbox=None, mask=None):
+        """
+        Parameters
+        ----------
+        image : 2d array
+            The image that contains all the sources
+        catalog : `astropy.table.Table` instance
+            The catalog of PSF sources.  It must contain at least two columns
+            `cx` and `cy` listing the center coordinates of sources.  Other
+            useful columns are:
+            'ID' : str, the ID of each source
+            'flux' : number, the flux of each source
+            More columns will be simply copied over to `.meta` attribute of
+            each particle object.
+        bbox : (by, bx), number
+            The default box size in pixels for all sources, if `catalog` table
+            does not contain `bx` and `by` columns.
+        mask : 2d bool array
+            Image mask
+        """
+        self.image = image
+        self.catalog = catalog.copy()
+        self.bbox = bbox
+        self.mask = mask
+        if ('cx' not in catalog.keys()) or ('cy' not in catalog.keys()):
+            raise ValueError('`catalog` must contain columns `cx` and `cy`.')
+        self._populate_sources()
+
+    def __len__(self):
+        return len(self.catalog)
+
+    def __getitem__(self, *args, **kwargs):
+        return self.sources.__getitem__(*args, **kwargs)
+
+    def _region(self, i):
+        """Return the region slice for the ith source"""
+        cat_keys = self.catalog.keys()
+        if 'by' in cat_keys:
+            by = self.catalog['by'][i]
+        else:
+            if self.bbox is None:
+                raise ValueError('`bbox` not specified.')
+            by = self.bbox[0]
+        if 'bx' in cat_keys:
+            bx = self.catalog['bx'][i]
+        else:
+            if self.bbox is None:
+                raise ValueError('`bbox` not specified.')
+            bx = self.bbox[1]
+        cy, cx = self.catalog['cy', 'cx'][i]
+        imsz = self.image.shape
+        x1 = int(round(np.clip(cx-bx//2, 0, imsz[1])))
+        x2 = int(round(np.clip(cx+bx//2+1, 0, imsz[1])))
+        y1 = int(round(np.clip(cy-by//2, 0, imsz[0])))
+        y2 = int(round(np.clip(cy+by//2+1, 0, imsz[0])))
+        return slice(y1, y2), slice(x1, x2)
+
+    def _extract_subim(self, i, image=None, mask=False):
+        """Extract and return the image snippet that contains the ith source
+
+        i : int
+            The index of source
+        image : 2d image, optional
+            The image to extract the sub-image for source.  Default is
+            `self.image`.
+        mask : bool, optional
+            If `True`, then the mask of sub-image will be returned
+        """
+        if image is None:
+            image = self.image
+        region = self._region(i)
+        if mask:
+            if self.mask is None:
+                ys = region[0].stop - region[0].start
+                xs = region[1].stop - region[1].start
+                return np.zeros((ys, xs), dtype=bool)
+            else:
+                return self.mask[region].copy()
+        else:
+            return image[region].copy()
+
+    def _populate_sources(self):
+        """Populate all the source objects
+        """
+        cat_keys = self.catalog.keys()
+        self.sources = []
+        if 'flux' in cat_keys:
+            has_flux = True
+        else:
+            has_flux = False
+        if 'ID' in cat_keys:
+            has_id = True
+        else:
+            has_id = False
+        for i, row in enumerate(self.catalog):
+            center = row['cy', 'cx']
+            subim = self._extract_subim(i).copy()
+            submsk = self._extract_subim(i, mask=True).copy()
+            if has_flux:
+                flux = row['flux']
+            else:
+                flux = None
+            if has_id:
+                ID = row['ID']
+            else:
+                ID = None
+            self.sources.append(PSFSource(row['cy','cx'], subim, mask=submsk,
+                    ID=ID, flux=flux, meta=row))
+
+    def _update_catalog(self):
+        """Update catalog with model parameters, including the columns
+        `cx`, `cy`, and `flux`"""
+        if 'flux' not in self.catalog.keys():
+            self.catalog.add_column(Column(np.repeat(0., len(self)),
+                    name='flux'))
+        for i,s in enumerate(self.sources):
+            region = self._region(i)
+            self.catalog[i]['cx'] = s.model.x0.value + region[1].start
+            self.catalog[i]['cy'] = s.model.y0.value + region[0].start
+            self.catalog[i]['flux'] = s.flux
+
+    def fit(self, fitter=None, model=None, niter=1):
+        """Fit PSF to all sources
+        """
+        for j in range(niter):
+            fluxes = [x.flux for x in self.sources]
+            ordered = np.argsort(fluxes)[::-1]
+            residual = self.image.copy()
+            model_image = np.zeros_like(self.image)
+            for i in ordered:
+                self.sources[i].image = self._extract_subim(i, residual)
+                self.sources[i].mask = self._extract_subim(i, mask=True)
+                if model is not None:
+                    self.sources[i].model = model
+                self.sources[i].fit(fitter=fitter)
+                submodel = self.sources[i].model_image()
+                region = self._region(i)
+                residual[region] -= submodel
+                model_image[region] += submodel
+            self.residual = residual
+            self.model = model_image
+        self._update_catalog()
+
+    def mark_source(self, ds9, radius=3, color=None):
+        """Mark the source location in DS9
+        """
+        from ...saoimage import CircularRegion
+        print('showing sources')
+        for x, y in self.catalog['cx','cy']:
+            r = CircularRegion(x,y,radius,color=color)
+            r.show(ds9)
+
+    def display(self, image=True, model=True, residual=True, ds9=None,
+            source=True, **kwargs):
+        """Display images, model, and residual
+
+        image, model, residual : bool
+            Switch to display the original image, the model, and the residual
+        ds9 : `saoimage.DS9`
+            The DS9 to display images.  If `None`, then images will be
+            displayed in matplotlib plot
+        source : bool
+            Show source locations
+        radius : number
+            The radius of circles to mark source locations in DS9
+        color : str
+            The color of circles to mark source locations in DS9
+        **kwargs : other keywords accepted by `matplotlib.pyplot.figure`.
+        """
+        radius = kwargs.pop('radius', 3)
+        color = kwargs.pop('color', 'green')
+        if ds9 is None:
+            import matplotlib.pyplot as plt
+            plt.figure(**kwargs)
+            if image:
+                plt.imshow(self.image)
+            if model and hasattr(self, 'model'):
+                plt.imshow(self.model)
+            if residual and hasattr(self, 'residual'):
+                plt.imshow(self.residual)
+        else:
+            if image:
+                ds9.imdisp(self.image)
+                if source:
+                    self.mark_source(ds9, radius=radius, color=color)
+            if model and hasattr(self, 'model'):
+                ds9.imdisp(self.model)
+                if source:
+                    self.mark_source(ds9, radius=radius, color=color)
+            if residual and hasattr(self, 'residual'):
+                ds9.imdisp(self.residual)
+                if source:
+                    self.mark_source(ds9, radius=radius, color=color)
+
+
 class PSFPhot():
     """Class to perform PSF photometry for given locations
     """
