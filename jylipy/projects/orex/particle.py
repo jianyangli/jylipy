@@ -493,7 +493,7 @@ class PSFPhot():
     """Class to perform PSF photometry for given locations
     """
 
-    def __init__(self, catalog, datadir='', box=11, fitter=None, mask=None):
+    def __init__(self, catalog, datadir='', bbox=None, fitter=None):
         """
         Parameters
         ----------
@@ -501,31 +501,40 @@ class PSFPhot():
             Image to be processed
         catalog : astropy.table.Table instance
             The catalog of sources.  It has to contain at least three columns,
-            `x0`, `y0`: the approximate centroid (x, y) of the source.
-            `Image` : str, the unique ID that can be used to identify image of
+            `cx`, `cy`: the approximate centroid (x, y) of the source.
+            `image` : str, the unique ID that can be used to identify image of
                 the source.
             If `catalog` contains a column `flux`, then this column will be
             used to sort the source from the brightest to the faintest for PSF
             fitting.
-        box : number
-            The box size within which PSF fitting is performed
+        bbox : (by, bx), number
+            The default box size in pixels for all sources, if `catalog` table
+            does not contain `bx` and `by` columns.
         fitter : astropy.modeing.fitting.Fitter class object
             Fitter used to perform PSF fitting.  Default is
             `astropy.modeling.fitting.LevMarLSQFitter`
-        mask : 2d array of bool
-            Image mask with True to mask out bad pixels that will not be used
-            to fit PSF.
         """
         self.catalog = catalog.copy()
-        self.box = box
         if fitter is None:
             fitter = LevMarLSQFitter()
+        self.bbox = bbox
         self.fitter = fitter
-        self.len = len(self.catalog)
-        self.mask = mask
-        self._filelist(datadir)
+        self._generate_filelist(datadir)
+        self._initialize_source_set()
 
-    def _filelist(self, datadir):
+    def _initialize_source_set(self):
+        """Initialize source set that contains groups of particles
+        corresponding to different images"""
+        self._sgroup = []
+        imnames = np.unique(self.catalog['image'])
+        for nn in imnames:
+            indices = self.catalog.index('image', nn)
+            im = self._load_image(nn)
+            sg = PSFSourceGroup(im, self.catalog[indices], bbox=self.bbox,
+                    mask=im>4094)
+            self._sgroup.append(sg)
+
+    def _generate_filelist(self, datadir):
         """Compile a list of file contained in the data directory, with a
         uniform indexing that does not include level and version number.
         """
@@ -544,186 +553,14 @@ class PSFPhot():
         return readfits(self._file_list[match],
                 verbose=False).astype('float32')
 
-    def psffit(self, m0, cat, image, mask=None, flux0=None, niter=1):
-        """Fit PSF model to all sources listed in a catalog in an image
-
-        Parameters
-        ----------
-        m0 : astropy.modelig.Model instance
-            The PSF model to be fitted.  The model has to have three
-            parameters: `xc`, `yc` for the center position, and `amplitude` as
-            an overall scaling factor.
-        cat : astropy.table.Table instance
-            The catalog of sources in the same image.  See `__init__`.
-        image : 2D array
-            Image that contains all sources.
-        flux0 : array
-            The initial estimate of fluxes for sources, used to sort the PSF
-            fitting process from the brightest source to the faintest source.
+    def fit(self,  model=None, fitter=None, niter=1):
+        """Fit PSF model to all sources.  See `PSFSourceGroup.fit`
         """
-        ordered = None
-        if flux0 is not None:
-            ordered = np.asanyarray(flux0).argsort()
-            if 'flux' not in cat.keys():
-                cat.add_column(Column(flux0, name='flux'))
-        elif 'flux' in cat.keys():
-            ordered = cat.argsort('flux')
-        if ordered is not None:
-            cat = cat[ordered[::-1]]
+        for sg in self._sgroup:
+            sg.fit(model=model, fitter=fitter, niter=niter)
 
-        cat_len = len(cat)
-
-        for n in range(niter):
-
-            if 'psf_flux' in cat.keys():
-                cat.sort('psf_flux')
-                cat.reverse()
-
-            width = self.box//2
-            m0.x0 = width
-            m0.y0 = width
-
-            sz = image.shape
-            mod_full = np.zeros_like(image)
-            xx0, yy0 = np.meshgrid(range(sz[1]), range(sz[0]))
-
-            subims = np.zeros(cat_len, dtype=object)  # sub images
-            models = np.zeros(cat_len, dtype=object)  # model objects
-            modims = np.zeros(cat_len, dtype=object)  # model images
-            resims = np.zeros(cat_len, dtype=object)  # residual images
-            regions = np.zeros((cat_len, 4))
-            flux = np.zeros(cat_len)
-            pos = np.zeros((cat_len, 2))  # position in original image
-            residual = image.copy()
-            for i, loc in enumerate(cat['xc', 'yc']):
-                # extract sub-image
-                xc, yc = [int(round(x)) for x in loc]
-                x1 = np.clip(xc - width, 0, sz[1])
-                x2 = np.clip(xc + width + 1, 0, sz[1])
-                y1 = np.clip(yc - width, 0, sz[0])
-                y2 = np.clip(yc + width + 1, 0, sz[0])
-                subim = residual[y1:y2,x1:x2].copy()
-                regions[i] = np.array([x1, y1, x2, y2])
-                subims[i] = subim
-
-                # fit PSF to sub-image
-                subsz = subim.shape
-                xx, yy = np.meshgrid(range(subsz[1]), range(subsz[0]))
-                m0.amplitude = subim.max()
-                if mask is not None:
-                    gdpix = ~mask[y1:y2,x1:x2]
-                    xx = xx[gdpix]
-                    yy = yy[gdpix]
-                    subim = subim[gdpix]
-                if len(xx) < 9:
-                    m = m0.copy()
-                    m.amplitude = -999.
-                else:
-                    m = self.fitter(m0, xx, yy, subim)
-
-                # position in original image
-                xc = xc - width + m.x0
-                yc = yc - width + m.y0
-                pos[i] = np.array([xc, yc])
-
-                # record model results
-                models[i] = m
-                flux[i] = m.flux
-                if mask is None:
-                    modims[i] = m.BGFree()(xx, yy)
-                    resims[i] = residual[y1:y2,x1:x2].copy() - modims[i]
-                else:
-                    modims[i] = np.zeros(subsz)
-                    modims[i][gdpix] = m.BGFree()(xx, yy)
-                    resims[i] = np.zeros(subsz)
-                    resims[i][gdpix] = residual[y1:y2,x1:x2].copy()[gdpix] \
-                            - modims[i][gdpix]
-
-                # calculate full frame model
-                m1 = m.BGFree()
-                m1.x0, m1.y0 = pos[i]
-                residual -= m1(xx0, yy0)
-
-            if 'psf_flux' in cat.keys():
-                cat['psf_flux'] = flux
-            else:
-                cat.add_column(Column(flux, name='psf_flux'))
-
-        parms = [m.parameters for m in models]
-        parm_tbl = Table(np.array(parms).T.tolist(),
-                names=models[0].param_names)
-        parm_tbl['x0'] = pos[:,0]
-        parm_tbl['y0'] = pos[:,1]
-        parm_tbl.add_column(Column(flux, name='flux'))
-
-        return cat, models, parm_tbl, regions, subims, modims, resims, residual
-
-    def __call__(self, m0, flux0=None, niter=1):
-        """
-        m0 : astropy.modelig.Model instance
-            The PSF model to be fitted.  The model has to have three
-            parameters: `xc`, `yc` for the center position, and `amplitude` as
-            an overall scaling factor.
-        flux0 : array
-            The initial estimate of fluxes for sources, used to sort the PSF
-            fitting process from the brightest source to the faintest source
-        niter : number
-            Number of iteration
-        """
-        self.catalog.sort(['Image', 'ID'])
-        imgs = np.unique(self.catalog['Image'])
-        cats = []
-        self.phot = []
-        self.subims = []
-        self.models = []
-        self.submod = []
-        self.subres = []
-        self.regions = []
-        self.residual = []
-        self.image = []
-        self.imname = []
-
-        for f in imgs:
-            im = self._load_image(f)
-            if im is None:
-                continue
-            index = self.catalog['Image'] == f
-            cat = self.catalog[index].copy()
-            if flux0 is not None:
-                flx = flux0[index]
-            else:
-                flx = None
-            cat, models, parm_tbl, regions, subims, modims, resims, residual \
-                    =  self.psffit(m0, cat, im, mask=im>4094, flux0=flx, \
-                        niter=niter)
-            cats.append(cat)
-            self.phot.append(parm_tbl)
-            self.subims.append(subims)
-            self.models.append(models)
-            self.submod.append(modims)
-            self.subres.append(resims)
-            self.regions.append(regions)
-            self.residual.append(residual)
-            self.imname.append(f)
-            self.image.append(im)
-
-        # post-processing
-        self.catalog = table.vstack(cats)
-        self.phot = table.vstack(self.phot)
-        self.subims = np.concatenate(self.subims)
-        self.models = np.concatenate(self.models)
-        self.submod = np.concatenate(self.submod)
-        self.subres = np.concatenate(self.subres)
-        self.regions = np.concatenate(self.regions)
-
-        sorting = self.catalog.argsort('ID')
-        self.catalog = self.catalog[sorting]
-        self.phot = self.phot[sorting]
-        self.subims = self.subims[sorting]
-        self.models = self.models[sorting]
-        self.submod = self.submod[sorting]
-        self.subres = self.subres[sorting]
-        self.regions = self.regions[sorting]
+    def __call__(self, *args, **kwargs):
+        self.fit(*args, **kwargs)
 
 
 class Geometry():
