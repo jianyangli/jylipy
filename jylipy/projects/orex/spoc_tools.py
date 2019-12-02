@@ -1,4 +1,11 @@
-import urllib.request, urllib.error, urllib.parse, http.cookiejar, sys, json, os, threading, queue, re
+from urllib import request, error, parse
+import http.cookiejar
+import sys
+import json
+import os
+import threading
+import queue
+import re
 from datetime import datetime
 from ...apext import Time
 from ...core import time_stamp
@@ -15,17 +22,18 @@ def session_login(host, username=None, password=None):
         from getpass import getpass
         password = getpass('Password: ')
     url = 'https://%s.lpl.arizona.edu/session-login' % host
-    #Create the data to be sent and set the request header
-    params = ('{"username": "%s","password":"%s"}' % (username,password)).encode()
-    header = {'Content-Type':'application/json'}
-    #Attempt to login:
-    request = urllib.request.Request(url,params,header)
+    # Create the data to be sent and set the request header
+    params = ('{"username": "%s","password": "%s"}' % (username,
+                                                       password)).encode()
+    header = {'Content-Type': 'application/json'}
+    # Attempt to login:
+    request = urllib.request.Request(url, params, header)
     try:
         response = urllib.request.urlopen(request)
-        #Save the cookie for later
+        # Save the cookie for later
         cookiejar = http.cookiejar.LWPCookieJar('%s_cookie' % host)
-        cookiejar.extract_cookies(response,request)
-        cookiejar.save('%s_cookie'%(host))
+        cookiejar.extract_cookies(response, request)
+        cookiejar.save('%s_cookie' % (host))
         print('Successfully logged in')
     except urllib.error.HTTPError as e:
         print('Failed to login.\nReason: %s' % e)
@@ -33,12 +41,13 @@ def session_login(host, username=None, password=None):
 
 
 def webapi_post(host, query, endpoint, username=None, password=None):
-    url = 'https://%s.lpl.arizona.edu/%s' % (host,endpoint)
-    header = {'Content-Type':'application/json'}
-    request = urllib.request.Request(url,query.encode(),header)
+    url = 'https://%s.lpl.arizona.edu/%s' % (host, endpoint)
+    header = {'Content-Type': 'application/json'}
+    request = urllib.request.Request(url, query.encode(), header)
     if host+'_cookie' not in os.listdir('.'):
         session_login(host, username=username, password=password)
-    elif (datetime.now() - datetime.fromtimestamp(os.path.getmtime(host+'_cookie'))).days > 2:
+    elif (datetime.now() -
+            datetime.fromtimestamp(os.path.getmtime(host+'_cookie'))).days > 2:
         session_login(host, username=username, password=password)
     cookiejar = http.cookiejar.LWPCookieJar('%s_cookie' % host)
     cookiejar.load('%s_cookie' % host)
@@ -47,11 +56,14 @@ def webapi_post(host, query, endpoint, username=None, password=None):
         response = urllib.request.urlopen(request)
         return response.info(), response.read()
     except urllib.error.HTTPError as e:
-        print('Failed to download. \nReason: %s\nQuery: %s' % (e.read(),query))
+        print('Failed to download. \nReason: %s\nQuery: %s' %
+              (e.read(), query))
         return None, None
 
 
 CONTENT_DISPOSITION_RE = re.compile(r'attachment; filename="(.*)"')
+
+
 def parse_content_disposition(val):
     if not val:
         return None
@@ -65,7 +77,7 @@ def parse_content_disposition(val):
 
 class SPOC():
     def __init__(self, host='spocflight', username=user_jyli,
-                password=pwd_jyli):
+                 password=pwd_jyli):
         self.host = host
         self.username = username
         self.password = password
@@ -75,29 +87,37 @@ class SPOC():
 
     def webapi_post(self, query, endpoint):
         return webapi_post(self.host, query, endpoint, username=self.username,
-                password=self.password)
+                           password=self.password)
 
 
 class DownloadHelper(threading.Thread):
     def __init__(self, download_queue, username=None, password=None):
         threading.Thread.__init__(self)
         self.download_queue = download_queue
-        self.username=username
-        self.password=password
+        self.username = username
+        self.password = password
 
     def run(self):
         while 1:
-            (level,id) = self.download_queue.get()
+            (level, id) = self.download_queue.get()
             if level == 'l0':
-                query = '{ "product": "ovirs_sci_frame.fits-l0-spot", "id": "ovirs_sci_frame.%s" }' % str(id)
-                spot = webapi_post('spocflight',query,'data-get-product',username=self.username, password=self.password)
-                with open('fits_l0_spot/ovirs_sci_frame_%s.fits' % str(id), 'wb') as f:
+                query = '{ "product": "ovirs_sci_frame.fits-l0-spot", '
+                ' "id": "ovirs_sci_frame.%s" }' % str(id)
+                spot = webapi_post('spocflight', query, 'data-get-product',
+                                   username=self.username,
+                                   password=self.password)
+                with open('fits_l0_spot/ovirs_sci_frame_%s.fits' % str(id),
+                          'wb') as f:
                     f.write(spot)
                     f.close()
             else:
-                query = '{ "product": "ovirs_sci_level2_record.fits-l2-spot", "id": "ovirs_sci_level2_record.%s" }' % str(id)
-                spot = webapi_post('spocflight',query,'data-get-product', username=self.username, password=self.password)
-                with open('fits_l2_spot/ovirs_sci_level2_record_%s.fits' % str(id), 'wb') as f:
+                query = '{ "product": "ovirs_sci_level2_record.fits-l2-spot", '
+                '"id": "ovirs_sci_level2_record.%s" }' % str(id)
+                spot = webapi_post('spocflight', query, 'data-get-product',
+                                   username=self.username,
+                                   password=self.password)
+                with open('fits_l2_spot/ovirs_sci_level2_record_%s.fits' %
+                          str(id), 'wb') as f:
                     f.write(spot)
             self.download_queue.task_done()
 
@@ -123,13 +143,17 @@ def spoc_product_name(inst, level, group, cat='sci'):
     groups = ['spot', 'multipart']
 
     if inst not in instruments:
-        raise ValueError('instrument not recognized in {0}: {1}'.format(instruments, inst))
+        raise ValueError('instrument not recognized in {0}: {1}'.format(
+            instruments, inst))
     if level not in levels:
-        raise ValueError('level not recognized in {0}: {1}'.format(levels, level))
+        raise ValueError('level not recognized in {0}: {1}'.format(levels,
+                         level))
     if group not in groups:
-        raise ValueError('group not recognized in {0}: {1}'.format(groups, group))
+        raise ValueError('group not recognized in {0}: {1}'.format(groups,
+                         group))
     if cat not in categories:
-        raise ValueError('category not recognized in {0}: {1}'.format(categories, cat))
+        raise ValueError('category not recognized in {0}: {1}'.format(
+                         categories, cat))
 
     if group.strip() == 'spot':
         grp_str = 'record'
@@ -147,7 +171,8 @@ def spoc_product_name(inst, level, group, cat='sci'):
 
 
 class SPOC_Downloader():
-    def __init__(self, inst, level, group, cat='sci', host='spocflight', user=user_jyli, passwd=pwd_jyli):
+    def __init__(self, inst, level, group, cat='sci', host='spocflight',
+                 user=user_jyli, passwd=pwd_jyli):
         self.table_name = spoc_product_name(inst, level, group, cat=cat)
         self.host = host
         self.instrument = inst
@@ -158,8 +183,10 @@ class SPOC_Downloader():
         self.password = passwd
 
     def query(self):
-        query_str = '{ "table_name": '+self.table_name+', "columns": ["*"] }'
-        result = webapi_post(self.host, query_str, 'data-get-values', username=self.username, password=self.password)
+        query_str = '{ "table_name": ' + self.table_name + \
+            ', "columns": ["*"] }'
+        result = webapi_post(self.host, query_str, 'data-get-values',
+                             username=self.username, password=self.password)
         if result is None:
             return False
         self.data = json.loads(result)['result']
@@ -168,7 +195,8 @@ class SPOC_Downloader():
     def download(self, block=False, nworker=8):
         download_queue = query.Queue()
         for i in range(nworker):
-            helper = DownloadHelper(download_queue, username=self.username, password=self.password)
+            helper = DownloadHelper(download_queue, username=self.username,
+                                    password=self.password)
             helper.daemon = True
             helper.start()
         for d in self.data:
@@ -199,8 +227,8 @@ class NAVCAM_Downloader(SPOC):
         self.utc_end = utc_end
         self.level = level
         if datadir is None:
-            datadir = 'navcam_'+time_stamp(format=1).replace(':',
-                    '').replace('-','')
+            datadir = 'navcam_' + \
+                time_stamp(format=1).replace(':', '').replace('-', '')
         self.datadir = datadir
         if self.level not in ['l0', 'l3a', 'l3b', 'l3ab']:
             raise ValueError('Invalid data level specified.')
@@ -208,10 +236,13 @@ class NAVCAM_Downloader(SPOC):
     def query(self):
         self._query_results = None
         if self.level == 'l0':
-            query = '{"table_name": "navcam_image_header", "columns": ["id"], "time_utc": {"start": "%s", "end": "%s"} }' % (self.utc_start, self.utc_end)
+            query = '{"table_name": "navcam_image_header", "columns": ["id"],'
+            ' "time_utc": {"start": "%s", "end": "%s"} }' % \
+            (self.utc_start, self.utc_end)
             _, result = self.webapi_post(query, 'data-get-values')
         else:
-            query = '{"columns": ["navcam_image_level3.id"], "time_utc": {"start": "%s", "end": "%s"} }' % ((self.utc_start, self.utc_end))
+            query = '{"columns": ["navcam_image_level3.id"], "time_utc": '
+            '{"start": "%s", "end": "%s"} }' % ((self.utc_start, self.utc_end))
             _, result = self.webapi_post(query, 'data-get-values-related')
 
         result = json.loads(result)
@@ -221,37 +252,41 @@ class NAVCAM_Downloader(SPOC):
     def download(self, datadir=None):
         from os.path import isdir, join
         from os import mkdir
-        if (not hasattr(self, '_query_result')) or (self._query_result is None):
+        if (not hasattr(self, '_query_result')) or \
+                (self._query_result is None):
             self.query()
         if datadir is None:
             datadir = self.datadir
         if self.level == 'l0':
-            query = '{"product": "navcam_image_header.fits-opnav", "id": "navcam_image_header.%s"}'
+            query = '{"product": "navcam_image_header.fits-opnav", "id":'
+            '"navcam_image_header.%s"}'
             field = 'id'
         else:
             if self.level == 'l3a':
-                query = '{"product": "navcam_image_level3.fits-l3a", "id": "navcam_image_level3.%s"}'
+                query = '{"product": "navcam_image_level3.fits-l3a", "id":'
+                '"navcam_image_level3.%s"}'
             elif self.level == 'l3b':
-                query = '{"product": "navcam_image_level3.fits-l3a", "id": "navcam_image_level3.%s"}'
+                query = '{"product": "navcam_image_level3.fits-l3a", "id":'
+                '"navcam_image_level3.%s"}'
             elif self.level == 'l3ab':
-                query = '{"product": "navcam_image_level3.fits-l3ab", "id": "navcam_image_level3.%s"}'
+                query = '{"product": "navcam_image_level3.fits-l3ab", "id":'
+                '"navcam_image_level3.%s"}'
             field = 'navcam_image_level3.id'
         for id in self._query_result['result']:
             headers, data = self.webapi_post((query % str(id[field])),
-                    'data-get-product')
+                                             'data-get-product')
 
-            if type(data) != type(None):
+            if data is not None:
                 if not isdir(datadir):
                     mkdir(datadir)
                 file_name = parse_content_disposition(headers.get(
                         'content-disposition'))
                 if not file_name:
-                    file_name = 'navcam_image_{}_{}.fits'.format(self.level,
-                            str(id['field']))
+                    file_name = 'navcam_image_{}_{}.fits'.format(
+                        self.level, str(id['field']))
                 file_name = join(self.datadir, file_name)
                 with open(file_name, 'wb') as output:
                     output.write(data)
                     output.close()
             else:
                 print('Error downloading image %d' % id[field])
-
