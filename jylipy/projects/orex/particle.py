@@ -8,6 +8,7 @@ from scipy.special import erf
 import astropy.units as u
 from ...apext import Table, Column, table
 from ...core import ascii_read, findfile, readfits
+from ...saoimage import DS9
 from sbpy.bib import cite
 from sbpy import photometry
 from sbpy.calib import solar_fluxd
@@ -191,28 +192,34 @@ class PSFSource():
     Attributes
     ----------
     ID : whatever
-        The ID of the source
+        ID of the source
     center : (y, x), numbers
-        The center pixel coordinate
-    model : `astropy.modeling.Model` instance
-        The model describe the source
+        Center pixel coordinate
+    model : `astropy.modeling.Model`
+        Model that describes the source
     flux : number
-        The total flux of source
+        Total flux of source
     image : 2D array
-        The image of the source
+        Image of the source
+    mask : 2D bool array of the same size as `image`
+        Image mask
+    corr : number
+        Correction factor for actual PSF
     """
     def __init__(self, center, image, mask=None, ID=None, model=None,
-                flux=None, meta=None):
+                flux=None, meta=None, corr=None):
         self.center = center
         self.image = image
         self._mask = mask
         self.ID = ID
         self.model = model
         self._flux = flux
-        self.meta = None
+        self.meta = meta
+        self.corr = corr
 
     @property
     def mask(self):
+        """Mask of image"""
         if self._mask is None:
             return np.zeros_like(self.image).astype(bool)
         else:
@@ -223,7 +230,16 @@ class PSFSource():
         self._mask = msk
 
     def model_image(self, nobg=True):
-        """Return model image"""
+        """Return model image
+
+        Parameters
+        ----------
+        nobg : bool, optional
+            If true, then the returned model image will contain no background.
+            This parameter requires that the `.model` class has a method
+            `.BGFree()` that returns the background free model.  Otherwise
+            returns the model image with modeled background.
+        """
         self._check_model()
         if np.allclose(self.model.parameters, 0):
             return np.zeros_like(self.image)
@@ -236,7 +252,7 @@ class PSFSource():
                 return self.model(xx0, yy0)
 
     def residual(self, nobg=True):
-        """Return residual image"""
+        """Return residual image.  See `.model_image` for parameter `nobg`."""
         self._check_model()
         res = self.image - self.model_image(nobg=nobg)
         if np.any(self.mask):
@@ -245,13 +261,17 @@ class PSFSource():
 
     @property
     def flux(self):
+        """Total flux of source"""
         if (self.model is None) or np.allclose(self.model.parameters, 0):
             return self._flux
         else:
             if not hasattr(self.model, 'flux'):
                 raise AttributeError('`flux` attribute is not available in'
                     ' model.')
-            return self.model.flux
+            if self.corr is None:
+                return self.model.flux
+            else:
+                return self.model.flux * self.corr
 
     def _check_model(self):
         if self.model is None:
@@ -277,22 +297,67 @@ class PSFSource():
             self.model = fitter(self.model, xx, yy, data)
             self.center = self.model.y0, self.model.x0
 
+    def display(self, ds9=None, num=None, subplots_kw={}, imshow_kw={},
+                nobg=True):
+        """Display the image, model, and residual.
+
+        Parameter
+        ---------
+        ds9 : `...saoimage.DS9`, optional
+            DS9 window for display.  If not set, then use `matplotlib` for
+            display.
+        num : int or str, optional
+            A `.pyplot.figure` keyword that sets the figure number or label.
+        subplots_kw : dict, optional
+            Dict with keywords passed to the `~matplotlib.pyplot.subplots` call
+            to create axes.
+        imshow_kw : dict, optional
+            Dict with keywords passed to the `~matplotlib.pyplot.imshow` call.
+
+        Return
+        ------
+        fig : `~matplotlib.pyplot.figure.Figure` if matplotlib display is used.
+        """
+        if isinstance(ds9, DS9):
+            ds9.imdisp(self.image)
+            ds9.imdisp(self.model_image(nobg=nobg))
+            ds9.imdisp(self.residual(nobg=nobg))
+        else:
+            from matplotlib import pyplot as plt
+            _ = subplots_kw.pop('nrows', None)
+            _ = subplots_kw.pop('ncols', None)
+            _ = subplots_kw.pop('sharex', None)
+            _ = subplots_kw.pop('sharey', None)
+            if num is not None:
+                subplots_kw['num'] = num
+            f, ax = plt.subplots(1, 3, sharey=True, **subplots_kw)
+            ax[0].imshow(self.image, **imshow_kw)
+            ax[0].set_axis_off()
+            ax[1].imshow(self.model_image(nobg=nobg), **imshow_kw)
+            ax[1].set_axis_off()
+            ax[2].imshow(self.residual(nobg=nobg), **imshow_kw)
+            ax[2].set_axis_off()
+            return f
+
 
 class PSFSourceGroup():
     """A group of PSF sources that are from the same source image.
 
     Attributes
     ----------
-    image_file : str
-        The name of image file
     image : 2d array
-        The image
+        Image
     catalog : `astropy.table.Table` instance
-        The catalog of PSF sources.  Columns are:
+        Catalog of PSF sources.  Columns are:
         cx, cy : center pixel coordinates
-        bx, by : box size in pixels
+        bx, by : bounding box size (pixels) of sources
         flux : total flux
         model : str, name of model
+    bbox : [by, bx], both numbers
+        Default bounding box size for each source, if `catalog` table does
+        not contain `by` and `bx` columns.
+    mask : 2d bool array of the same shape as `image`
+        Image mask
     """
     def __init__(self, image, catalog, bbox=None, mask=None):
         """
@@ -409,13 +474,25 @@ class PSFSourceGroup():
         if 'flux' not in self.catalog.keys():
             self.catalog.add_column(Column(np.repeat(0., len(self)),
                     name='flux'))
+        model_name = []
         for i,s in enumerate(self.sources):
             region = self._region(i)
             self.catalog[i]['cx'] = s.model.x0.value + region[1].start
             self.catalog[i]['cy'] = s.model.y0.value + region[0].start
             self.catalog[i]['flux'] = s.flux
+            if s.model.name is None:
+                model_name.append(s.model.__class__.__name__)
+            else:
+                model_name.append(s.model.name)
+        if 'model' in self.catalog.keys():
+            col_index = self.catalog.index_column('model')
+            self.catalog.remove_column('model')
+        else:
+            col_index = len(self.catalog.keys())
+        self.catalog.add_column(Column(model_name, name='model'),
+                                index=col_index)
 
-    def fit(self, fitter=None, model=None, niter=1):
+    def fit(self, model=None, fitter=None, niter=1):
         """Fit PSF to all sources
         """
         for j in range(niter):
@@ -427,7 +504,7 @@ class PSFSourceGroup():
                 self.sources[i].image = self._extract_subim(i, residual)
                 self.sources[i].mask = self._extract_subim(i, mask=True)
                 if model is not None:
-                    self.sources[i].model = model
+                    self.sources[i].model = model.copy()
                 self.sources[i].fit(fitter=fitter)
                 submodel = self.sources[i].model_image()
                 region = self._region(i)
@@ -491,6 +568,18 @@ class PSFSourceGroup():
 
 class PSFPhot():
     """Class to perform PSF photometry for given locations
+
+    Attributes
+    ----------
+    sgroup : list
+        Source groups.  A source group is defined as all the sources that are
+        identified in one single image.
+    catalog : `astropy.table.Table`
+        Source catalog.  This table includes all sources in all source groups.
+    bbox : [by, bx], numbers
+        Default size of bounding box.  See `PSFSourceGroup.bbox`.
+    fitter : `astropy.modeling.fitting.Fitter`
+        Default fitter.
     """
 
     def __init__(self, catalog, datadir='', bbox=None, fitter=None):
@@ -514,25 +603,28 @@ class PSFPhot():
             Fitter used to perform PSF fitting.  Default is
             `astropy.modeling.fitting.LevMarLSQFitter`
         """
-        self.catalog = catalog.copy()
         if fitter is None:
             fitter = LevMarLSQFitter()
         self.bbox = bbox
         self.fitter = fitter
         self._generate_filelist(datadir)
-        self._initialize_source_set()
+        self._initialize_source_set(catalog)
 
-    def _initialize_source_set(self):
+    @property
+    def catalog(self):
+        return table.vstack([x.catalog for x in self.sgroup])
+
+    def _initialize_source_set(self, catalog):
         """Initialize source set that contains groups of particles
         corresponding to different images"""
-        self._sgroup = []
-        imnames = np.unique(self.catalog['image'])
+        self.sgroup = []
+        imnames = np.unique(catalog['image'])
         for nn in imnames:
-            indices = self.catalog.index('image', nn)
+            indices = catalog.index('image', nn)
             im = self._load_image(nn)
-            sg = PSFSourceGroup(im, self.catalog[indices], bbox=self.bbox,
+            sg = PSFSourceGroup(im, catalog[indices], bbox=self.bbox,
                     mask=im>4094)
-            self._sgroup.append(sg)
+            self.sgroup.append(sg)
 
     def _generate_filelist(self, datadir):
         """Compile a list of file contained in the data directory, with a
@@ -556,7 +648,7 @@ class PSFPhot():
     def fit(self,  model=None, fitter=None, niter=1):
         """Fit PSF model to all sources.  See `PSFSourceGroup.fit`
         """
-        for sg in self._sgroup:
+        for sg in self.sgroup:
             sg.fit(model=model, fitter=fitter, niter=niter)
 
     def __call__(self, *args, **kwargs):
