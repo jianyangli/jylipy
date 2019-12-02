@@ -353,11 +353,17 @@ class PSFSourceGroup():
         bx, by : bounding box size (pixels) of sources
         flux : total flux
         model : str, name of model
+    sources : list of `PSFSource`
+        List of sources
     bbox : [by, bx], both numbers
         Default bounding box size for each source, if `catalog` table does
         not contain `by` and `bx` columns.
     mask : 2d bool array of the same shape as `image`
         Image mask
+    model_parm : `astropy.table.Table` or list
+        Model parameters.  If the models of all sources are identical, then
+        this attribute is a table.  Otherwise it is a list of tables for each
+        model types.
     """
     def __init__(self, image, catalog, bbox=None, mask=None):
         """
@@ -492,6 +498,28 @@ class PSFSourceGroup():
         self.catalog.add_column(Column(model_name, name='model'),
                                 index=col_index)
 
+    @property
+    def model_parm(self):
+        if 'model' not in self.catalog.keys():
+            return None
+        parm_tbl = []
+        for m in np.unique(self.catalog['model']):
+            index = self.catalog.index('model', m)[0]
+            parm = {}
+            for k in self.sources[index[0]].model.param_names:
+                parm[k] = [getattr(self.sources[x].model, k).value \
+                           for x in index]
+            parm = Table(parm)
+            if 'ID' in self.catalog.keys():
+                parm.add_column(self.catalog[index]['ID'], index=0)
+            else:
+                parm.add_column(self.catalog[index]['cy'], index=0)
+                parm.add_column(self.catalog[index]['cx'], index=0)
+            parm_tbl.append(Table(parm))
+        if len(parm_tbl) == 1:
+            parm_tbl = parm_tbl[0]
+        return parm_tbl
+
     def fit(self, model=None, fitter=None, niter=1):
         """Fit PSF to all sources
         """
@@ -574,12 +602,14 @@ class PSFPhot():
     sgroup : list
         Source groups.  A source group is defined as all the sources that are
         identified in one single image.
-    catalog : `astropy.table.Table`
-        Source catalog.  This table includes all sources in all source groups.
+    catalog : list of `astropy.table.Table`
+        Source catalogs from all source groups.
     bbox : [by, bx], numbers
         Default size of bounding box.  See `PSFSourceGroup.bbox`.
     fitter : `astropy.modeling.fitting.Fitter`
         Default fitter.
+    model_parm : list of list or `astropy.table.Table`
+        Model parameters from all source groups.
     """
 
     def __init__(self, catalog, datadir='', bbox=None, fitter=None):
@@ -612,16 +642,23 @@ class PSFPhot():
 
     @property
     def catalog(self):
-        return table.vstack([x.catalog for x in self.sgroup])
+        return [x.catalog for x in self.sgroup]
+
+    @property
+    def model_parm(self):
+        return [x.model_parm for x in self.sgroup]
 
     def _initialize_source_set(self, catalog):
         """Initialize source set that contains groups of particles
         corresponding to different images"""
+        from os.path import basename
         self.sgroup = []
         imnames = np.unique(catalog['image'])
         for nn in imnames:
             indices = catalog.index('image', nn)
             im = self._load_image(nn)
+            if im is None:
+                raise IOError('Could not load image {}.'.format(nn))
             sg = PSFSourceGroup(im, catalog[indices], bbox=self.bbox,
                     mask=im>4094)
             self.sgroup.append(sg)
@@ -632,14 +669,16 @@ class PSFPhot():
         """
         from os.path import basename
         self._file_list = findfile(datadir, '.fits', recursive=True)
-        self._file_id = ['_'.join(basename(x).split('.')[0].split('_')[:2])
-                for x in self._file_list]
+        self._file_id = [basename(x).split('.')[0].split('_')[0].split('S')[0]
+                         for x in self._file_list]
 
     def _load_image(self, img_id):
         """Return the image based on the input id
         """
+        from os.path import basename
         try:
-            match = self._file_id.index('_'.join(img_id.split('_')[:2]))
+            match = self._file_id.index(basename(img_id).split('.')[0].split(
+                                        '_')[0].split('S')[0])
         except ValueError:
             return None
         return readfits(self._file_list[match],
