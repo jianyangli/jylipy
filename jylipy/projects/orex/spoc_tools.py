@@ -1,8 +1,8 @@
-import urllib.request, urllib.error, urllib.parse, http.cookiejar, sys, json, os, threading, queue
+import urllib.request, urllib.error, urllib.parse, http.cookiejar, sys, json, os, threading, queue, re
 from datetime import datetime
 
 user_jyli = 'jyli'
-pwd_jyli = 'VUy-cw6-mDA-VLz'
+pwd_jyli = 'giUjMTSJf4g8DcE'
 
 
 def session_login(host, username=None, password=None):
@@ -42,9 +42,21 @@ def webapi_post(host, query, endpoint, username=None, password=None):
     cookiejar.add_cookie_header(request)
     try:
         response = urllib.request.urlopen(request)
-        return response.read()
+        return response.info(), response.read()
     except urllib.error.HTTPError as e:
         print('Failed to download. \nReason: %s\nQuery: %s' % (e.read(),query))
+
+
+CONTENT_DISPOSITION_RE = re.compile(r'attachment; filename="(.*)"')
+def parse_content_disposition(val):
+    if not val:
+        return None
+
+    m = re.match(CONTENT_DISPOSITION_RE, val)
+    if not m:
+        return None
+
+    return m.group(1)
 
 
 class DownloadHelper(threading.Thread):
@@ -86,7 +98,7 @@ def spoc_product_name(inst, level, group, cat='sci'):
         'l3e1'         : 'ovirs_sci_level3e_record'
         'l3e2'         : 'ovirs_sci_level3e'
     """
-    instruments = ['ovirs','navcam']
+    instruments = ['ovirs']
     categories = ['sci']
     levels = ['l0', 'l2', 'l3a', 'l3b', 'l3c', 'l3e', 'l3f', 'l3g']
     groups = ['spot', 'multipart']
@@ -127,7 +139,7 @@ class SPOC_Downloader():
         self.password = passwd
 
     def query(self):
-        query_str = '{ "table_name": '+self.table_name+', "columnsaa": ["*"] }'
+        query_str = '{ "table_name": '+self.table_name+', "columns": ["*"] }'
         result = webapi_post(self.host, query_str, 'data-get-values', username=self.username, password=self.password)
         if result is None:
             return False
