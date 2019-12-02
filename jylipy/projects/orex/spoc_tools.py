@@ -27,23 +27,23 @@ def session_login(host, username=None, password=None):
                                                        password)).encode()
     header = {'Content-Type': 'application/json'}
     # Attempt to login:
-    request = urllib.request.Request(url, params, header)
+    req = request.Request(url, params, header)
     try:
-        response = urllib.request.urlopen(request)
+        response = request.urlopen(req)
         # Save the cookie for later
         cookiejar = http.cookiejar.LWPCookieJar('%s_cookie' % host)
-        cookiejar.extract_cookies(response, request)
+        cookiejar.extract_cookies(response, req)
         cookiejar.save('%s_cookie' % (host))
         print('Successfully logged in')
-    except urllib.error.HTTPError as e:
+    except error.HTTPError as e:
         print('Failed to login.\nReason: %s' % e)
-        raise urllib.error.HTTPError
+        raise error.HTTPError
 
 
 def webapi_post(host, query, endpoint, username=None, password=None):
     url = 'https://%s.lpl.arizona.edu/%s' % (host, endpoint)
     header = {'Content-Type': 'application/json'}
-    request = urllib.request.Request(url, query.encode(), header)
+    req = request.Request(url, query.encode(), header)
     if host+'_cookie' not in os.listdir('.'):
         session_login(host, username=username, password=password)
     elif (datetime.now() -
@@ -51,11 +51,11 @@ def webapi_post(host, query, endpoint, username=None, password=None):
         session_login(host, username=username, password=password)
     cookiejar = http.cookiejar.LWPCookieJar('%s_cookie' % host)
     cookiejar.load('%s_cookie' % host)
-    cookiejar.add_cookie_header(request)
+    cookiejar.add_cookie_header(req)
     try:
-        response = urllib.request.urlopen(request)
+        response = request.urlopen(req)
         return response.info(), response.read()
-    except urllib.error.HTTPError as e:
+    except error.HTTPError as e:
         print('Failed to download. \nReason: %s\nQuery: %s' %
               (e.read(), query))
         return None, None
@@ -101,7 +101,7 @@ class DownloadHelper(threading.Thread):
         while 1:
             (level, id) = self.download_queue.get()
             if level == 'l0':
-                query = '{ "product": "ovirs_sci_frame.fits-l0-spot", '
+                query = '{ "product": "ovirs_sci_frame.fits-l0-spot", '\
                 ' "id": "ovirs_sci_frame.%s" }' % str(id)
                 spot = webapi_post('spocflight', query, 'data-get-product',
                                    username=self.username,
@@ -111,7 +111,7 @@ class DownloadHelper(threading.Thread):
                     f.write(spot)
                     f.close()
             else:
-                query = '{ "product": "ovirs_sci_level2_record.fits-l2-spot", '
+                query = '{ "product": "ovirs_sci_level2_record.fits-l2-spot",'\
                 '"id": "ovirs_sci_level2_record.%s" }' % str(id)
                 spot = webapi_post('spocflight', query, 'data-get-product',
                                    username=self.username,
@@ -236,15 +236,17 @@ class NAVCAM_Downloader(SPOC):
     def query(self):
         self._query_results = None
         if self.level == 'l0':
-            query = '{"table_name": "navcam_image_header", "columns": ["id"],'
-            ' "time_utc": {"start": "%s", "end": "%s"} }' % \
+            query = '{"table_name": "navcam_image_header", "columns": ["id"],'\
+            '"time_utc": {"start": "%s", "end": "%s"} }' % \
             (self.utc_start, self.utc_end)
             _, result = self.webapi_post(query, 'data-get-values')
         else:
-            query = '{"columns": ["navcam_image_level3.id"], "time_utc": '
+            query = '{"columns": ["navcam_image_level3.id"], "time_utc": '\
             '{"start": "%s", "end": "%s"} }' % ((self.utc_start, self.utc_end))
             _, result = self.webapi_post(query, 'data-get-values-related')
 
+        if result is None:
+            return False
         result = json.loads(result)
         self._query_result = result
         return True
@@ -258,18 +260,18 @@ class NAVCAM_Downloader(SPOC):
         if datadir is None:
             datadir = self.datadir
         if self.level == 'l0':
-            query = '{"product": "navcam_image_header.fits-opnav", "id":'
+            query = '{"product": "navcam_image_header.fits-opnav", "id":'\
             '"navcam_image_header.%s"}'
             field = 'id'
         else:
             if self.level == 'l3a':
-                query = '{"product": "navcam_image_level3.fits-l3a", "id":'
+                query = '{"product": "navcam_image_level3.fits-l3a", "id":'\
                 '"navcam_image_level3.%s"}'
             elif self.level == 'l3b':
-                query = '{"product": "navcam_image_level3.fits-l3a", "id":'
+                query = '{"product": "navcam_image_level3.fits-l3a", "id":'\
                 '"navcam_image_level3.%s"}'
             elif self.level == 'l3ab':
-                query = '{"product": "navcam_image_level3.fits-l3ab", "id":'
+                query = '{"product": "navcam_image_level3.fits-l3ab", "id":'\
                 '"navcam_image_level3.%s"}'
             field = 'navcam_image_level3.id'
         for id in self._query_result['result']:
