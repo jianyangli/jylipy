@@ -1,5 +1,8 @@
 import urllib.request, urllib.error, urllib.parse, http.cookiejar, sys, json, os, threading, queue, re
 from datetime import datetime
+from ...apext import Time
+from ...core import time_stamp
+
 
 user_jyli = 'jyli'
 pwd_jyli = 'giUjMTSJf4g8DcE'
@@ -45,6 +48,7 @@ def webapi_post(host, query, endpoint, username=None, password=None):
         return response.info(), response.read()
     except urllib.error.HTTPError as e:
         print('Failed to download. \nReason: %s\nQuery: %s' % (e.read(),query))
+        return None, None
 
 
 CONTENT_DISPOSITION_RE = re.compile(r'attachment; filename="(.*)"')
@@ -57,6 +61,21 @@ def parse_content_disposition(val):
         return None
 
     return m.group(1)
+
+
+class SPOC():
+    def __init__(self, host='spocflight', username=user_jyli,
+                password=pwd_jyli):
+        self.host = host
+        self.username = username
+        self.password = password
+
+    def login(self):
+        session_login(self.host, self.username, self.password)
+
+    def webapi_post(self, query, endpoint):
+        return webapi_post(self.host, query, endpoint, username=self.username,
+                password=self.password)
 
 
 class DownloadHelper(threading.Thread):
@@ -156,3 +175,83 @@ class SPOC_Downloader():
             download_queue.put((self.level, d['id']))
         if block:
             download_queue.join()
+
+
+class NAVCAM_Downloader(SPOC):
+    """NAVCAM image downloader
+    """
+    def __init__(self, utc_start, utc_end, level, datadir=None):
+        """
+        utc_start, utc_end : str
+            Start and end UTC
+        level : in ['l0', 'l3a', 'l3b', 'l3ab']
+            The level of data to be downloaded
+        datadir : str, optional
+            The directory that the downloaded data will be saved to.  Default
+            is 'navcam_`date_string`/' in the the current working directory.
+        user : str
+            Login username
+        passwd : str
+            Login password
+        """
+        super().__init__()
+        self.utc_start = utc_start
+        self.utc_end = utc_end
+        self.level = level
+        if datadir is None:
+            datadir = 'navcam_'+time_stamp(format=1).replace(':',
+                    '').replace('-','')
+        self.datadir = datadir
+        if self.level not in ['l0', 'l3a', 'l3b', 'l3ab']:
+            raise ValueError('Invalid data level specified.')
+
+    def query(self):
+        self._query_results = None
+        if self.level == 'l0':
+            query = '{"table_name": "navcam_image_header", "columns": ["id"], "time_utc": {"start": "%s", "end": "%s"} }' % (self.utc_start, self.utc_end)
+            _, result = self.webapi_post(query, 'data-get-values')
+        else:
+            query = '{"columns": ["navcam_image_level3.id"], "time_utc": {"start": "%s", "end": "%s"} }' % ((self.utc_start, self.utc_end))
+            _, result = self.webapi_post(query, 'data-get-values-related')
+
+        result = json.loads(result)
+        self._query_result = result
+        return True
+
+    def download(self, datadir=None):
+        from os.path import isdir, join
+        from os import mkdir
+        if (not hasattr(self, '_query_result')) or (self._query_result is None):
+            self.query()
+        if datadir is None:
+            datadir = self.datadir
+        if self.level == 'l0':
+            query = '{"product": "navcam_image_header.fits-opnav", "id": "navcam_image_header.%s"}'
+            field = 'id'
+        else:
+            if self.level == 'l3a':
+                query = '{"product": "navcam_image_level3.fits-l3a", "id": "navcam_image_level3.%s"}'
+            elif self.level == 'l3b':
+                query = '{"product": "navcam_image_level3.fits-l3a", "id": "navcam_image_level3.%s"}'
+            elif self.level == 'l3ab':
+                query = '{"product": "navcam_image_level3.fits-l3ab", "id": "navcam_image_level3.%s"}'
+            field = 'navcam_image_level3.id'
+        for id in self._query_result['result']:
+            headers, data = self.webapi_post((query % str(id[field])),
+                    'data-get-product')
+
+            if type(data) != type(None):
+                if not isdir(datadir):
+                    mkdir(datadir)
+                file_name = parse_content_disposition(headers.get(
+                        'content-disposition'))
+                if not file_name:
+                    file_name = 'navcam_image_{}_{}.fits'.format(self.level,
+                            str(id['field']))
+                file_name = join(self.datadir, file_name)
+                with open(file_name, 'wb') as output:
+                    output.write(data)
+                    output.close()
+            else:
+                print('Error downloading image %d' % id[field])
+
