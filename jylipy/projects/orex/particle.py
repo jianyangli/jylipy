@@ -273,6 +273,10 @@ class PSFSource():
             else:
                 return self.model.flux * self.corr
 
+    @flux.setter
+    def flux(self, v):
+        self._flux = v
+
     def _check_model(self):
         if self.model is None:
             raise ValueError('Model not specified for fitting.')
@@ -446,46 +450,68 @@ class PSFSourceGroup():
         else:
             return image[region].copy()
 
+    def _prepare_source(self, i):
+        """Prepare data for the ith source"""
+        c = self.catalog[i]
+        keys = self.catalog.keys()
+        if ('cx_fit' in keys) and \
+                ('cy_fit' in keys):
+            center = c['cy_fit', 'cx_fit']
+        else:
+            center = c['cy', 'cx']
+        subim = self._extract_subim(i).copy()
+        submsk = self._extract_subim(i, mask=True).copy()
+        if 'flux_fit' in keys:
+            flux = c['flux_fit']
+        elif 'flux' in keys:
+            flux = c['flux']
+        else:
+            flux = None
+        if 'ID' in keys:
+            ID = c['ID']
+        else:
+            ID = None
+        return center, subim, submsk, ID, flux
+
     def _populate_sources(self):
         """Populate all the source objects
         """
-        cat_keys = self.catalog.keys()
         self.sources = []
-        if 'flux' in cat_keys:
-            has_flux = True
-        else:
-            has_flux = False
-        if 'ID' in cat_keys:
-            has_id = True
-        else:
-            has_id = False
         for i, row in enumerate(self.catalog):
-            center = row['cy', 'cx']
-            subim = self._extract_subim(i).copy()
-            submsk = self._extract_subim(i, mask=True).copy()
-            if has_flux:
-                flux = row['flux']
-            else:
-                flux = None
-            if has_id:
-                ID = row['ID']
-            else:
-                ID = None
-            self.sources.append(PSFSource(row['cy','cx'], subim, mask=submsk,
+            center, subim, submsk, ID, flux = self._prepare_source(i)
+            self.sources.append(PSFSource(center, subim, mask=submsk,
                     ID=ID, flux=flux, meta=row))
+
+    def _update_sources(self):
+        """Update sources based on `.catalog`"""
+        if not hasattr(self, 'sources'):
+            return
+        for i, s in enumerate(self.sources):
+            center, subim, submsk, ID, flux = self._prepare_source(i)
+            s.center = center
+            s.image = subim
+            s.mask = submsk
+            s.ID = ID
+            s.flux = flux
 
     def _update_catalog(self):
         """Update catalog with model parameters, including the columns
-        `cx`, `cy`, and `flux`"""
-        if 'flux' not in self.catalog.keys():
-            self.catalog.add_column(Column(np.repeat(0., len(self)),
-                    name='flux'))
+        `cx_fit`, `cy_fit`, and `flux_fit`"""
         model_name = []
-        for i,s in enumerate(self.sources):
+        if 'flux_fit' not in self.catalog.keys():
+            self.catalog.add_column(Column(np.repeat(0., len(self)),
+                    name='flux_fit'))
+        if 'cx_fit' not in self.catalog.keys():
+            self.catalog.add_column(Column(np.repeat(0., len(self.catalog)),
+                                           name='cx_fit'))
+        if 'cy_fit' not in self.catalog.keys():
+            self.catalog.add_column(Column(np.repeat(0., len(self.catalog)),
+                                           name='cy_fit'))
+        for i, s in enumerate(self.sources):
             region = self._region(i)
-            self.catalog[i]['cx'] = s.model.x0.value + region[1].start
-            self.catalog[i]['cy'] = s.model.y0.value + region[0].start
-            self.catalog[i]['flux'] = s.flux
+            self.catalog[i]['cx_fit'] = s.model.x0.value + region[1].start
+            self.catalog[i]['cy_fit'] = s.model.y0.value + region[0].start
+            self.catalog[i]['flux_fit'] = s.flux
             if s.model.name is None:
                 model_name.append(s.model.__class__.__name__)
             else:
@@ -540,7 +566,8 @@ class PSFSourceGroup():
                 model_image[region] += submodel
             self.residual = residual
             self.model = model_image
-        self._update_catalog()
+            self._update_catalog()
+            self._update_sources()
 
     def mark_source(self, ds9, radius=3, color=None):
         """Mark the source location in DS9
