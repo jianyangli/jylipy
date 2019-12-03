@@ -206,9 +206,8 @@ class PSFSource():
     corr : number
         Correction factor for actual PSF
     """
-    def __init__(self, center, image, mask=None, ID=None, model=None,
+    def __init__(self, image, mask=None, ID=None, model=None,
                 flux=None, meta=None, corr=None):
-        self.center = center
         self.image = image
         self._mask = mask
         self.ID = ID
@@ -228,6 +227,13 @@ class PSFSource():
     @mask.setter
     def mask(self, msk):
         self._mask = msk
+
+    @property
+    def center(self):
+        if hasattr(self, 'model'):
+            return self.model.y0.value, self.model.x0.value
+        else:
+            return self.image.shape[0]/2, self.image.shape[1]/2
 
     def model_image(self, nobg=True):
         """Return model image
@@ -299,7 +305,6 @@ class PSFSource():
             data = self.image[~self.mask].astype('float32')
             self.model.amplitude = data.max()
             self.model = fitter(self.model, xx, yy, data)
-            self.center = self.model.y0, self.model.x0
 
     def display(self, ds9=None, num=None, subplots_kw={}, imshow_kw={},
                 nobg=True):
@@ -359,9 +364,6 @@ class PSFSourceGroup():
         model : str, name of model
     sources : list of `PSFSource`
         List of sources
-    bbox : [by, bx], both numbers
-        Default bounding box size for each source, if `catalog` table does
-        not contain `by` and `bx` columns.
     mask : 2d bool array of the same shape as `image`
         Image mask
     model_parm : `astropy.table.Table` or list
@@ -389,12 +391,20 @@ class PSFSourceGroup():
         mask : 2d bool array
             Image mask
         """
-        self.image = image
-        self.catalog = catalog.copy()
-        self.bbox = bbox
-        self.mask = mask
-        if ('cx' not in catalog.keys()) or ('cy' not in catalog.keys()):
+        keys = catalog.keys()
+        if ('cx' not in keys) or ('cy' not in keys):
             raise ValueError('`catalog` must contain columns `cx` and `cy`.')
+        if (('bx' not in keys) or ('by' not in keys)) and (bbox is None):
+            raise ValueError('`bbox` is not specified anywhere.')
+        ns = len(catalog)
+        if 'bx' not in keys:
+            catalog.add_column(Column(np.repeat(bbox[1], ns), name='bx'))
+        if 'by' not in keys:
+            catalog.add_column(Column(np.repeat(bbox[0], ns), name='by'))
+        self.image = image
+        self.mask = mask
+
+        self.catalog = catalog.copy()
         self._populate_sources()
 
     def __len__(self):
@@ -403,22 +413,18 @@ class PSFSourceGroup():
     def __getitem__(self, *args, **kwargs):
         return self.sources.__getitem__(*args, **kwargs)
 
+    def _center(self, i):
+        """Return (yc, xc) of the ith source"""
+        keys = self.catalog.keys()
+        if ('cy_fit' in keys) and ('cx_fit' in keys):
+            return self.catalog[i]['cy_fit', 'cx_fit']
+        else:
+            return self.catalog[i]['cy', 'cx']
+
     def _region(self, i):
         """Return the region slice for the ith source"""
-        cat_keys = self.catalog.keys()
-        if 'by' in cat_keys:
-            by = self.catalog['by'][i]
-        else:
-            if self.bbox is None:
-                raise ValueError('`bbox` not specified.')
-            by = self.bbox[0]
-        if 'bx' in cat_keys:
-            bx = self.catalog['bx'][i]
-        else:
-            if self.bbox is None:
-                raise ValueError('`bbox` not specified.')
-            bx = self.bbox[1]
-        cy, cx = self.catalog['cy', 'cx'][i]
+        by, bx = self.catalog[i]['by', 'bx']
+        cy, cx = self._center(i)
         imsz = self.image.shape
         x1 = int(round(np.clip(cx-bx//2, 0, imsz[1])))
         x2 = int(round(np.clip(cx+bx//2+1, 0, imsz[1])))
@@ -454,11 +460,7 @@ class PSFSourceGroup():
         """Prepare data for the ith source"""
         c = self.catalog[i]
         keys = self.catalog.keys()
-        if ('cx_fit' in keys) and \
-                ('cy_fit' in keys):
-            center = c['cy_fit', 'cx_fit']
-        else:
-            center = c['cy', 'cx']
+        center = self._center(i)
         subim = self._extract_subim(i).copy()
         submsk = self._extract_subim(i, mask=True).copy()
         if 'flux_fit' in keys:
@@ -479,8 +481,8 @@ class PSFSourceGroup():
         self.sources = []
         for i, row in enumerate(self.catalog):
             center, subim, submsk, ID, flux = self._prepare_source(i)
-            self.sources.append(PSFSource(center, subim, mask=submsk,
-                    ID=ID, flux=flux, meta=row))
+            self.sources.append(PSFSource(subim, mask=submsk, ID=ID, flux=flux,
+                                          meta=row))
 
     def _update_sources(self):
         """Update sources based on `.catalog`"""
@@ -488,7 +490,6 @@ class PSFSourceGroup():
             return
         for i, s in enumerate(self.sources):
             center, subim, submsk, ID, flux = self._prepare_source(i)
-            s.center = center
             s.image = subim
             s.mask = submsk
             s.ID = ID
@@ -498,31 +499,40 @@ class PSFSourceGroup():
         """Update catalog with model parameters, including the columns
         `cx_fit`, `cy_fit`, and `flux_fit`"""
         model_name = []
-        if 'flux_fit' not in self.catalog.keys():
-            self.catalog.add_column(Column(np.repeat(0., len(self)),
-                    name='flux_fit'))
-        if 'cx_fit' not in self.catalog.keys():
-            self.catalog.add_column(Column(np.repeat(0., len(self.catalog)),
-                                           name='cx_fit'))
-        if 'cy_fit' not in self.catalog.keys():
-            self.catalog.add_column(Column(np.repeat(0., len(self.catalog)),
-                                           name='cy_fit'))
+        flux_fit = np.zeros(len(self))
+        cx_fit = np.zeros(len(self))
+        cy_fit = np.zeros(len(self))
         for i, s in enumerate(self.sources):
             region = self._region(i)
-            self.catalog[i]['cx_fit'] = s.model.x0.value + region[1].start
-            self.catalog[i]['cy_fit'] = s.model.y0.value + region[0].start
-            self.catalog[i]['flux_fit'] = s.flux
+            ct = s.center
+            cx_fit[i] = ct[1] + region[1].start
+            cy_fit[i] = ct[0] + region[0].start
+            flux_fit[i] = s.flux
             if s.model.name is None:
                 model_name.append(s.model.__class__.__name__)
             else:
                 model_name.append(s.model.name)
-        if 'model' in self.catalog.keys():
-            col_index = self.catalog.index_column('model')
-            self.catalog.remove_column('model')
+        model_name = Column(model_name, name='model')
+        flux_fit = Column(flux_fit, name='flux_fit')
+        cx_fit = Column(cx_fit, name='cx_fit')
+        cy_fit = Column(cy_fit, name='cy_fit')
+        keys = self.catalog.keys()
+        if 'model' in keys:
+            self.catalog.replace_column('model', model_name)
         else:
-            col_index = len(self.catalog.keys())
-        self.catalog.add_column(Column(model_name, name='model'),
-                                index=col_index)
+            self.catalog.add_column(model_name)
+        if 'flux_fit' in keys:
+            self.catalog.replace_column('flux_fit', flux_fit)
+        else:
+            self.catalog.add_column(flux_fit)
+        if 'cx_fit' in keys:
+            self.catalog.replace_column('cx_fit', cx_fit)
+        else:
+            self.catalog.add_column(cx_fit)
+        if 'cy_fit' in keys:
+            self.catalog.replace_column('cy_fit', cy_fit)
+        else:
+            self.catalog.add_column(cy_fit)
 
     @property
     def model_parm(self):
@@ -631,8 +641,6 @@ class PSFPhot():
         identified in one single image.
     catalog : list of `astropy.table.Table`
         Source catalogs from all source groups.
-    bbox : [by, bx], numbers
-        Default size of bounding box.  See `PSFSourceGroup.bbox`.
     fitter : `astropy.modeling.fitting.Fitter`
         Default fitter.
     model_parm : list of list or `astropy.table.Table`
