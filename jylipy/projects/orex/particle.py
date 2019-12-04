@@ -348,6 +348,54 @@ class PSFSource():
             ax[2].set_axis_off()
             return f
 
+    @classmethod
+    def from_row(cls, image, row, bbox=None, mask=None):
+        """Generate `PSFSource` object from a row in the catalog
+
+        Parameter
+        ---------
+        image : 2D array
+            Whole image that contains the source
+        row : `astropy.table.row.Row`, record array
+            A row in the catalog that contains at least 'cx' and 'cy'.  Other
+            useable fields include 'cx_fit', 'cy_fit', 'flux', 'flux_fit',
+            'ID', 'bx', 'by'.
+        bbox : [by, bx], numbers
+            The bounding box size in pixels
+        """
+        keys = row.dtype.names
+        if (('by' not in keys) or ('bx' not in keys)) and bbox is None:
+            raise ValueError('bounding box not defined.')
+        if 'by' in keys:
+            by, bx = row['by', 'bx']
+        else:
+            by, bx = bbox
+        if ('cy_fit' in keys) and ('cx_fit' in keys):
+            cy, cx = row['cy_fit', 'cx_fit']
+        else:
+            cy, cx = row['cy', 'cx']
+        if 'flux_fit' in keys:
+            flux = row['flux_fit']
+        elif 'flux' in keys:
+            flux = row['flux']
+        else:
+            flux = None
+        if 'ID' in keys:
+            ID = row['ID']
+        else:
+            ID = None
+        imsz = image.shape
+        x1 = int(round(np.clip(cx-bx//2, 0, imsz[1])))
+        x2 = int(round(np.clip(cx+bx//2+1, 0, imsz[1])))
+        y1 = int(round(np.clip(cy-by//2, 0, imsz[0])))
+        y2 = int(round(np.clip(cy+by//2+1, 0, imsz[0])))
+        subim = image[y1:y2, x1:x2]
+        if mask is None:
+            submsk = np.zeros((y2-y1, x2-x1))
+        else:
+            submsk = mask[y1:y2, x1:x2]
+        return cls(subim, mask=submsk, ID=ID, flux=flux, meta=row)
+
 
 class PSFSourceGroup():
     """A group of PSF sources that are from the same source image.
@@ -405,7 +453,8 @@ class PSFSourceGroup():
         self.mask = mask
 
         self.catalog = catalog.copy()
-        self._populate_sources()
+        self.sources = [PSFSource.from_row(self.image, row, bbox=bbox,
+                                           mask=mask) for row in self.catalog]
 
     def __len__(self):
         return len(self.catalog)
@@ -456,44 +505,29 @@ class PSFSourceGroup():
         else:
             return image[region].copy()
 
-    def _prepare_source(self, i):
-        """Prepare data for the ith source"""
-        c = self.catalog[i]
-        keys = self.catalog.keys()
-        center = self._center(i)
-        subim = self._extract_subim(i).copy()
-        submsk = self._extract_subim(i, mask=True).copy()
-        if 'flux_fit' in keys:
-            flux = c['flux_fit']
-        elif 'flux' in keys:
-            flux = c['flux']
-        else:
-            flux = None
-        if 'ID' in keys:
-            ID = c['ID']
-        else:
-            ID = None
-        return center, subim, submsk, ID, flux
+    def _update_sources(self, i=None):
+        """Update sources based on `.catalog`
 
-    def _populate_sources(self):
-        """Populate all the source objects
+        If optional parameter `i` is None, then all sources will be updated.
+        Otherwise source[i] is updated.
         """
-        self.sources = []
-        for i, row in enumerate(self.catalog):
-            center, subim, submsk, ID, flux = self._prepare_source(i)
-            self.sources.append(PSFSource(subim, mask=submsk, ID=ID, flux=flux,
-                                          meta=row))
-
-    def _update_sources(self):
-        """Update sources based on `.catalog`"""
         if not hasattr(self, 'sources'):
             return
-        for i, s in enumerate(self.sources):
-            center, subim, submsk, ID, flux = self._prepare_source(i)
-            s.image = subim
-            s.mask = submsk
-            s.ID = ID
-            s.flux = flux
+        if i is None:
+            for i, s in enumerate(self.sources):
+                self._update_sources(i=i)
+        else:
+            s = self.sources[i]
+            s.image = self._extract_subim(i).copy()
+            s.mask = self._extract_subim(i, mask=True).copy()
+            c = self.catalog[i]
+            keys = self.catalog.keys()
+            if 'flux_fit' in keys:
+                s.flux = c['flux_fit']
+            elif 'flux' in keys:
+                s.flux = c['flux']
+            else:
+                s.flux = None
 
     def _update_catalog(self):
         """Update catalog with model parameters, including the columns
