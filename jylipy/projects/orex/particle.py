@@ -391,7 +391,7 @@ class PSFSource():
         y2 = int(round(np.clip(cy+by//2+1, 0, imsz[0])))
         subim = image[y1:y2, x1:x2]
         if mask is None:
-            submsk = np.zeros((y2-y1, x2-x1))
+            submsk = np.zeros((y2-y1, x2-x1), dtype=bool)
         else:
             submsk = mask[y1:y2, x1:x2]
         return cls(subim, mask=submsk, ID=ID, flux=flux, meta=row)
