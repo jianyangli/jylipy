@@ -108,6 +108,26 @@ class SmearedGaussian2D(Fittable2DModel):
             return self.amplitude * np.sqrt(2*np.pi) * self.sigma \
                 * self.smear / erf(0.5 * self.smear / self.sigma * _sqrt2recip)
 
+    @property
+    def flux_err(self):
+        """Calculate flux error from covariance matrix"""
+        # formula derived on 12/4/2019
+        if (not hasattr(self, 'cov')) or (self.cov is None):
+            return np.nan
+
+        if self.smear == 0:
+            ddp = np.array([2*np.pi*self.sigma*self.sigma, 0])
+        else:
+            erf_func_recip = 1./erf(0.5*self.smear*_sqrt2recip/self.sigma)
+            _sqrt_2pi = np.sqrt(2 * np.pi)
+            ddamp = _sqrt_2pi * self.sigma * self.smear * erf_func_recip
+            exp_term = np.exp(- self.smear * self.smear /
+                              (8 * self.sigma * self.sigma))
+            ddsmear = self.amplitude * (_sqrt_2pi * self.sigma - self.smear \
+                                * exp_term * erf_func_recip) * erf_func_recip
+            ddp = np.array([ddamp, ddsmear])
+        return np.sqrt(ddp @ self.cov[:2,:2] @ ddp)
+
     def BGFree(self):
         """Return a background-free version of the model
         """
@@ -199,6 +219,8 @@ class PSFSource():
         Model that describes the source
     flux : number
         Total flux of source
+    flux_err : number
+        Error of total flux
     image : 2D array
         Image of the source
     mask : 2D bool array of the same size as `image`
@@ -283,12 +305,30 @@ class PSFSource():
     def flux(self, v):
         self._flux = v
 
+    @property
+    def flux_err(self):
+        if self.model is None:
+            return np.nan
+        else:
+            if not hasattr(self.model, 'flux_err'):
+                raise AttributeError('`flux_err` attribute is not available in'
+                                     ' model.')
+            if self.corr is None:
+                return self.model.flux_err
+            else:
+                return self.model.flux_err * self.corr
+
     def _check_model(self):
         if self.model is None:
             raise ValueError('Model not specified for fitting.')
 
-    def fit(self, fitter=None):
+    def fit(self, fitter=None, maxiter=500):
         """Fit the source to a PSF model
+
+        After fitting the model to source, it attaches parameter covariance
+        and `fitter.fit_info` to `.model`.
+
+        Return `astropy.modeling.fitting.Fitter`
         """
         self._check_model()
 
@@ -304,7 +344,10 @@ class PSFSource():
             yy = yy0[~self.mask].astype('float32')
             data = self.image[~self.mask].astype('float32')
             self.model.amplitude = data.max()
-            self.model = fitter(self.model, xx, yy, data)
+            self.model = fitter(self.model, xx, yy, data, maxiter=maxiter)
+            self.model.cov = fitter.fit_info['param_cov']
+            self.model.fit_info = fitter.fit_info
+        return fitter
 
     def display(self, ds9=None, num=None, subplots_kw={}, imshow_kw={},
                 nobg=True):
@@ -534,6 +577,7 @@ class PSFSourceGroup():
         `cx_fit`, `cy_fit`, and `flux_fit`"""
         model_name = []
         flux_fit = np.zeros(len(self))
+        flux_fit_err = np.zeros(len(self))
         cx_fit = np.zeros(len(self))
         cy_fit = np.zeros(len(self))
         for i, s in enumerate(self.sources):
@@ -542,31 +586,32 @@ class PSFSourceGroup():
             cx_fit[i] = ct[1] + region[1].start
             cy_fit[i] = ct[0] + region[0].start
             flux_fit[i] = s.flux
+            flux_fit_err[i] = s.flux_err
             if s.model.name is None:
                 model_name.append(s.model.__class__.__name__)
             else:
                 model_name.append(s.model.name)
-        model_name = Column(model_name, name='model')
-        flux_fit = Column(flux_fit, name='flux_fit')
-        cx_fit = Column(cx_fit, name='cx_fit')
-        cy_fit = Column(cy_fit, name='cy_fit')
         keys = self.catalog.keys()
         if 'model' in keys:
             self.catalog.replace_column('model', model_name)
         else:
-            self.catalog.add_column(model_name)
+            self.catalog.add_column(Column(model_name, name='model'))
         if 'flux_fit' in keys:
             self.catalog.replace_column('flux_fit', flux_fit)
         else:
-            self.catalog.add_column(flux_fit)
+            self.catalog.add_column(Column(flux_fit, name='flux_fit'))
+        if 'flux_fit_err' in keys:
+            self.catalog.replace_column('flux_fit_err', flux_fit_err)
+        else:
+            self.catalog.add_column(Column(flux_fit_err, name='flux_fit_err'))
         if 'cx_fit' in keys:
             self.catalog.replace_column('cx_fit', cx_fit)
         else:
-            self.catalog.add_column(cx_fit)
+            self.catalog.add_column(Column(cx_fit, name='cx_fit'))
         if 'cy_fit' in keys:
             self.catalog.replace_column('cy_fit', cy_fit)
         else:
-            self.catalog.add_column(cy_fit)
+            self.catalog.add_column(Column(cy_fit, name='cy_fit'))
 
     @property
     def model_parm(self):
