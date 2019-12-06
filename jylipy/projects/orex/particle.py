@@ -156,18 +156,43 @@ class SmearedGaussian2D(Fittable2DModel):
         if (not hasattr(self, 'cov')) or (self.cov is None):
             return np.nan
 
+        ddp = []
+        i = []
+
         if self.smear == 0:
-            ddp = np.array([2*np.pi*self.sigma*self.sigma, 0])
+            if not self.amplitude.fixed:
+                ddp.append(2*np.pi*self.sigma*self.sigma)
+                i.append(0)
+            if not self.sigma.fixed:
+                dd.append(4*np.pi*self.amplitude*self.sigma)
+                i.append(1)
+            if not self.smear.fixed:
+                ddp.append(0)
+                i.append(2)
         else:
             erf_func_recip = 1./erf(0.5*self.smear*_sqrt2recip/self.sigma)
             _sqrt_2pi = np.sqrt(2 * np.pi)
-            ddamp = _sqrt_2pi * self.sigma * self.smear * erf_func_recip
-            exp_term = np.exp(- self.smear * self.smear /
+            exp_term = np.exp(- self.smear * self.smear / \
                               (8 * self.sigma * self.sigma))
-            ddsmear = self.amplitude * (_sqrt_2pi * self.sigma - self.smear \
-                                * exp_term * erf_func_recip) * erf_func_recip
-            ddp = np.array([ddamp, ddsmear])
-        return np.sqrt(ddp @ self.cov[:2,:2] @ ddp)
+            if not self.amplitude.fixed:
+                ddp.append(_sqrt_2pi * self.sigma * self.smear * \
+                           erf_func_recip)
+                i.append(0)
+            if not self.sigma.fixed:
+                ddp.append(self.amplitude * self.smear * (_sqrt_2pi + \
+                           self.smear * exp_term * erf_func_recip / \
+                           self.sigma) * erf_func_recip)
+                i.append(1)
+            if not self.smear.fixed:
+                ddp.append(self.amplitude * (_sqrt_2pi * self.sigma - \
+                           self.smear * exp_term * erf_func_recip) * \
+                           erf_func_recip)
+                i.append(2)
+
+        ddp = np.array(ddp)
+        i = np.array(i)
+        cov = self.cov[i][:,i]
+        return np.sqrt(ddp @ cov @ ddp)
 
     def BGFree(self):
         """Return a background-free version of the model
