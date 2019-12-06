@@ -49,6 +49,47 @@ class RoundGaussian2D(Fittable2DModel):
     def flux(self):
         return 2*np.pi*self.sigma**2*self.amplitude
 
+    @property
+    def flux_err(self):
+        """Calculate flux error from covariance matrix"""
+        # formula derived on 12/4/2019
+        if (not hasattr(self, 'cov')) or (self.cov is None):
+            return np.nan
+
+        ddp = []
+        i = []
+        if ~self.amplitude.fixed:
+            ddp.append(2*np.pi*self.sigma*self.sigma)
+            i.append(0)
+        if ~self.sigma.fixed:
+            ddp.append(4*np.pi*self.sigma*self.amplitude)
+            i.append(1)
+
+        ddp = np.array(ddp)
+        i = np.array(i)
+        cov = self.cov[i][:,i]
+        return np.sqrt(ddp @ cov @ ddp)
+
+    def BGFree(self):
+        return RoundGaussian2D(self.amplitude, self.sigma, self.x0, self.y0)
+
+
+class RoundGaussian2D_LinearBG(RoundGaussian2D):
+    """Round 2D Gaussian model with linear background
+    """
+    amplitude = Parameter(default=1., min=0.)
+    sigma = Parameter(default=1., min=0.)
+    x0 = Parameter(default=0.)
+    y0 = Parameter(default=0.)
+    a = Parameter(default=0.)
+    b = Parameter(default=0.)
+    c = Parameter(default=0.)
+
+    @staticmethod
+    def evaluate(x, y, amplitude, sigma, x0, y0, a, b, c):
+        return RoundGaussian2D.evaluate(x, y, amplitude, sigma, x0, y0) + \
+                a*x + b*y + c
+
 
 class SmearedGaussian2D(Fittable2DModel):
     """
