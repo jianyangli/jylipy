@@ -85,6 +85,11 @@ class RoundGaussian2D_LinearBG(RoundGaussian2D):
     b = Parameter(default=0.)
     c = Parameter(default=0.)
 
+    @property
+    def flux_err(self):
+        model_err = super().flux_err
+        return np.sqrt(model_err * model_err + self.c)
+
     @staticmethod
     def evaluate(x, y, amplitude, sigma, x0, y0, a, b, c):
         return RoundGaussian2D.evaluate(x, y, amplitude, sigma, x0, y0) + \
@@ -228,6 +233,11 @@ class SmearedGaussian2D_ConstantBG(SmearedGaussian2D):
     position_angle = Parameter(default=0., min=0., max=np.pi)
     background = Parameter(default=0.)
 
+    @property
+    def flux_err(self):
+        model_err = super().flux_err
+        return np.sqrt(model_err * model_err + self.background)
+
     @staticmethod
     def evaluate(x, y, amplitude, sigma, smear, x0, y0, angle, background):
         return SmearedGaussian2D.evaluate(x, y, amplitude, sigma, smear, x0,
@@ -265,6 +275,11 @@ class SmearedGaussian2D_LinearBG(SmearedGaussian2D):
     a = Parameter(default=0.)
     b = Parameter(default=0.)
     c = Parameter(default=0.)
+
+    @property
+    def flux_err(self):
+        model_err = super().flux_err
+        return np.sqrt(model_err * model_err + self.c)
 
     @staticmethod
     def evaluate(x, y, amplitude, sigma, smear, x0, y0, angle, a, b, c):
