@@ -974,42 +974,49 @@ class PhotometricData(object):
             if 'RADF' in self.refkey:
                 self._data.add_column(Column(self.RADF/np.pi, name=key))
             elif 'BRDF' in self.refkey:
-                self._data.add_column(Column(self.BRDF*self.mu0, name=key))
+                self._data.add_column(Column((self.BRDF.T*self.mu0).T,
+                                             name=key))
             else:
-                self._data.add_column(Column(self.REFF*self.mu0/np.pi, name=key))
+                self._data.add_column(Column((self.REFF.T*self.mu0).T/np.pi,
+                                             name=key))
         elif key == 'RADF':
             if 'BDR' in self.refkey:
                 self._data.add_column(Column(self.BDR*np.pi, name=key))
             elif 'BRDF' in self.refkey:
-                self._data.add_column(Column(self.BRDF*self.mu0*np.pi, name=key))
+                self._data.add_column(Column((self.BRDF.T*self.mu0).T*np.pi,
+                                             name=key))
             else:
-                self._data.add_column(Column(self.REFF*self.mu0, name=key))
+                self._data.add_column(Column((self.REFF.T*self.mu0).T,
+                                             name=key))
         elif key == 'BRDF':
             if 'BDR' in self.refkey:
-                self._data.add_column(Column(self.BDR/self.mu0, name=key))
+                self._data.add_column(Column((self.BDR.T/self.mu0).T,
+                                             name=key))
             elif 'RADF' in self.refkey:
-                self._data.add_column(Column(self.RADF/(np.pi*self.mu0), name=key))
+                self._data.add_column(Column((self.RADF.T/(np.pi*self.mu0)).T,
+                                             name=key))
             else:
                 self._data.add_column(Column(self.REFF/np.pi, name=key))
         elif key == 'REFF':
             if 'BDR' in self.refkey:
-                self._data.add_column(Column(self.BDR*np.pi/self.mu0, name=key))
+                self._data.add_column(Column((self.BDR*np.pi/self.mu0).T,
+                                             name=key))
             elif 'RADF' in self.refkey:
-                self._data.add_column(Column(self.RADF/self.mu0, name=key))
+                self._data.add_column(Column((self.RADF/self.mu0).T, name=key))
             else:
                 self._data.add_column(Column(self.BRDF*np.pi, name=key))
         else:
             pass
 
-    def __getitem__(self, k):
-        s = self.sca[k].astable()
-        r = self._data[k]
-        if self.geo is not None:
-            g = self.geo[k]
-            out = PhotometricData(table.hstack((s,r,g)))
-        else:
-            out = PhotometricData(table.hstack((s,r)))
-        return out
+    #def __getitem__(self, k):
+    #    s = self.sca[k].astable()
+    #    r = self._data[k]
+    #    if self.geo is not None:
+    #        g = self.geo[k]
+    #        out = PhotometricData(table.hstack((s,r,g)))
+    #    else:
+    #        out = PhotometricData(table.hstack((s,r)))
+    #    return out
 
     #def __setitem__(self, k, v):
     #   v = PhotometricData(v)
@@ -1076,7 +1083,8 @@ class PhotometricData(object):
             out.meta['binparms'] = self.binparms
         return out
 
-    def plot(self, x=None, y='RADF', correction=None, unit='deg', type='auto', **kwargs):
+    def plot(self, x=None, y='RADF', band=None, correction=None, unit='deg',
+             type='auto', **kwargs):
         '''Plot photometric data.
 
         x : str, optional
@@ -1102,8 +1110,14 @@ class PhotometricData(object):
                 type = 'scatter'
 
         # prepare plotting quantities
-        xlbl = {'inc': 'Incidence Angle', 'emi': 'Emission Angle', 'pha': 'Phase Angle', 'psi': 'Plane Angle', 'lat': 'Photometric Latitude', 'lon': 'Photometric Longitude'}
+        xlbl = {'inc': 'Incidence Angle', 'emi': 'Emission Angle',
+                'pha': 'Phase Angle', 'psi': 'Plane Angle',
+                'lat': 'Photometric Latitude', 'lon': 'Photometric Longitude'}
         yy = getattr(self, y)
+        if yy.ndim == 2:
+            if band is None:
+                band = 0
+            yy = yy[:, band]
         ylabel = kwargs.pop('ylabel', y)
         if correction != None:
             if correction.lower() in ['ls', 'lommel-seeliger']:
@@ -1117,20 +1131,24 @@ class PhotometricData(object):
                 yy = yy/corr
                 ylabel = ylabel+'$/\mu_0$'
             else:
-                raise ValueError('correction type must be in [''LS'', ''Lommel-Seeliger'', ''Lambert'', {0} received'.format(correction))
+                raise ValueError('correction type must be in [''LS'', '
+                                 ' ''Lommel-Seeliger'', ''Lambert'', '
+                                 '{0} received'.format(correction))
 
         # make plots
         if type == 'density':
             if x is None:
                 x = 'pha'
             xx = getattr(self, x).to(unit).value
-            xlabel = kwargs.pop('xlabel', '{0} ({1})'.format(xlbl[x], str(unit)))
+            xlabel = kwargs.pop('xlabel', '{0} ({1})'.format(xlbl[x],
+                                str(unit)))
             density(xx, yy, xlabel=xlabel, ylabel=ylabel, **kwargs)
         elif type == 'scatter':
             from matplotlib import pyplot as plt
             if x is not None:
                 xx = getattr(self, x).to(unit).value
-                xlabel = kwargs.pop('xlabel', '{0} ({1})'.format(xlbl[x], str(unit)))
+                xlabel = kwargs.pop('xlabel', '{0} ({1})'.format(xlbl[x],
+                                    str(unit)))
                 plt.plot(xx, yy, 'o')
                 pplot(xlabel=xlabel, ylabel=ylabel, **kwargs)
             else:
@@ -1143,7 +1161,8 @@ class PhotometricData(object):
                     pplot(ax[i], xlabel=xlabel, ylabel=ylabel, **kwargs)
                 plt.draw()
         else:
-            raise ValueError("`type` of plot can only be 'auto', 'scatter', or 'density'")
+            raise ValueError("`type` of plot can only be 'auto', 'scatter', "
+                             "or 'density'")
 
     def write(self, *args, **kwargs):
         '''Save photometric data to a FITS file'''
@@ -1253,14 +1272,6 @@ class PhotometricData(object):
                 pho._add_refkey(k)
         self._data = table.vstack((self._data, pho._data))
         self._set_properties()
-        #if self.lonlim is not None and pho.lonlim is not None:
-        #   self.lonlim = [min([self.lonlim[0],pho.lonlim[0]]),max([self.lonlim[1],pho.lonlim[1]])]
-        #else:
-        #   self.lonlim = None
-        #if self.latlim is not None and pho.latlim is not None:
-        #   self.latlim = [min([self.latlim[0],pho.latlim[0]]),max([self.latlim[1],pho.latlim[1]])]
-        #else:
-        #   self.latlim = None
 
     def _binned_merge(self, pho):
         # check binning boundaries
@@ -1418,7 +1429,11 @@ class PhotometricData(object):
                 d = data.to('deg').value
                 rm |= (d<l1) | (d>l2)
         if rlim is not None:
-            rm |= (self.BDR>rlim[1]) | (self.BDR<rlim[0])
+            if self.BDR.ndim == 1:
+                rm |= (self.BDR>rlim[1]) | (self.BDR<rlim[0])
+            else:
+                for b in range(self.BDR.shape[1]):
+                    rm |= (self.BDR[:,b]>rlim[1]) | (self.BDR[:,b]<rlim[0])
         rmidx = np.where(rm)[0]
         self.remove_rows(rmidx)
 
