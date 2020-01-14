@@ -43,7 +43,8 @@ class Region(object):
         '''
 
         if len(self.parname) != len(args):
-            raise TypeError('{0}.__init__() takes {1} arguments ({2} given)'.format(type(self),len(self.parname)+1,len(args)+1))
+            raise TypeError('{0}.__init__() takes {1} arguments ({2} given)'.
+                format(type(self),len(self.parname)+1,len(args)+1))
         if self._shape is None:
             self._shape = kwargs.pop('shape', None)
         self.frame = kwargs.pop('frame', None)
@@ -92,7 +93,8 @@ class Region(object):
         return self.y+self.__dict__[self.size[1]]/2.
 
     def __repr__(self):
-        return '<'+super(Region, self).__repr__().split()[0].split('.')[-1]+'('+self.__str__().split('(')[1]+'>'
+        return '<'+super(Region, self).__repr__().split()[0].split('.')[-1]+ \
+            '('+self.__str__().split('(')[1]+'>'
 
     def __str__(self):
         par = []
@@ -121,7 +123,8 @@ class Region(object):
         for k in list(self.specs.keys()):
             propstr = propstr+' '+k+'='+str(self.specs[k])
         propstr = '#'+propstr
-        ds9.set('regions', 'image; '+self.shape+' '+' '.join(str(par)[1:-1].split(','))+propstr)
+        ds9.set('regions', 'image; {} {} {}'.format(self.shape,
+                ' '.join(str(par)[1:-1].split(',')), propstr))
 
 
 class CircularRegion(Region):
@@ -150,6 +153,74 @@ class AnnulusRegion(Region):
     parname = ('x', 'y', 'r_in', 'r_out')
     _shape = 'annulus'
     size = ('r_out', 'r_out')
+
+
+class RegionList(list):
+    """Region list class"""
+
+    @classmethod
+    def from_ds9(cls, d, frame=None, system='image'):
+        """Return a list of region objects from DS9 window
+
+        d : `DS9`
+            The DS9 window to collect region objects from
+        """
+        obj = cls()
+        if frame is not None:
+            fno0 = d.get('frame')
+            d.set('frame '+str(frame))
+        cf = d.get('frame')
+        sys0 = d.get('region system')
+        if sys0 != system:
+            d.set('region system '+system)
+        regstr = d.get('regions -format ds9').strip().split('\n')
+
+        gs = {}
+        global_specs = regstr[1].split(' ')
+        if global_specs[0] == 'global':
+            for i in range(1, len(global_specs)):
+                if global_specs[i].find('=') != -1:
+                    k, v = global_specs[i].split('=')
+                    if i < len(global_specs):
+                        while (i<len(global_specs)-1) and \
+                                (global_specs[i+1].find('=') == -1):
+                            i += 1
+                            v = ' '.join([v, global_specs[i]])
+                    try:
+                        v = int(v)
+                    except ValueError:
+                        pass
+                    gs[k] = v
+        obj.global_specs = gs
+        obj.global_specs['frame'] = cf
+        obj.global_specs['zerobased'] = False
+        if len(regstr) > 2:
+            obj.global_specs['system'] = regstr[2]
+        if len(regstr) > 3:
+            for s in regstr[3:]:
+                spec = obj.global_specs.copy()
+                spec['ds9'] = d
+                s = s.split('#')
+                if len(s) > 1:
+                    for sp in s[1].strip().split(' '):
+                        k, v = sp.split('=')
+                        spec[k] = v
+                s = s[0].split('(')
+                if s[0] == 'circle':
+                    par = eval('('+s[1])
+                    obj.append(CircularRegion(*par, **spec))
+                elif s[0] == 'ellipse':
+                    par = eval('('+s[1])
+                    obj.append(EllipseRegion(*par, **spec))
+                elif s[0] == 'box':
+                    par = eval('('+s[1])
+                    obj.append(BoxRegion(*par, **spec))
+                elif s[0] == 'annulus':
+                    par = eval('('+s[1])
+                    obj.append(AnnulusRegion(*par, **spec))
+                else:
+                    obj.append('('.join(s))
+        return obj
 
 
 import pyds9
@@ -453,44 +524,13 @@ class DS9(pyds9.DS9):
         '''Display multiframe FITS'''
         self.set('multiframe '+fitsfile)
 
-    def region(self, frame=None, system='image', zerobased=True):
+    def region(self, **kwargs):
         '''Returns a list of regions already defined in the frame
 
         Note: the keyword `zerobased` controls the coordinate indexing
         convention.  DS9 convention is 1-based, but Python convention
         is 0-based!'''
-        if frame is not None:
-            fno0 = self.get('frame')
-            self.set('frame '+str(frame))
-        cf = self.get('frame')
-        sys0 = self.get('region system')
-        if sys0 != system:
-            self.set('region system '+system)
-        regstr = self.get('region -format saoimage')
-        if regstr == []:
-            return []
-        else:
-            regstr = regstr.split()
-        reg = []
-        for r in regstr:
-            shape = r[:r.find('(')]
-            pars = np.fromstring(r[r.find('('):].strip('()'),sep=',',dtype=float)
-            if zerobased:
-                pars[:2] -= 1
-            if shape == 'circle':
-                reg.append(CircularRegion(*pars, ds9=self, frame=cf, zerobased=zerobased))
-            elif shape == 'ellipse':
-                reg.append(EllipseRegion(*pars, ds9=self, frame=cf, zerobased=zerobased))
-            elif shape == 'box':
-                reg.append(BoxRegion(*pars, ds9=self, frame=cf, zerobased=zerobased))
-            elif shape == 'annulus':
-                reg.append(AnnulusRegion(*pars, ds9=self, frame=cf, zerobased=zerobased))
-            else:
-                reg.append({'shape': shape, 'pars': pars})
-        if frame is not None:
-            self.set('frame '+fno0)
-        self.set('region system '+sys0)
-        return reg
+        return RegionList.from_ds9(self, **kwargs)
 
     def aperture(self, frame=None, zerobased=True):
         '''Extract apertures from circular or annulus regions in
