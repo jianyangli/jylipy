@@ -805,6 +805,10 @@ class PhotometricData(object):
             else:
                 self.geo = None
 
+            # collect wavelength
+            if 'band' in kwargs:
+                self.band = kwargs.pop('band')
+
         elif len(args) == 1:
             if isinstance(args[0], PhotometricData):
                 # Initialize from another PhotometricData instance
@@ -1164,14 +1168,20 @@ class PhotometricData(object):
             raise ValueError("`type` of plot can only be 'auto', 'scatter', "
                              "or 'density'")
 
-    def write(self, *args, **kwargs):
+    def write(self, outfile, **kwargs):
         '''Save photometric data to a FITS file'''
-        data = self.astable()
-        return data.write(*args, **kwargs)
+        hdu = fits.PrimaryHDU()
+        tblhdu = fits.BinTableHDU(self.astable(), name='phodata')
+        hdulist = fits.HDUList([hdu, tblhdu])
+        if hasattr(self, 'band'):
+            bandhdu = fits.ImageHDU(self.band, name='band')
+            hdulist.append(bandhdu)
+        hdulist.writeto(outfile, **kwargs)
 
     def read(self, filename):
         '''Read photometric data from file'''
-        infits = fits.open(filename)[1]
+        infitshdu = fits.open(filename)
+        infits = infitshdu[1]
         indata = Table(infits.data)
         ang_keys = ['inc', 'emi', 'pha', 'psi', 'pholat', 'pholon']
         ref_keys = ['BDR', 'RADF', 'BRDF', 'REFF']
@@ -1201,6 +1211,10 @@ class PhotometricData(object):
             self.geo = LatLon(gt)
         else:
             self.geo = None
+
+        if len(infitshdu) > 2:
+            self.band = infitshdu[2].data
+
         self._set_properties()
 
     def append(self, v):
