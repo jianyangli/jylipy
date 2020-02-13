@@ -2,6 +2,7 @@
 
 import numpy as np
 from astropy.modeling import Parameter
+from astropy.io import fits
 import jylipy.Photometry as pho
 
 
@@ -125,3 +126,19 @@ class Akimov_Linear(pho.PhotometricModel):
         f = 10**(0.4*b*pha)
         disk = pho.AkimovDisk(ALak)
         return np.pi * f * disk(pha, lat, lon)
+
+
+
+class PhotometricData(pho.PhotometricData):
+
+    @classmethod
+    def from_spdif(cls, spdif):
+        """Initialize PhotometricData class from SPDIF"""
+
+        data = fits.open(spdif)
+        pho = cls(iof=data[0].data,
+                  inc=data[3].data['incidang'], emi=data[3].data['emissang'],
+                  pha=data[3].data['phaseang'], geolon=data[3].data['lon'],
+                  geolat=data[3].data['lat'], band=data['wavelength'].data)
+
+        return pho
