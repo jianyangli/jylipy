@@ -821,6 +821,7 @@ class PhotometricData(object):
                     self.geo = data.geo.copy()
                 self._type = data.type
                 self.binparms = args[0].binparms
+                self.band = args[0].band
             elif isinstance(args[0], Table):
                 # Initialize from an astropy Table
                 cos = kwargs.pop('cos', False)
@@ -1012,15 +1013,17 @@ class PhotometricData(object):
         else:
             pass
 
-    #def __getitem__(self, k):
-    #    s = self.sca[k].astable()
-    #    r = self._data[k]
-    #    if self.geo is not None:
-    #        g = self.geo[k]
-    #        out = PhotometricData(table.hstack((s,r,g)))
-    #    else:
-    #        out = PhotometricData(table.hstack((s,r)))
-    #    return out
+    def __getitem__(self, k):
+        s = self.sca[k].astable()
+        r = self._data[k]
+        if self.geo is not None:
+            g = self.geo[k]
+            out = PhotometricData(table.hstack([s,r,g]))
+        else:
+            out = PhotometricData(table.hstack([s,r]))
+        if hasattr(self, 'band'):
+            out.band = self.band
+        return out
 
     #def __setitem__(self, k, v):
     #   v = PhotometricData(v)
