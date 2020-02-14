@@ -1219,6 +1219,7 @@ class PhotometricData(object):
             self.band = infitshdu[2].data
 
         self._set_properties()
+        infitshdu.close()
 
     def append(self, v):
         '''Append data to the end'''
@@ -2199,6 +2200,7 @@ class PhotometricDataGrid(object):
             info = Table(inf['info'].data).asdict()
             for k in 'latmin latmax lonmin lonmax incmin incmax emimin emimax phamin phamax'.split():
                 info[k] = info[k]*units.deg
+            inf.close()
 
         return {'version': ver, 'lon': lon, 'lat': lat, 'info': info}
 
@@ -2884,6 +2886,7 @@ class ModelGrid(object):
             keys = eval(hdus['primary'].header['extra'])
             for k in keys:
                 self.extra[k] = hdus[k].data
+        hdus.close()
 
 class PhaseFunction(FittableModel):
 
