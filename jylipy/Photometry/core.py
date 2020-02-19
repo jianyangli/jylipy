@@ -1183,9 +1183,12 @@ class PhotometricData(object):
 
     def read(self, filename):
         '''Read photometric data from file'''
-        infitshdu = fits.open(filename)
-        infits = infitshdu[1]
-        indata = Table(infits.data)
+        with fits.open(filename) as infitshdu:
+            indata = Table(infitshdu[1].data)
+            hdr = infitshdu[1].header
+            if len(infitshdu) > 2:
+                self.band = infitshdu[2].data.copy()
+
         ang_keys = ['inc', 'emi', 'pha', 'psi', 'pholat', 'pholon']
         ref_keys = ['BDR', 'RADF', 'BRDF', 'REFF']
         geo_keys = ['lat', 'lon', 'geolat', 'geolon']
@@ -1200,26 +1203,22 @@ class PhotometricData(object):
             gt.rename_column('geolat', 'lat')
         if 'geolon' in gt.keys():
             gt.rename_column('geolon', 'lon')
-        if 'TUNIT1' in infits.header:
-            unit = infits.header['TUNIT1'].strip()
+        if 'TUNIT1' in hdr:
+            unit = hdr['TUNIT1'].strip()
         else:
             unit = 'deg'
         for c in ak:
             at[c].unit = unit
         self.sca = ScatteringGeometry(at)
         self._data = rt.copy()
-        self._type = infits.header.pop('DTYPE', 'measured')
-        self.binparms = infits.header.pop('binparms',None)
+        self._type = hdr.pop('DTYPE', 'measured')
+        self.binparms = hdr.pop('binparms',None)
         if len(gk)>0:
             self.geo = LatLon(gt)
         else:
             self.geo = None
 
-        if len(infitshdu) > 2:
-            self.band = infitshdu[2].data
-
         self._set_properties()
-        infitshdu.close()
 
     def append(self, v):
         '''Append data to the end'''
@@ -2885,7 +2884,7 @@ class ModelGrid(object):
         if 'extra' in hdus['primary'].header:
             keys = eval(hdus['primary'].header['extra'])
             for k in keys:
-                self.extra[k] = hdus[k].data
+                self.extra[k] = hdus[k].data.copy()
         hdus.close()
 
 class PhaseFunction(FittableModel):
