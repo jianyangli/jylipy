@@ -26,6 +26,7 @@ from . import vector
 from . import pysis_ext
 from . import astrometry
 from . import mpc
+from . import alma
 #from . import spiceypy1
 
 # In testing

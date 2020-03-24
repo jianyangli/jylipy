@@ -806,6 +806,10 @@ class PhotometricData(object):
             else:
                 self.geo = None
 
+            # collect wavelength
+            if 'band' in kwargs:
+                self.band = kwargs.pop('band')
+
         elif len(args) == 1:
             if isinstance(args[0], PhotometricData):
                 # Initialize from another PhotometricData instance
@@ -818,6 +822,7 @@ class PhotometricData(object):
                     self.geo = data.geo.copy()
                 self._type = data.type
                 self.binparms = args[0].binparms
+                self.band = args[0].band
             elif isinstance(args[0], Table):
                 # Initialize from an astropy Table
                 cos = kwargs.pop('cos', False)
@@ -975,28 +980,35 @@ class PhotometricData(object):
             if 'RADF' in self.refkey:
                 self._data.add_column(Column(self.RADF/np.pi, name=key))
             elif 'BRDF' in self.refkey:
-                self._data.add_column(Column(self.BRDF*self.mu0, name=key))
+                self._data.add_column(Column((self.BRDF.T*self.mu0).T,
+                                             name=key))
             else:
-                self._data.add_column(Column(self.REFF*self.mu0/np.pi, name=key))
+                self._data.add_column(Column((self.REFF.T*self.mu0).T/np.pi,
+                                             name=key))
         elif key == 'RADF':
             if 'BDR' in self.refkey:
                 self._data.add_column(Column(self.BDR*np.pi, name=key))
             elif 'BRDF' in self.refkey:
-                self._data.add_column(Column(self.BRDF*self.mu0*np.pi, name=key))
+                self._data.add_column(Column((self.BRDF.T*self.mu0).T*np.pi,
+                                             name=key))
             else:
-                self._data.add_column(Column(self.REFF*self.mu0, name=key))
+                self._data.add_column(Column((self.REFF.T*self.mu0).T,
+                                             name=key))
         elif key == 'BRDF':
             if 'BDR' in self.refkey:
-                self._data.add_column(Column(self.BDR/self.mu0, name=key))
+                self._data.add_column(Column((self.BDR.T/self.mu0).T,
+                                             name=key))
             elif 'RADF' in self.refkey:
-                self._data.add_column(Column(self.RADF/(np.pi*self.mu0), name=key))
+                self._data.add_column(Column((self.RADF.T/(np.pi*self.mu0)).T,
+                                             name=key))
             else:
                 self._data.add_column(Column(self.REFF/np.pi, name=key))
         elif key == 'REFF':
             if 'BDR' in self.refkey:
-                self._data.add_column(Column(self.BDR*np.pi/self.mu0, name=key))
+                self._data.add_column(Column((self.BDR*np.pi/self.mu0).T,
+                                             name=key))
             elif 'RADF' in self.refkey:
-                self._data.add_column(Column(self.RADF/self.mu0, name=key))
+                self._data.add_column(Column((self.RADF/self.mu0).T, name=key))
             else:
                 self._data.add_column(Column(self.BRDF*np.pi, name=key))
         else:
@@ -1007,9 +1019,11 @@ class PhotometricData(object):
         r = self._data[k]
         if self.geo is not None:
             g = self.geo[k]
-            out = PhotometricData(table.hstack((s,r,g)))
+            out = PhotometricData(table.hstack([s,r,g]))
         else:
-            out = PhotometricData(table.hstack((s,r)))
+            out = PhotometricData(table.hstack([s,r]))
+        if hasattr(self, 'band'):
+            out.band = self.band
         return out
 
     #def __setitem__(self, k, v):
@@ -1077,7 +1091,8 @@ class PhotometricData(object):
             out.meta['binparms'] = self.binparms
         return out
 
-    def plot(self, x=None, y='RADF', correction=None, unit='deg', type='auto', **kwargs):
+    def plot(self, x=None, y='RADF', band=None, correction=None, unit='deg',
+             type='auto', **kwargs):
         '''Plot photometric data.
 
         x : str, optional
@@ -1103,8 +1118,14 @@ class PhotometricData(object):
                 type = 'scatter'
 
         # prepare plotting quantities
-        xlbl = {'inc': 'Incidence Angle', 'emi': 'Emission Angle', 'pha': 'Phase Angle', 'psi': 'Plane Angle', 'lat': 'Photometric Latitude', 'lon': 'Photometric Longitude'}
+        xlbl = {'inc': 'Incidence Angle', 'emi': 'Emission Angle',
+                'pha': 'Phase Angle', 'psi': 'Plane Angle',
+                'lat': 'Photometric Latitude', 'lon': 'Photometric Longitude'}
         yy = getattr(self, y)
+        if yy.ndim == 2:
+            if band is None:
+                band = 0
+            yy = yy[:, band]
         ylabel = kwargs.pop('ylabel', y)
         if correction != None:
             if correction.lower() in ['ls', 'lommel-seeliger']:
@@ -1118,20 +1139,24 @@ class PhotometricData(object):
                 yy = yy/corr
                 ylabel = ylabel+'$/\mu_0$'
             else:
-                raise ValueError('correction type must be in [''LS'', ''Lommel-Seeliger'', ''Lambert'', {0} received'.format(correction))
+                raise ValueError('correction type must be in [''LS'', '
+                                 ' ''Lommel-Seeliger'', ''Lambert'', '
+                                 '{0} received'.format(correction))
 
         # make plots
         if type == 'density':
             if x is None:
                 x = 'pha'
             xx = getattr(self, x).to(unit).value
-            xlabel = kwargs.pop('xlabel', '{0} ({1})'.format(xlbl[x], str(unit)))
+            xlabel = kwargs.pop('xlabel', '{0} ({1})'.format(xlbl[x],
+                                str(unit)))
             density(xx, yy, xlabel=xlabel, ylabel=ylabel, **kwargs)
         elif type == 'scatter':
             from matplotlib import pyplot as plt
             if x is not None:
                 xx = getattr(self, x).to(unit).value
-                xlabel = kwargs.pop('xlabel', '{0} ({1})'.format(xlbl[x], str(unit)))
+                xlabel = kwargs.pop('xlabel', '{0} ({1})'.format(xlbl[x],
+                                    str(unit)))
                 plt.plot(xx, yy, 'o')
                 pplot(xlabel=xlabel, ylabel=ylabel, **kwargs)
             else:
@@ -1144,17 +1169,27 @@ class PhotometricData(object):
                     pplot(ax[i], xlabel=xlabel, ylabel=ylabel, **kwargs)
                 plt.draw()
         else:
-            raise ValueError("`type` of plot can only be 'auto', 'scatter', or 'density'")
+            raise ValueError("`type` of plot can only be 'auto', 'scatter', "
+                             "or 'density'")
 
-    def write(self, *args, **kwargs):
+    def write(self, outfile, **kwargs):
         '''Save photometric data to a FITS file'''
-        data = self.astable()
-        return data.write(*args, **kwargs)
+        hdu = fits.PrimaryHDU()
+        tblhdu = fits.BinTableHDU(self.astable(), name='phodata')
+        hdulist = fits.HDUList([hdu, tblhdu])
+        if hasattr(self, 'band'):
+            bandhdu = fits.ImageHDU(self.band, name='band')
+            hdulist.append(bandhdu)
+        hdulist.writeto(outfile, **kwargs)
 
     def read(self, filename):
         '''Read photometric data from file'''
-        infits = fits.open(filename)[1]
-        indata = Table(infits.data)
+        with fits.open(filename) as infitshdu:
+            indata = Table(infitshdu[1].data)
+            hdr = infitshdu[1].header
+            if len(infitshdu) > 2:
+                self.band = infitshdu[2].data.copy()
+
         ang_keys = ['inc', 'emi', 'pha', 'psi', 'pholat', 'pholon']
         ref_keys = ['BDR', 'RADF', 'BRDF', 'REFF']
         geo_keys = ['lat', 'lon', 'geolat', 'geolon']
@@ -1169,20 +1204,21 @@ class PhotometricData(object):
             gt.rename_column('geolat', 'lat')
         if 'geolon' in gt.keys():
             gt.rename_column('geolon', 'lon')
-        if 'TUNIT1' in infits.header:
-            unit = infits.header['TUNIT1'].strip()
+        if 'TUNIT1' in hdr:
+            unit = hdr['TUNIT1'].strip()
         else:
             unit = 'deg'
         for c in ak:
             at[c].unit = unit
         self.sca = ScatteringGeometry(at)
         self._data = rt.copy()
-        self._type = infits.header.pop('DTYPE', 'measured')
-        self.binparms = infits.header.pop('binparms',None)
+        self._type = hdr.pop('DTYPE', 'measured')
+        self.binparms = hdr.pop('binparms',None)
         if len(gk)>0:
             self.geo = LatLon(gt)
         else:
             self.geo = None
+
         self._set_properties()
 
     def append(self, v):
@@ -1254,14 +1290,6 @@ class PhotometricData(object):
                 pho._add_refkey(k)
         self._data = table.vstack((self._data, pho._data))
         self._set_properties()
-        #if self.lonlim is not None and pho.lonlim is not None:
-        #   self.lonlim = [min([self.lonlim[0],pho.lonlim[0]]),max([self.lonlim[1],pho.lonlim[1]])]
-        #else:
-        #   self.lonlim = None
-        #if self.latlim is not None and pho.latlim is not None:
-        #   self.latlim = [min([self.latlim[0],pho.latlim[0]]),max([self.latlim[1],pho.latlim[1]])]
-        #else:
-        #   self.latlim = None
 
     def _binned_merge(self, pho):
         # check binning boundaries
@@ -1419,7 +1447,11 @@ class PhotometricData(object):
                 d = data.to('deg').value
                 rm |= (d<l1) | (d>l2)
         if rlim is not None:
-            rm |= (self.BDR>rlim[1]) | (self.BDR<rlim[0])
+            if self.BDR.ndim == 1:
+                rm |= (self.BDR>rlim[1]) | (self.BDR<rlim[0])
+            else:
+                for b in range(self.BDR.shape[1]):
+                    rm |= (self.BDR[:,b]>rlim[1]) | (self.BDR[:,b]<rlim[0])
         rmidx = np.where(rm)[0]
         self.remove_rows(rmidx)
 
@@ -1570,7 +1602,7 @@ class PhotometricDataGrid(object):
 
     _version = '1.0.0'
 
-    def __init__(self, lon=None, lat=None, datafile=None, maxmem=1.5):
+    def __init__(self, lon=None, lat=None, datafile=None, maxmem=8.):
         '''PhotometricDataGrid class initialization
 
         lon, lat : array-like numbers, optional
@@ -2168,6 +2200,7 @@ class PhotometricDataGrid(object):
             info = Table(inf['info'].data).asdict()
             for k in 'latmin latmax lonmin lonmax incmin incmax emimin emimax phamin phamax'.split():
                 info[k] = info[k]*units.deg
+            inf.close()
 
         return {'version': ver, 'lon': lon, 'lat': lat, 'info': info}
 
@@ -2480,7 +2513,7 @@ class PhotometricGridFitter(object):
         njj = len(jj)
 
         def fit_ij(i, j):
-            if isinstance(data[i,j], PhotometricData):
+            if (not data._info['masked'][i,j]) and isinstance(data[i,j], PhotometricData):
                 d = data[i,j].copy()
                 d.validate()
                 d.trim(ilim=ilim, elim=elim, alim=alim, rlim=rlim)
@@ -2555,8 +2588,8 @@ class PhotometricGridFitter(object):
                     process_fit(fitter, m, n, verbose=verbose)
 
         self.fitted = True
-        self.model.extra['RMS'] = self.RMS.astype(float)
-        self.model.extra['RRMS'] = self.RRMS.astype(float)
+        self.model.extra['RMS'] = self.RMS
+        self.model.extra['RRMS'] = self.RRMS
         return self.model
 
 
@@ -2785,7 +2818,31 @@ class ModelGrid(object):
         if len(ex_keys) > 0:
             out[0].header['extra'] = str(tuple(ex_keys))
             for k in ex_keys:
-                hdu = fits.ImageHDU(self.extra[k], name=k)
+                try:
+                    data = self.extra[k].astype(float)
+                except ValueError:
+                    len_arr = np.zeros(self.extra[k].shape, dtype=int)
+                    it = np.nditer(self.extra[k], flags=['multi_index',
+                        'refs_ok'])
+                    while not it.finished:
+                        try:
+                            len_arr[it.multi_index] = \
+                                len(self.extra[k][it.multi_index])
+                        except TypeError:
+                            pass
+                        it.iternext()
+                    sz = len_arr.max()
+                    data = np.zeros(self.extra[k].shape+(sz,))
+                    it = np.nditer(self.extra[k], flags=['multi_index',
+                        'refs_ok'])
+                    while not it.finished:
+                        if len_arr[it.multi_index] == 0:
+                            data[it.multi_index] = np.zeros(sz)
+                        else:
+                            data[it.multi_index] = \
+                                self.extra[k][it.multi_index]
+                        it.iternext()
+                hdu = fits.ImageHDU(data, name=k)
                 out.append(hdu)
         out.writeto(filename, overwrite=overwrite)
 
@@ -2828,7 +2885,8 @@ class ModelGrid(object):
         if 'extra' in hdus['primary'].header:
             keys = eval(hdus['primary'].header['extra'])
             for k in keys:
-                self.extra[k] = hdus[k].data
+                self.extra[k] = hdus[k].data.copy()
+        hdus.close()
 
 class PhaseFunction(FittableModel):
 
