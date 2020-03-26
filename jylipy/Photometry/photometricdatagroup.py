@@ -348,6 +348,67 @@ class PhotometricDataArray(np.ndarray):
         obj.read(infile)
         return obj
 
+    def trim(self,  verbose=True, **kwargs):
+        """Trim photometric data in the array
+
+        See `PhotometricData.trim()` for details
+        """
+        tag = -0.1
+        flattened = self.reshape(-1)
+        masked = flattened['masked']
+        # prepare property array
+        fields = list(flattened.dtype.names)
+        fields.remove('pho')
+        fields.remove('file')
+        prop = np.asarray(flattened[fields]).copy()
+        # loop through all elements
+        for i in range(self.size):
+            prog = float(i)/self.size*100
+            if verbose:
+                if prog > tag:
+                    import sys
+                    sys.stdout.write('{:.1f} completed\r'.format(prog))
+                    sys.stdout.flush()
+                    tag = np.ceil(prog + 0.1)
+            if masked[i]:
+                continue
+            x = flattened[i]
+            orig_len = len(x)
+            x.trim(**kwargs)
+            final_len = len(x)
+            if final_len != orig_len:
+                prop['count'][i] = final_len
+                flattened['flushed'][i] = False
+                if len(x) == 0:
+                    prop['incmin'][i] = 0.
+                    prop['incmax'][i] = 0.
+                    prop['emimin'][i] = 0.
+                    prop['emimax'][i] = 0.
+                    prop['phamin'][i] = 0.
+                    prop['phamax'][i] = 0.
+                    prop['latmin'][i] = 0.
+                    prop['latmax'][i] = 0.
+                    prop['latmin'][i] = 0.
+                    prop['latmax'][i] = 0.
+                    flattened['masked'][i] = True
+                else:
+                    prop['incmin'][i] = x.inclim[0].to('deg').value
+                    prop['incmax'][i] = x.inclim[1].to('deg').value
+                    prop['emimin'][i] = x.emilim[0].to('deg').value
+                    prop['emimax'][i] = x.emilim[1].to('deg').value
+                    prop['phamin'][i] = x.phalim[0].to('deg').value
+                    prop['phamax'][i] = x.phalim[1].to('deg').value
+                    prop['latmin'][i] = x.latlim[0].to('deg').value
+                    prop['latmax'][i] = x.latlim[1].to('deg').value
+                    prop['latmin'][i] = x.lonlim[0].to('deg').value
+                    prop['latmax'][i] = x.lonlim[1].to('deg').value
+        # update properties
+        prop['masked'] = flattened['masked']
+        prop['loaded'] = flattened['loaded']
+        prop['flushed'] = flattened['flushed']
+        for f in fields:
+            super().__setitem__(f, prop[f].reshape(self.shape))
+
 
 class PhotometricModelArray(np.ndarray):
     """Photometric model array
