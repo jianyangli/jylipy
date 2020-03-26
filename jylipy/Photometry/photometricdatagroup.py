@@ -58,19 +58,17 @@ def phoarr_info(phoarr, shape=False, all=False):
 class PhotometricDataArray(np.ndarray):
     """Photometric data array object
     """
-    def __new__(cls, *args, **kwargs):
-        maxmem = kwargs.pop('maxmem', 10)
-        datafile = kwargs.pop('datafile', None)
-        n = int((np.floor(np.log10(np.array(args[0]).prod()))+1))
+    def __new__(cls, shape, maxmem=10, datafile=None, order=None):
+        """Initialize object"""
+        n = int((np.floor(np.log10(np.array(shape).prod()))+1))
         fmt = '%0' + '%i' % n + 'i'
-        dtype = kwargs.pop('dtype', None)
         names = tuple('pho file count incmin incmax emimin emimax'
             ' phamin phamax lonmin lonmax latmin latmax masked loaded'
             ' flushed'.split())
         types = [object, 'U{}'.format(n+13), int, float, float, float, float,
             float, float, float, float, float, float, bool, bool, bool]
         dtype = [(n, d) for n, d in zip(names, types)]
-        obj = super().__new__(cls, *args, dtype=dtype, **kwargs)
+        obj = super().__new__(cls, shape, dtype=dtype, order=order)
         obj.maxmem = maxmem
         obj.datafile = datafile
         i = 0
@@ -99,33 +97,37 @@ class PhotometricDataArray(np.ndarray):
     def __getitem__(self, k):
         out = super().__getitem__(k)
         if isinstance(out, PhotometricDataArray):
+            # the type of `out` is casted to type(self) if k is a slice or
+            # a field name
             if (out.dtype.names is None) or (len(out.dtype.names) < 16):
+                # if getting a field not the whole record array
                 return np.asarray(out)
-            return out
+            else:
+                # if getting a slice of object
+                return out
         else:
+            # if getting a single element
             if (not out['masked']) and (not out['loaded']):
-                if self.datafile is None:
-                    raise ValueError('Data file not specified.')
-                datafile, datadir = self._path_name(self.datafile)
-                f = os.path.join(datadir, out['file'])
-                if os.path.isfile(f):
-                    self._memory_dump()
-                    out['pho'] = PhotometricData(f)
-                    out['loaded'] = True
-                    out['flushed'] = True
-                else:
-                    raise IOError('Data record not found from file {}'.
-                            format(f))
+                self._load_data(out)
             return out['pho']
 
     def __setitem__(self, k, v):
+        """Assign values to specified PhotometricDataArray elements
+
+        Cases allowed for assignment:
+            1. assign a single element by a PhotometricData object
+            2. assign a slice by a PhotometricDataArray object of the
+               same shape
+            3. assign a slice by repeating a PhotometricData object
+        """
         if isinstance(k, str) or ((hasattr(k, '__iter__')) and \
                 np.any([isinstance(x, str) for x in k])):
             raise ValueError('Setting property fields not allowed')
+        self._memory_dump()
         if (self[k] is None) or (isinstance(self[k], PhotometricData)):
+            # assign a single element by a PhotometricData object
             if not isinstance(v, PhotometricData):
                 raise ValueError('`PhotometricData` instance required.')
-            self._memory_dump()
             self['pho'][k] = v
             self['count'][k] = len(v)
             self['incmin'][k] = v.inclim[0].to('deg').value
@@ -142,31 +144,34 @@ class PhotometricDataArray(np.ndarray):
             self['flushed'][k] = False
             self['loaded'][k] = True
         elif isinstance(self[k], PhotometricDataArray):
+            # assigne a slice
             if isinstance(v, PhotometricData):
-                self._memory_dump()
+                # by repeating a single PhotometricData object
+                prop = (len(v),
+                        v.inclim[0].to('deg').value,
+                        v.inclim[1].to('deg').value,
+                        v.emilim[0].to('deg').value,
+                        v.emilim[1].to('deg').value,
+                        v.phalim[0].to('deg').value,
+                        v.phalim[1].to('deg').value,
+                        v.latlim[0].to('deg').value,
+                        v.latlim[1].to('deg').value,
+                        v.lonlim[0].to('deg').value,
+                        v.lonlim[1].to('deg').value,
+                        False,
+                        True,
+                        False)
                 for x in np.nditer(self[k], flags=['refs_ok'],
                         op_flags=['readwrite']):
                     recname = str(x['file'].copy())
-                    x[...] = (v.copy(),
-                              recname,
-                              len(v),
-                              v.inclim[0].to('deg').value,
-                              v.inclim[1].to('deg').value,
-                              v.emilim[0].to('deg').value,
-                              v.emilim[1].to('deg').value,
-                              v.phalim[0].to('deg').value,
-                              v.phalim[1].to('deg').value,
-                              v.latlim[0].to('deg').value,
-                              v.latlim[1].to('deg').value,
-                              v.lonlim[0].to('deg').value,
-                              v.lonlim[1].to('deg').value,
-                              False,
-                              True,
-                              False)
+                    x[...] = (v.copy(), recname) + prop
             elif isinstance(v, PhotometricDataArray):
+                # by a PhotometricDataArray object
+                # force load all elements if not already loaded
+                for x in v.reshape(-1):
+                    pass
                 fields = list(self.dtype.names)
                 fields.remove('file')
-                self._memory_dump()
                 for f in fields:
                     from copy import deepcopy
                     self[f][k] = deepcopy(v[f])
@@ -177,15 +182,6 @@ class PhotometricDataArray(np.ndarray):
             else:
                 raise ValueError('Only `PhotometricData` or'
                     ' `PhotometricDataArray` instance allowed.')
-        else:
-            raise ValueError('Only `PhotometricData` or `PhotometricDataArray`'
-                ' instance allowed.')
-        self._memory_dump()
-
-    def _set_property(self, k, v):
-        """Set the property fields of the record array
-        """
-        super().__setitem__(k, v)
 
     def _memory_dump(self, forced=False, verbose=False):
         """Check the size of object, free memory by deleting
@@ -213,22 +209,23 @@ class PhotometricDataArray(np.ndarray):
         infofile = filename+'.fits'
         return infofile, datadir
 
-    #def _load_data(self, x):
-    #    """Load photometric data record
+    def _load_data(self, x):
+        """Load photometric data record
 
-    #     x : one element in `PhotometricDataArray`
-    #    """
-    #    if (not x['masked']) and (not x['loaded']):
-    #        if self.datafile is None:
-    #            raise ValueError('Data file not specified.')
-    #        filename, datadir = self._path_name(self.datafile)
-    #        f = os.path.join(datadir, x['file'].item())
-    #        if os.path.isfile(f):
-    #            x['pho'][()] = PhotometricData(f)
-    #            x['loaded'] = True
-    #            x['flushed'] = True
-    #        else:
-    #            raise IOError('Data record not found.')
+         x : reference to an element in `PhotometricDataArray`
+        """
+        if self.datafile is None:
+            raise ValueError('Data file not specified.')
+        datafile, datadir = self._path_name(self.datafile)
+        f = os.path.join(datadir, x['file'])
+        if os.path.isfile(f):
+            self._memory_dump()
+            x['pho'] = PhotometricData(f)
+            x['loaded'] = True
+            x['flushed'] = True
+        else:
+            raise IOError('Data record not found from file {}'.
+                    format(f))
 
     def _save_data(self, x, outdir=None, flush=True):
         """Save photometric data record
@@ -342,7 +339,7 @@ class PhotometricDataArray(np.ndarray):
             raise IOError("Shape of PhotometricDataArray doesn't match input"
                 " data.")
         for k in info.dtype.names:
-            self._set_property(k, info[k].reshape(self.shape))
+            super().__setitem__(k, info[k].reshape(self.shape))
 
     @classmethod
     def from_file(cls, infile):
