@@ -1,5 +1,6 @@
 # Photometric data group classes
 
+import warnings
 import os
 import numpy as np
 from astropy.io import fits
@@ -9,6 +10,10 @@ __all__ = ['phoarr_info', 'PhotometricDataArray', 'PhotometricModelArray']
 
 
 _memory_size = lambda x: x*4.470348358154297e-08
+
+
+class MemoryWarning(Warning):
+    "Memory dump failure warning."
 
 
 def phoarr_info(phoarr, shape=False, all=False):
@@ -192,6 +197,10 @@ class PhotometricDataArray(np.ndarray):
             if sz<self.maxmem:
                 return False
         # free memory by deleting all PhotometricData instances
+        if self.datafile is None:
+            warnings.warn("Data file not specified.  Memory dump failed.",
+                    MemoryWarning)
+            return False
         if verbose:
             print('Cleaning memory...')
         for x in np.nditer(self, flags=['refs_ok'], op_flags=['readwrite']):
@@ -241,6 +250,8 @@ class PhotometricDataArray(np.ndarray):
         if outdir is None:
             outfile, outdir = self._path_name(self.datafile)
         f = os.path.join(outdir, x['file'].item())
+        if not os.path.isdir(outdir):
+            os.mkdir(outdir)
         if (x['masked']) and os.path.isfile(f):
             os.remove(f)
         elif x['loaded'] and ((not x['flushed']) or not flush):
@@ -281,8 +292,6 @@ class PhotometricDataArray(np.ndarray):
         ### This segment is to be checked
         if (not flush) and (not overwrite) and os.path.isfile(outfile):
             raise IOError('output file {0} already exists'.format(outfile))
-        if not os.path.isdir(outdir):
-            os.mkdir(outdir)
 
         # save envolope information
         hdu_list = fits.HDUList()
