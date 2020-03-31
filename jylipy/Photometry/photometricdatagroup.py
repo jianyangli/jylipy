@@ -4,9 +4,10 @@ import warnings
 import os
 import numpy as np
 from astropy.io import fits
-from .core import PhotometricData
+from .core import PhotometricData, PhotometricMPFitter
 
-__all__ = ['phoarr_info', 'PhotometricDataArray', 'PhotometricModelArray']
+__all__ = ['phoarr_info', 'PhotometricDataArray', 'ModelArray',
+           'PhotometricDataArrayFitter', 'PhotometricDataArrayMPFitter']
 
 
 _memory_size = lambda x: x*4.470348358154297e-08
@@ -419,8 +420,8 @@ class PhotometricDataArray(np.ndarray):
             super().__setitem__(f, prop[f].reshape(self.shape))
 
 
-class PhotometricModelArray(np.ndarray):
-    """Photometric model array
+class ModelArray(np.ndarray):
+    """Model array class
 
     This class is to support the modeling of `PhotometricDataArray` class.  It
     contains an array of the same photometric model.
@@ -486,7 +487,7 @@ class PhotometricModelArray(np.ndarray):
 
     def __getitem__(self, k):
         out = super().__getitem__(k)
-        if isinstance(out, PhotometricModelArray):
+        if isinstance(out, ModelArray):
             if (out.dtype.names is None) or (len(out.dtype.names) < len(self.param_names)+1):
                 return np.asarray(out)
             else:
@@ -512,23 +513,23 @@ class PhotometricModelArray(np.ndarray):
             self['masked'][k] = False
             for p in self.param_names:
                 self[p][k] = getattr(v, p).value
-        elif isinstance(self[k], PhotometricModelArray):
+        elif isinstance(self[k], ModelArray):
             if isinstance(v, self.model_class):
                 for x in np.nditer(self[k], flags=['refs_ok'],
                         op_flags=['readwrite']):
                     pars = tuple([getattr(v, p).value for p in
                         self.param_names])
                     x[...] = (False,) + pars
-            elif isinstance(v, PhotometricModelArray):
+            elif isinstance(v, ModelArray):
                 for f in list(self.dtype.names):
                     from copy import deepcopy
                     self[f][k] = deepcopy(v[f])
             else:
-                raise ValueError('Only `{}` or `PhotometricModelArray`'
+                raise ValueError('Only `{}` or `ModelArray`'
                     ' instance allowed.'.format(self.model_class.__class__.
                     __name__))
         else:
-            raise ValueError('Only `{}` or `PhotometricModelArray`'
+            raise ValueError('Only `{}` or `ModelArray`'
                     ' instance allowed.'.format(self.model_class.__class__.
                     __name__))
 
