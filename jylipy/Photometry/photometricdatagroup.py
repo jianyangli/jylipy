@@ -60,6 +60,78 @@ def phoarr_info(phoarr, shape=False, all=False):
             return phoarr.reshape(-1)[list(phoarr.dtype.names[1:-2])]
 
 
+class ObjectArray(np.ndarray):
+    """Object array containing class"""
+    field_names = 'object', 'mask'
+    dtypes = object, bool
+
+    def __new__(cls, shape, obj_class, order=None):
+        dtypes = [(n, d) for n, d in zip(cls.field_names, cls.dtypes)]
+        obj = super().__new__(cls, shape, dtype=dtypes, order=order)
+        obj.obj_class = obj_class
+        return obj
+
+    def __array_finalize__(self, obj):
+        if obj is None:
+            return
+        self.obj_class = obj.obj_class
+
+    def __repr__(self):
+        return f'<{self.__class__.__name__} {self.shape}>'
+
+    def __str__(self):
+        return self.__repr__()
+
+    def __getitem__(self, k):
+        out = super().__getitem__(k)
+        if isinstance(out, ObjectArray):
+            if (out.dtype.names is None) or (len(out.dtype.names) < len(self.field_names)):
+                return np.asarray(out)
+            else:
+                return out
+        else:
+            return out['object']
+
+    def __setitem__(self, k, v):
+        """Assign values to specified ObjectArray elements
+
+        Cases allowed for assignment:
+            1. assign a single element by a PhotometricData object
+            2. assign a slice by a PhotometricDataArray object of the
+               same shape
+            3. assign a slice by repeating a PhotometricData object
+        """
+        if isinstance(k, str) or ((hasattr(k, '__iter__')) and \
+                np.any([isinstance(x, str) for x in k])):
+            raise ValueError('Setting property fields not allowed')
+        if (self[k] is None) or (isinstance(self[k], ObjectArray)):
+            if not isinstance(v, ObjectArray):
+                raise ValueError('`{}` instance required.'.format(self.__class__.__name__))
+            self['object'][k] = v
+        elif isinstance(self[k], ObjectArray):
+            # assign a slice
+            if isinstance(v, self.obj_class):
+                for x in np.nditer(self[k], flags=['refs_ok'], op_flags=['readwrite']):
+                    from copy import deepcopy
+                    x['object'] = deepcopy(v)
+            elif isinstance(v, ObjectArray):
+                if v.obj_class != self.obj_class:
+                    raise ValueError('Unmatched underlying object classes: {} vs. {}'.format(self.obj_class.__class__.__name__, v.obj_class.__class__.__name__))
+                # by an ObjectArray object
+                for f in self.field_names:
+                    self[f][k] = deepcopy(v[f])
+            else:
+                raise ValueError('Only {} and {} class instance allowed in assignment'.format(self.__class__.__name__, self.obj_class.__class__.__name__))
+
+    @property
+    def mask(self):
+        return self['mask']
+
+    @mask.setter
+    def mask(self, k, v):
+        self['mask'][k] = v
+
+
 class PhotometricDataArray(np.ndarray):
     """Photometric data array object
     """
