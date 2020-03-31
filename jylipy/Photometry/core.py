@@ -807,8 +807,7 @@ class PhotometricData(object):
                 self.geo = None
 
             # collect wavelength
-            if 'band' in kwargs:
-                self.band = kwargs.pop('band')
+            self.band = kwargs.pop('band', None)
 
         elif len(args) == 1:
             if isinstance(args[0], PhotometricData):
@@ -821,8 +820,8 @@ class PhotometricData(object):
                 else:
                     self.geo = data.geo.copy()
                 self._type = data.type
-                self.binparms = args[0].binparms
-                self.band = args[0].band
+                self.binparms = getattr(args[0], 'binparms', None)
+                self.band = getattr(args[0], 'band', None)
             elif isinstance(args[0], Table):
                 # Initialize from an astropy Table
                 cos = kwargs.pop('cos', False)
@@ -1022,8 +1021,7 @@ class PhotometricData(object):
             out = PhotometricData(table.hstack([s,r,g]))
         else:
             out = PhotometricData(table.hstack([s,r]))
-        if hasattr(self, 'band'):
-            out.band = self.band
+        out.band = getattr(self, 'band', None)
         return out
 
     #def __setitem__(self, k, v):
@@ -1177,7 +1175,7 @@ class PhotometricData(object):
         hdu = fits.PrimaryHDU()
         tblhdu = fits.BinTableHDU(self.astable(), name='phodata')
         hdulist = fits.HDUList([hdu, tblhdu])
-        if hasattr(self, 'band'):
+        if getattr(self, 'band', None) is not None:
             bandhdu = fits.ImageHDU(self.band, name='band')
             hdulist.append(bandhdu)
         hdulist.writeto(outfile, **kwargs)
@@ -1189,6 +1187,8 @@ class PhotometricData(object):
             hdr = infitshdu[1].header
             if len(infitshdu) > 2:
                 self.band = infitshdu[2].data.copy()
+            else:
+                self.band = None
 
         ang_keys = ['inc', 'emi', 'pha', 'psi', 'pholat', 'pholon']
         ref_keys = ['BDR', 'RADF', 'BRDF', 'REFF']
