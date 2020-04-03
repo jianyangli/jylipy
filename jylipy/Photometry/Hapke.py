@@ -117,7 +117,7 @@ class HapkeK(Fittable1DModel):
             dk[st] = HapkeK.dKmodel(alpha[st], theta, grid=False)
         else:
             dk = HapkeK.dKmodel(alpha, theta)
-        k = np.clip(k, 0.)
+        #k = np.clip(k, 0.)
         return dk
 
 
@@ -220,7 +220,7 @@ class SHOE(SHOE_Base):
         return [dB0, dh]
 
 
-class SHOE_approx(Fittable1DModel):
+class SHOE_approx(SHOE_Base):
     '''
     Shadow-hiding opposition effect model, the approximate solution
     See Eq. 9.22 in Hapke (2012) book
