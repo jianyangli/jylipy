@@ -481,7 +481,7 @@ class MPFitter(object):
             return 0, obj
         else:
             #print fjac.shape
-            print(var)#+tuple(model.parameters))
+            #print(var)#+tuple(model.parameters))
             pderiv = np.squeeze(model.fit_deriv(*(var+tuple(model.parameters))))
             #print np.asarray(pderiv).T.shape
             #fjac[:] = np.asarray(pderiv).T.flatten()
