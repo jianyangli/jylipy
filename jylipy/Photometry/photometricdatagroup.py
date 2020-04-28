@@ -444,6 +444,7 @@ class ModelArray(np.ndarray):
         obj.__version__ = '1.0.0'
         obj._model_class = model
         obj._param_names = model.param_names
+        obj.extra = {}
         return obj
 
     def __array_finalize__(self, obj):
@@ -451,6 +452,7 @@ class ModelArray(np.ndarray):
         self.__version__ = getattr(obj, '__version__', '1.0.0')
         self._model_class = getattr(obj, 'model_class', None)
         self._param_names = getattr(obj, 'param_names', None)
+        self.extra = getattr(obj, 'extra', {})
 
     def __getattr__(self, name):
         if name not in self.param_names:
@@ -575,3 +577,120 @@ class ModelArray(np.ndarray):
         else:
             # variable number of models
             return np.ma.array(self[p], mask=self.mask)
+
+
+class PhotometricDataArrayFitter():
+    """Fitter to fit `PhotometricDataArray` class object
+
+    One can directly use the fitter by providing an astropy fitter
+    class as a parameter in the call:
+
+    >>> fitter = PhotoemtricDataArrayFitter()
+    >>> models = fitter(m0, data, fitter=PhotometricMPFitter)
+
+    Or can subclass this class with the default fitter specified.  See
+    `PhotometricDataArrayMPFitter` as an example.
+    """
+    def __init__(self):
+        self.fitted = False
+
+    def __call__(self, model, data, fitter=None, ilim=None, elim=None,
+        alim=None, rlim=None, latlim=None, lonlim=None, **kwargs):
+        """Fit PhotometricDataArray to model
+
+        model : `~astropy.modeling.Model` instance
+            Model to be fitted
+        data : `PhotometricDataArray`
+            Data to be fitted
+        fitter : astropy fitter class
+            Fitter used to fit the data
+        ilim : 2-element array like number or `astropy.units.Quantity`
+            Limit of incidence angle
+        elim : 2-element array like number or `astropy.units.Quantity`
+            Limit of emission angle
+        alim : 2-element array like number or `astropy.units.Quantity`
+            Limit of phase angle
+        rlim : 2-element array like number or `astropy.units.Quantity`
+            Limit of bidirectional reflectance
+        latlim : 2-element array like number of `astropy.units.Quantity`
+            Latitude range to be fitted
+        lonlim : 2-element array like number of `astropy.units.Quantity`
+            Longitude range to be fitted
+        **kwargs : dict
+            Keyword arguments accepted by `PhotometricData.fit()`
+
+        Return : `ModelArray` instance
+        """
+        verbose = kwargs.pop('verbose', True)
+        if latlim is None:
+            latlim = [-90, 90]
+        if lonlim is None:
+            lonlim = [0, 360]
+        if fitter is not None:
+            self.fitter = fitter
+        if not hasattr(self, 'fitter'):
+            raise ValueError('Fitter not defined.')
+        self.model = ModelArray(data.shape, type(model))
+        model1d = self.model.reshape(-1)
+        self.fit_info = np.zeros(data.shape, dtype=object)
+        fit_info1d = self.fit_info.reshape(-1)
+        self.fit = np.zeros(data.shape, dtype=np.ndarray)
+        fit1d = self.fit.reshape(-1)
+        self.RMS = np.zeros(data.shape, dtype=object)
+        rms1d = self.RMS.reshape(-1)
+        self.RRMS = np.zeros(data.shape, dtype=object)
+        rrms1d = self.RRMS.reshape(-1)
+        self.mask = np.ones(data.shape, dtype=bool)
+        fitmask1d = self.mask.reshape(-1)
+
+        data1d = data.reshape(-1)
+        mask = data['masked'].reshape(-1)
+        for i in range(data.size):
+            if (not mask[i]) and isinstance(data1d[i], PhotometricData):
+                d = data1d[i].copy()
+                d.validate()
+                d.trim(ilim=ilim, elim=elim, alim=alim, rlim=rlim)
+                if len(d) > 10:
+                    fitter = d.fit(model, fitter=self.fitter(), verbose=False,
+                        **kwargs)
+                else:
+                    fitter = None
+
+            #process_fit(fitter, m, n, verbose=verbose)
+            if fitter is not None:
+                if hasattr(fitter.model, '__iter__'):
+                    # assemble to a model set if spectral data
+                    params = np.array([m.parameters for m in fitter.model])
+                    model_set = type(fitter.model[0])(*params.T,
+                        n_models=params.shape[0])
+                else:
+                    # single band data
+                    model_set = fitter.model
+                model1d[i] = model_set
+                fit_info1d[i] = fitter.fit_info
+                fit1d[i] = fitter.fit
+                rms1d[i] = fitter.RMS
+                rrms1d[i] = fitter.RRMS
+                fitmask1d[i] = False
+            else:
+                fitmask1d[i] = True
+
+            if verbose:
+                print('Data cell {0}'.format(i), end=': ')
+                if not fitmask1d[i]:
+                    if len(model_set) == 1:
+                        print(model_set.__repr__())
+                    else:
+                        print(model_set)
+                else:
+                    print('not fitted.')
+
+        self.fitted = True
+        self.model.extra['RMS'] = self.RMS
+        self.model.extra['RRMS'] = self.RRMS
+        return self.model
+
+
+class PhotometricDataArrayMPFitter(PhotometricDataArrayFitter):
+    fitter = PhotometricMPFitter
+
