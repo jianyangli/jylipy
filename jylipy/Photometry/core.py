@@ -1601,7 +1601,7 @@ class PhotometricDataGrid(object):
 
     _version = '1.0.0'
 
-    def __init__(self, lon=None, lat=None, datafile=None, maxmem=1.5):
+    def __init__(self, lon=None, lat=None, datafile=None, maxmem=8.):
         '''PhotometricDataGrid class initialization
 
         lon, lat : array-like numbers, optional
