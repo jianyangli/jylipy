@@ -128,7 +128,6 @@ class Akimov_Linear(pho.PhotometricModel):
         return np.pi * f * disk(pha, lat, lon)
 
 
-
 class PhotometricData(pho.PhotometricData):
 
     @classmethod
@@ -142,3 +141,74 @@ class PhotometricData(pho.PhotometricData):
                   geolat=data[3].data['lat'], band=data['wavelength'].data)
 
         return pho
+
+
+class GetSpots(dict):
+    """Class to store the SCLK list for all facets"""
+
+    @classmethod
+    def from_getspots(cls, facetfile):
+        """Initialize class object from input getspots file"""
+        obj = cls()
+        # Read facet file
+        with open(facetfile) as f:
+            lines = f.read().strip().split('\n')
+        sclks = []
+        facet = lines[0].strip()
+        for l in lines[1:]:
+            if l.startswith('F') or l.startswith('END'):
+                if len(sclks) > 0 :
+                    # After F1, do the save to filename then reset sclks
+                    obj[facet] = sclks.copy()
+                sclks = []
+                facet = l.strip()
+            else:
+                sclks.append(l.split()[0])
+        return obj
+
+    @property
+    def n_spots(self):
+        return [len(self[k]) for k in self]
+
+    def extract_phodata(self, spdif, outfile='phoarray.fits'):
+        """Extract photometric data from SPDIF file
+
+        Parameters
+        ----------
+        spdif : str
+            File name of the input SPDIF
+        outfile : str, optional
+            The name of output file.
+
+        Returns
+        -------
+        `PhotometricDataArray`
+            The photometric data array extracted from SPDIF based on
+            `GetSpots` result
+        """
+        nfac = len(self)
+        print(f'Data from {nfac} facets to be extracted.')
+        indata = fits.open(spdif)
+        sclks = list(indata[3].data['SCLK'])
+        keys = list(self.keys())
+        outdata = pho.PhotometricDataArray(nfac)
+        for i in range(nfac):
+            print('                                                          '
+                  '                                                          '
+                  '                                          ', end='\r')
+            print(f'Processing facet {keys[i]}, {len(self[keys[i]])} SCLK to'
+                   ' be checked.  ', end=' ')
+            w = []
+            for s in self[keys[i]]:
+                if s in sclks:
+                    w.append(sclks.index(s))
+            if len(w) > 0:
+                outdata[i] = PhotometricData(inc=indata[3].data['incidang'][w],
+                                             emi=indata[3].data['emissang'][w],
+                                             pha=indata[3].data['phaseang'][w],
+                                             iof=indata[0].data[w],
+                                             geolat=indata[3].data['lat'][w],
+                                             geolon=indata[3].data['lon'][w],
+                                             band=indata[2].data)
+            #print(f'{len(outdata[i])} spots collected.', end='\r')
+        return outdata
