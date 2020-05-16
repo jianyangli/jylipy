@@ -579,6 +579,34 @@ class ModelArray(np.ndarray):
             return np.ma.array(self[p], mask=self.mask)
 
 
+def fit(args):
+    i, data, mask, model, ilim, elim, alim, rlim, verbose, fitter, kwargs \
+        = args
+    if (not mask) and isinstance(data, PhotometricData):
+        d = data.copy()
+        d.validate()
+        d.trim(ilim=ilim, elim=elim, alim=alim, rlim=rlim)
+        if len(d) > 10:
+            fitter = d.fit(model, fitter=fitter(), verbose=False,
+                    **kwargs)
+        else:
+            fitter = None
+
+    if verbose:
+        print('Data cell {0}'.format(i), end=': ')
+        if fitter is not None:
+            if not hasattr(fitter.model, '__iter__'):
+                print(fitter.model.__repr__())
+            else:
+                params = np.array([m.parameters for m in fitter.model])
+                print(type(fitter.model[0])(*params.T,
+                      n_models=params.shape[0]))
+        else:
+            print('not fitted.')
+
+    return fitter
+
+
 class PhotometricDataArrayFitter():
     """Fitter to fit `PhotometricDataArray` class object
 
@@ -595,7 +623,7 @@ class PhotometricDataArrayFitter():
         self.fitted = False
 
     def __call__(self, model, data, fitter=None, ilim=None, elim=None,
-        alim=None, rlim=None, latlim=None, lonlim=None, multi=1, **kwargs):
+        alim=None, rlim=None, multi=4, **kwargs):
         """Fit PhotometricDataArray to model
 
         model : `~astropy.modeling.Model` instance
@@ -612,20 +640,12 @@ class PhotometricDataArrayFitter():
             Limit of phase angle
         rlim : 2-element array like number or `astropy.units.Quantity`
             Limit of bidirectional reflectance
-        latlim : 2-element array like number of `astropy.units.Quantity`
-            Latitude range to be fitted
-        lonlim : 2-element array like number of `astropy.units.Quantity`
-            Longitude range to be fitted
         **kwargs : dict
             Keyword arguments accepted by `PhotometricData.fit()`
 
         Return : `ModelArray` instance
         """
         verbose = kwargs.pop('verbose', True)
-        if latlim is None:
-            latlim = [-90, 90]
-        if lonlim is None:
-            lonlim = [0, 360]
         if fitter is not None:
             self.fitter = fitter
         if not hasattr(self, 'fitter'):
@@ -646,51 +666,15 @@ class PhotometricDataArrayFitter():
         data1d = data.reshape(-1)
         mask = data['masked'].reshape(-1)
 
-        def fit(indices, q):
-            for i in indices:
-                if (not mask[i]) and isinstance(data1d[i], PhotometricData):
-                    d = data1d[i].copy()
-                    d.validate()
-                    d.trim(ilim=ilim, elim=elim, alim=alim, rlim=rlim)
-                    if len(d) > 10:
-                        fitter = d.fit(model, fitter=self.fitter(), verbose=False,
-                            **kwargs)
-                    else:
-                        fitter = None
-                q.put([i, fitter])
-
-                if verbose:
-                    print('Data cell {0}'.format(i), end=': ')
-                    if fitter is not None:
-                        if not hasattr(fitter.model, '__iter__'):
-                            print(fitter.model.__repr__())
-                        else:
-                            params = np.array([m.parameters for m in fitter.model])
-                            print(type(fitter.model[0])(*params.T, n_models=params.shape[0]))
-                    else:
-                        print('not fitted.')
-
         from multiprocessing import Pool, Process, Queue
         from time import sleep
-        #pool = Pool(processes=multi)
-        jobs = []
-        q = Queue()
-        indices_groups = [range(i, data.size, multi) for i in range(multi)]
-        for indices in indices_groups:
-            p = Process(target=fit, args=(indices, q))
-            jobs.append(p)
-            p.start()
-        print('{} jobs running'.format(len(jobs)))
-        for p in jobs:
-            p.join()
+        pool = Pool(processes=multi)
+        pool_params = [(i, data1d[i], mask[i], model, ilim, elim, alim, rlim,
+                        verbose, self.fitter, kwargs)
+                        for i in range(data1d.size)]
+        results = pool.map(fit, pool_params)
 
-        print()
-        print('all fitting done, now processing')
-        print()
-
-        while not q.empty():
-            i, fitter = q.get()
-            print(i)
+        for i, fitter in enumerate(results):
             if fitter is not None:
                 if hasattr(fitter.model, '__iter__'):
                     # assemble to a model set if spectral data
@@ -708,8 +692,6 @@ class PhotometricDataArrayFitter():
                 fitmask1d[i] = False
             else:
                 fitmask1d[i] = True
-
-        print('processing done')
 
         self.fitted = True
         self.model.extra['RMS'] = self.RMS
