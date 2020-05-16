@@ -595,7 +595,7 @@ class PhotometricDataArrayFitter():
         self.fitted = False
 
     def __call__(self, model, data, fitter=None, ilim=None, elim=None,
-        alim=None, rlim=None, latlim=None, lonlim=None, **kwargs):
+        alim=None, rlim=None, latlim=None, lonlim=None, multi=1, **kwargs):
         """Fit PhotometricDataArray to model
 
         model : `~astropy.modeling.Model` instance
@@ -645,18 +645,52 @@ class PhotometricDataArrayFitter():
 
         data1d = data.reshape(-1)
         mask = data['masked'].reshape(-1)
-        for i in range(data.size):
-            if (not mask[i]) and isinstance(data1d[i], PhotometricData):
-                d = data1d[i].copy()
-                d.validate()
-                d.trim(ilim=ilim, elim=elim, alim=alim, rlim=rlim)
-                if len(d) > 10:
-                    fitter = d.fit(model, fitter=self.fitter(), verbose=False,
-                        **kwargs)
-                else:
-                    fitter = None
 
-            #process_fit(fitter, m, n, verbose=verbose)
+        def fit(indices, q):
+            for i in indices:
+                if (not mask[i]) and isinstance(data1d[i], PhotometricData):
+                    d = data1d[i].copy()
+                    d.validate()
+                    d.trim(ilim=ilim, elim=elim, alim=alim, rlim=rlim)
+                    if len(d) > 10:
+                        fitter = d.fit(model, fitter=self.fitter(), verbose=False,
+                            **kwargs)
+                    else:
+                        fitter = None
+                q.put([i, fitter])
+
+                if verbose:
+                    print('Data cell {0}'.format(i), end=': ')
+                    if fitter is not None:
+                        if not hasattr(fitter.model, '__iter__'):
+                            print(fitter.model.__repr__())
+                        else:
+                            params = np.array([m.parameters for m in fitter.model])
+                            print(type(fitter.model[0])(*params.T, n_models=params.shape[0]))
+                    else:
+                        print('not fitted.')
+
+        from multiprocessing import Pool, Process, Queue
+        from time import sleep
+        #pool = Pool(processes=multi)
+        jobs = []
+        q = Queue()
+        indices_groups = [range(i, data.size, multi) for i in range(multi)]
+        for indices in indices_groups:
+            p = Process(target=fit, args=(indices, q))
+            jobs.append(p)
+            p.start()
+        print('{} jobs running'.format(len(jobs)))
+        for p in jobs:
+            p.join()
+
+        print()
+        print('all fitting done, now processing')
+        print()
+
+        while not q.empty():
+            i, fitter = q.get()
+            print(i)
             if fitter is not None:
                 if hasattr(fitter.model, '__iter__'):
                     # assemble to a model set if spectral data
@@ -675,15 +709,7 @@ class PhotometricDataArrayFitter():
             else:
                 fitmask1d[i] = True
 
-            if verbose:
-                print('Data cell {0}'.format(i), end=': ')
-                if not fitmask1d[i]:
-                    if len(model_set) == 1:
-                        print(model_set.__repr__())
-                    else:
-                        print(model_set)
-                else:
-                    print('not fitted.')
+        print('processing done')
 
         self.fitted = True
         self.model.extra['RMS'] = self.RMS
