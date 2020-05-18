@@ -594,7 +594,7 @@ def fit(args):
 
     if verbose:
         print('Data cell {0}'.format(i), end=': ')
-        if fitter is not None:
+        if (fitter is not None) and hasattr(fitter, 'model'):
             if not hasattr(fitter.model, '__iter__'):
                 print(fitter.model.__repr__())
             else:
@@ -675,7 +675,7 @@ class PhotometricDataArrayFitter():
         results = pool.map(fit, pool_params)
 
         for i, fitter in enumerate(results):
-            if fitter is not None:
+            if (fitter is not None) and hasattr(fitter, 'model'):
                 if hasattr(fitter.model, '__iter__'):
                     # assemble to a model set if spectral data
                     params = np.array([m.parameters for m in fitter.model])
@@ -690,8 +690,14 @@ class PhotometricDataArrayFitter():
                 rms1d[i] = fitter.RMS
                 rrms1d[i] = fitter.RRMS
                 fitmask1d[i] = False
+            elif fitter is not None:
+                fitmask1d[i] = True
+                rms1d[i] = -1e10
+                rrms1d[i] = -1e10
             else:
                 fitmask1d[i] = True
+                rms1d[i] = 0.
+                rrms1d[i] = 0.
 
         self.fitted = True
         self.model.extra['RMS'] = self.RMS
