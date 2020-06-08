@@ -2269,7 +2269,7 @@ class PhotometricDataGrid(object):
                 rm |= (d.BDR>rlim[1]) | (d.BDR<rlim[0])
             rmidx = np.where(rm)[0]
             d.remove_rows(rmidx)
-            self._update_property(i/nlon,i%nlon)
+            self._update_property(i//nlon,i%nlon)
             self._flushed1d[i] = False
 
     def fit(self, model, fitter=None, **kwargs):
