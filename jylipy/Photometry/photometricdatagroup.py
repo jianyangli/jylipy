@@ -702,6 +702,7 @@ class PhotometricDataArrayFitter():
         self.fitted = True
         self.model.extra['RMS'] = self.RMS
         self.model.extra['RRMS'] = self.RRMS
+        pool.close()
         return self.model
 
 
