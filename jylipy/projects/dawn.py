@@ -1352,3 +1352,266 @@ def par2cube(modelfiles, sort=False, logfile=None, overwrite=True):
         cubfile = outdir+'/model_'+k+'.cub'
         writefits(outfile, par[k], clobber=overwrite)
         pysis_ext.fits2isis(outfile, cubfile)
+
+
+
+from os.path import isfile, join
+import numpy as np
+from jylipy import *
+
+solar_vis_file = '../Calib_VIR/DAWN_VIR_VIS_SOLAR_SPECTRUM_V2.TAB'
+solar_ir_file = '../Calib_VIR/DAWN_VIR_IR_SOLAR_SPECTRUM_V2.TAB'
+corr_vis_file = '../Calib_VIR/VIR_VIS_CORRECTION_FACTOR.TAB'
+corr_ir_file = '../Calib_VIR/VIR_IR_CORRECTION_FACTOR.TAB'
+pvl_vis_file = '../Calib_VIR/HapkeHen_VIS.pvl'
+pvl_ir_file = '../Calib_VIR/HapkeHen_IR.pvl'
+shapemodel = '/Users/jyli/local/pkg/isis3/data/base/dems/Ceres_Dawn_FC_HAMO_DTM_DLR_Global_60ppd_Oct2016_prep.cub'
+
+class VIRSpectrum():
+    """Class of VIR Spectrum Cubes"""
+
+    def __init__(self, data_id, path=''):
+        self.data_id = data_id
+        data_id_root = '_'.join(data_id.split('_')[:-1])
+        if self.data_id.find('VIS') != -1:
+            self.band = 'VIS'
+        elif self.data_id.find('IR') != -1:
+            self.band = 'IR'
+        self.path = path
+        self.pdsfile = data_id_root + '_1.LBL'
+        self.hklabel = data_id_root + '_HK_1.LBL'
+        self.hktable = data_id_root + '_HK_1.TAB'
+        # raw cube
+        self.rawcube = data_id_root + '_1.cub'
+        # I/F cube
+        self.iofcube = data_id_root + '_1_iof.cub'
+        # photometrically corrected cube
+        self.corrcube = data_id_root + '_1_corr.cub'
+        # photometrically corrected and projected cube
+        self.projcube = data_id_root + '_1_corr_proj.cub'
+        if isfile(join(self.path, self.rawcube)):
+            self.ingested = True
+        else:
+            self.ingested = False
+        if isfile(join(self.path, self.iofcube)):
+            self.calibrated = True
+        else:
+            self.calibrated = False
+        if isfile(join(self.path, self.corrcube)):
+            self.corrected = True
+        else:
+            self.corrected = False
+        if isfile(join(self.path, self.projcube)):
+            self.projected = True
+        else:
+            self.projected = False
+        self.verbose = True
+
+    def info(self):
+        """Print spectral cube information"""
+        for k, v in self.__dict__.items():
+            print('{} = {}'.format(k, v))
+        print()
+
+    def ingest(self):
+        """ingest spectrum to ISIS cube
+
+        1. Convert to ISIS cube
+        2. spiceinit
+
+        """
+        if not isfile(join(self.path, self.pdsfile)):
+            raise IOError('Raw PDS file does not exist')
+        if not isfile(join(self.path, self.hklabel)):
+            raise IOError('Housekeeping label file does not exist')
+        if not isfile(join(self.path, self.hktable)):
+            raise IOError('Housekeeping table file does not exist')
+        if self.verbose:
+            print('Ingesting PDS data to ISIS cube')
+        pysis_ext.dawnvir2isis(join(self.path, self.pdsfile),
+                               join(self.path, self.rawcube),
+                               hkfrom = join(self.path, self.hklabel),
+                               hktable = join(self.path, self.hktable))
+        pysis_ext.spiceinit(join(self.path, self.rawcube),
+                            shape='user', model=shapemodel)
+        self.ingested = True
+        if self.verbose:
+            print('Ingestion completed\n')
+
+    def iof_calib(self):
+        """Calibrate to reflectance spectrum I/F
+
+        1. Apply slope correction.
+        2. Convert to I/F
+        """
+        if not self.ingested:
+            self.ingest()
+
+        if self.verbose:
+            print('I/F calibration and slope correction')
+        # extract heliocentric distance
+        with open(join(self.path, self.pdsfile)) as f:
+            s = f.read()
+        s = [x.strip() for x in s.split('\n')]
+        for x in s:
+            if x.find('SPACECRAFT_SOLAR_DISTANCE') != -1:
+                break
+        _, v = x.split('=')
+        v, _ = v.split('<')
+        rh = float(v)/1.496e8
+
+        # load cube
+        cub = pysis_ext.CubeFile(join(self.path,
+                                      self.rawcube)).apply_numpy_specials()
+        cub = np.rollaxis(cub, 0, 3)
+        # slope correction
+        if self.band == 'IR':
+            corr_ir = ascii_read(corr_ir_file)
+            corr_ir = np.asarray(corr_ir[corr_ir.keys()[1]])
+            cub *= corr_ir
+            solar_ir = ascii_read(solar_ir_file, data_start=0)
+            solar_ir = np.asarray(solar_ir[solar_ir.keys()[0]])
+            cub = cub/solar_ir*rh**2*np.pi
+        elif self.band == 'VIS':
+            corr_vis = ascii_read(corr_vis_file)
+            corr_vis = np.asarray(corr_vis[corr_vis.keys()[1]])
+            cub *= corr_vis
+            solar_vis = ascii_read(solar_vis_file, data_start=0)
+            solar_vis = np.asarray(solar_vis[solar_vis.keys()[0]])
+            cub = cub/solar_vis*rh**2*np.pi
+        cub = np.rollaxis(cub, -1, 0)
+        writefits('temp.fits', cub, overwrite=True)
+        pysis_ext.fits2isis('temp.fits', join(self.path, self.iofcube))
+        pysis_ext.copylabel(join(self.path, self.iofcube),
+                            source = join(self.path, self.rawcube),
+                            groups = 'Archive',
+                            blobs = 'TABLE: VIRHouseKeeping')
+        from os import remove
+        remove('temp.fits')
+        self.calibrated = True
+        if self.verbose:
+            print('I/F calibration and slope correction completed\n')
+
+    def photomet(self):
+        """Photometric correction"""
+        if not self.calibrated:
+            self.iof_calib()
+        if self.verbose:
+            print('Photometric correction')
+        if self.band == 'IR':
+            pysis_ext.photomet(join(self.path, self.iofcube)+'+1-321',
+                               join(self.path, self.corrcube),
+                               frompvl = pvl_ir_file,
+                               maxemission=75, maxincidence=75,
+                               usedem=True, anglesource='dem')
+        elif self.band == 'VIS':
+            pysis_ext.photomet(join(self.path, self.iofcube)+'+112-432',
+                               join(self.path, self.corrcube),
+                               frompvl = pvl_vis_file,
+                               maxemission=75, maxincidence=75,
+                               usedem=True, anglesource='dem')
+        self.corrected = True
+        if self.verbose:
+            print('Photometric correction completed\n')
+
+    def project(self):
+        """Projection"""
+        if not self.corrected:
+            self.photomet()
+        if self.verbose:
+            print('Projection')
+        pysis_ext.cam2map(join(self.path, self.corrcube),
+                          join(self.path, self.projcube))
+        self.projected = True
+        if self.verbose:
+            print('Projection completed\n')
+
+    def load(self, which):
+        """Load spectral cube
+
+        which : str
+            Options are:
+            'raw': Raw cube
+            'iof': I/F cube
+            'corr': Photometrically corrected cube
+            'proj': Photometrically corrected and projected cube
+
+        Spectral cube will be loaded to self.data
+        """
+        if which == 'raw':
+            if not self.ingested:
+                self.ingest()
+            datafile = join(self.path, self.rawcube)
+        elif which == 'iof':
+            if not self.calibrated:
+                self.iof_calib()
+            datafile = join(self.path, self.iofcube)
+        elif which == 'corr':
+            if not self.corrected:
+                self.photomet()
+            datafile = join(self.path, self.corrcube)
+        elif which == 'proj':
+            if not self.projected:
+                self.project()
+            datafile = join(self.path, self.projcube)
+        cube = pysis_ext.CubeFile(datafile)
+        self.data = cube.apply_numpy_specials()
+        self.bandinfo = cube.label['IsisCube']['BandBin']
+
+class Group(dict):
+    """Group class"""
+    def __init__(self, name):
+        self.name = name
+
+    def string(self, indent=0):
+        out = ['Group = {}'.format(self.name)]
+        out = out + ['  {} = {}'.format(k, v) for k, v in self.items()]
+        out = out + ['EndGroup\n']
+        out = [x.rjust(indent+len(x)) for x in out]
+        return '\n'.join(out)
+
+class Object(list):
+    """Object class"""
+    def __init__(self, name):
+        self.name = name
+
+    def append(self, v):
+        if not isinstance(v, Group):
+            raise ValueError('A Group class instance is expected, '
+                             '{} received'.format(type(v)))
+        super().append(v)
+
+    def string(self, indent=0):
+        out = 'Object = {}\n\n'.format(self.name)
+        out = out.rjust(indent+len(out))
+        out = out + '\n'.join([x.string(indent=indent+2) for x in self])
+        out = out + '\n' + 'EndObject\n'.rjust(indent+10)
+        #out = out.replace('\n', '\n'.rjust(indent+1))
+        return out
+
+class PVL(list):
+    """PVL class"""
+
+    def __init__(self, comment=None):
+        self.comment = comment
+
+    def append(self, v):
+        if not isinstance(v, Object):
+            raise ValueError('An Object class instance is expected, '
+                             '{} received'.format(type(v)))
+        super().append(v)
+
+    def string(self):
+        from datetime import datetime
+        out = '# Created {}\n'.format(str(datetime.now()))
+        if self.comment is not None:
+            cmts = self.comment.split('\n')
+            cmts = ['# '+x for x in cmts if not x.startswith('#')]
+            out = out + '\n'.join(cmts) + '\n\n'
+        out = out + '\n'.join([x.string() for x in self])
+        return out
+
+    def write(self, filename):
+        with open(filename, 'w') as f:
+            f.write(self.string())
+
