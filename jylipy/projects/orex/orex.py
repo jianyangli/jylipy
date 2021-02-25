@@ -361,7 +361,7 @@ class Catalog(Table):
         plot(score,'o')
 
 
-def show_map(ax, data, title='Map', vmin=None, vmax=None, origin='down', cmap='jet', colorbarticks=None, norm=None):
+def show_map(ax, data, title='Map', vmin=None, vmax=None, origin='lower', cmap='jet', colorbarticks=None, norm=None):
 #    plt.figure(figsize=(8,3.3))
     im = ax.imshow(data,vmin=vmin,vmax=vmax,cmap=cmap,aspect='auto',origin=origin,norm=norm)
     sz = data.shape
