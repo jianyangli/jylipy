@@ -63,7 +63,7 @@ def adjust_orientation(filename, center=None, outdir=datadir+'Oriented/'):
 
 
 def background(im):
-    ys, xs = im.shape
+    ys, xs = readfits(im)[0].data.shape
     b1 = jp.background(im,region=[100,100,300,300],method='median')
     b2 = jp.background(im,region=[100,xs-300,300,xs-100],method='median')
     b3 = jp.background(im,region=[ys-300,100,ys-100,300],method='median')
