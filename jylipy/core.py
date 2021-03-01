@@ -308,7 +308,9 @@ def apphot(im=None, aperture=None, ds9=None, radius=3, newwindow=False, **kwargs
     if not isinstance(aperture,list):
         aperture = [aperture]
     for apt in aperture:
-        napt = apt.positions.shape[0]
+        napt = 1
+        if apt.positions.ndim == 2:
+            napt = apt.positions.shape[0]
         if hasattr(im,'uncertainty'):
             error = im.uncertainty.array
         else:
@@ -1957,7 +1959,7 @@ def background(im, ext=0, region=None, std=False, method='mean', plot=False):
     '''
 
     if not isinstance(im, (str,bytes)):
-        if hasattr(im, '__iter__') and (isinstance(im[0],(str,bytes)) or (np.asarray(im).ndim is 3)):
+        if hasattr(im, '__iter__') and (isinstance(im[0],(str,bytes)) or (np.asarray(im).ndim == 3)):
             # recursively calculate background for each image
             if not std:
                 return [background(i, ext=ext, region=region, method=method) for i in im]
@@ -1965,17 +1967,17 @@ def background(im, ext=0, region=None, std=False, method='mean', plot=False):
                 bg, st = [], []
                 for i in im:
                     tmp = background(i, ext=ext, region=region, std=True, method=method)
-                    if method is 'median':
+                    if method == 'median':
                         bg.append(tmp)
                     else:
                         bg.append(tmp[0])
                         st.append(tmp[1])
-                if method is 'median':
+                if method == 'median':
                     return bg
                 else:
                     return bg, st
-        else:
-            raise ValueError('string type or string iterable or 3-D array expected, {0} received'.format(type(im)))
+        #else:
+        #    raise ValueError('string type or string iterable or 3-D array expected, {0} received'.format(type(im)))
 
     if isinstance(im, (str,bytes)):
         img = fits.getdata(im,ext).astype(np.float32)
@@ -1986,14 +1988,14 @@ def background(im, ext=0, region=None, std=False, method='mean', plot=False):
         img = img[region[0]:region[2],region[1]:region[3]]
 
     # resistent mean method
-    if method is 'mean':
+    if method == 'mean':
         if std:
             return resmean(img.flatten(), std=True)
         else:
             return resmean(img.flatten())
 
     # median method
-    if method is 'median':
+    if method == 'median':
         return np.median(img.flatten())
 
     # gaussian fit method
@@ -2707,14 +2709,14 @@ def linfit(x, y=None, yerr=None, xerr=None, intercept=True, return_all=False):
         yerr1 = np.ones(n)
     else:
         yerr1 = np.asarray(yerr).astype(float).flatten()
-    if len(yerr1) is 1:
+    if len(yerr1) == 1:
         yerr1 = np.repeat(yerr1,n)
 
     if xerr is None:
         xerr1 = np.ones(n)
     else:
         xerr1 = np.asarray(xerr).astype(float).flatten()
-    if len(xerr1) is 1:
+    if len(xerr1) == 1:
         xerr1 = np.repeat(xerr1,n)
 
     yerr2 = yerr1*yerr1
@@ -2755,7 +2757,7 @@ def power(x, par=[1.,-1.]):
 
  v1.0.0 : JYL @PSI, Oct, 2013
     '''
-    if np.size(par) is 1:
+    if np.size(par) == 1:
         p = np.array([1., par])
     else:
         p = np.asarray(par)
@@ -2813,14 +2815,14 @@ def powfit(x, y=None, yerr=None, xerr=None, scale=True, fast=True):
         yerr1 = np.ones(n)
     else:
         yerr1 = np.asarray(yerr).astype(float).flatten()
-    if len(yerr1) is 1:
+    if len(yerr1) == 1:
         yerr1 = np.repeat(yerr1,n)
 
     if xerr is None:
         xerr1 = np.ones(n)
     else:
         xerr1 = np.asarray(xerr).astype(float).flatten()
-    if len(xerr1) is 1:
+    if len(xerr1) == 1:
         xerr1 = np.repeat(xerr1,n)
 
     if fast:
@@ -4029,7 +4031,7 @@ class Measurement(np.ndarray):
     def astable(self):
         ''' Return a table listing the measurements'''
         if self.fields is None:
-            if self.shape is ():
+            if self.shape == ():
                 return Table([[self.dtype.type(self)]], names='data')
             else:
                 return Table(self, names='data')
