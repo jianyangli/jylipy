@@ -308,7 +308,9 @@ def apphot(im=None, aperture=None, ds9=None, radius=3, newwindow=False, **kwargs
     if not isinstance(aperture,list):
         aperture = [aperture]
     for apt in aperture:
-        napt = apt.positions.shape[0]
+        napt = 1
+        if apt.positions.ndim == 2:
+            napt = apt.positions.shape[0]
         if hasattr(im,'uncertainty'):
             error = im.uncertainty.array
         else:
@@ -764,7 +766,7 @@ def coma(azind, azfth, size=(300,300), center=None, ns=200, core=(2,2), r=None, 
 
 
     ys, xs = size
-    if center == None:
+    if center is None:
         yc, xc = (ys-1.)/2., (xs-1.)/2.
     else:
         yc, xc = center
@@ -797,8 +799,8 @@ def coma(azind, azfth, size=(300,300), center=None, ns=200, core=(2,2), r=None, 
 
     # revise core region
     if ns > 1:
-        x1, x2 = round(xc)-core[0], round(xc)+core[0]+1
-        y1, y2 = round(yc)-core[1], round(yc)+core[1]+1
+        x1, x2 = int(round(xc)-core[0]), int(round(xc)+core[0]+1)
+        y1, y2 = int(round(yc)-core[1]), int(round(yc)+core[1]+1)
         coresize = (core[1]*2+1)*ns, (core[0]*2+1)*ns
         center = ns*(core[1]+0.5+xc-round(xc))-0.5, ns*(core[0]+0.5+yc-round(yc))-0.5
         coma_center = coma(azind,azfth,size=coresize, center=center, ns=-ns)
@@ -1154,6 +1156,7 @@ def enhance_1overrho(im, ext=0, center=None, centroid=False, div=True):
             ct = centroiding(img, refine=True, newframe=False, verbose=False)
         else:
             ct = center[i]
+        ct = int(ct[0]), int(ct[1])
 
         # Generate 1/rho model
         sz = img.shape
@@ -1241,7 +1244,7 @@ def azavg(im, ext=0, center=None, centroid=False):
         sz = img.shape
         ct = np.asarray(ct)
         rmax = int(np.ceil(np.linalg.norm([np.asarray([0,0])-ct, np.asarray([0,sz[1]-1])-ct, np.asarray([sz[0]-1,0])-ct, np.asarray([sz[0]-1,sz[1]-1])-ct],axis=1).max()))
-        azimg = xy2rt(img, center=ct, ramax=rmax, rabin=rmax*2+1, azbin=720, method='splinef2d')
+        azimg = xy2rt(img, center=ct, ramax=rmax, rastep=rmax*2+1, azstep=720, method='splinef2d')
         radprof = interp1d(np.linspace(0,rmax,rmax*2+1), np.median(azimg,axis=1))
         dst = dist(-ct[0], sz[0]-ct[0]-1, sz[0], -ct[1], sz[1]-ct[1]-1, sz[1])
         avgim = radprof(dst.reshape(-1)).reshape(sz)
@@ -1745,7 +1748,7 @@ def rot(im, ang, mag=1.0, center=None, missing=0., pivot=False, order=3, method=
         return interpn(points, im, xi, method=method, bounds_error=False, fill_value=np.asarray(missing).astype(im.dtype)).reshape(sz)
 
 
-def xy2rt(im, xxx_todo_changeme2, rastep=1., ramax=None, azstep=1., order=3, missing=0., method='linear', version='1.1'):
+def xy2rt(im, center, rastep=1., ramax=None, azstep=1., order=3, missing=0., method='linear', version='1.1'):
     '''
  Reproject the input image from rectangular coordinates to polar
  coordinates (theta, r)
@@ -1754,7 +1757,7 @@ def xy2rt(im, xxx_todo_changeme2, rastep=1., ramax=None, azstep=1., order=3, mis
  ----------
  im : array-like, number
    Input image
- (yc, xc) : sequence of two numbers
+ center : sequence of two numbers
    The center of input image, in vertical and horizontal directions
  rastep, azstep : number, optional
    The step sizes in radial and azimuthal directions.  Default is 1
@@ -1790,7 +1793,7 @@ def xy2rt(im, xxx_todo_changeme2, rastep=1., ramax=None, azstep=1., order=3, mis
  v1.1.1 : JYL @PSI, 5/6/2016
    Removed keywords `rabin' and `azbin', replace by `rastep' and `azstep'.
     '''
-    (yc, xc) = xxx_todo_changeme2
+    (yc, xc) = center
     im0 = np.asarray(im)
     sz = im0.shape
 
@@ -1956,7 +1959,7 @@ def background(im, ext=0, region=None, std=False, method='mean', plot=False):
     '''
 
     if not isinstance(im, (str,bytes)):
-        if hasattr(im, '__iter__') and (isinstance(im[0],(str,bytes)) or (np.asarray(im).ndim is 3)):
+        if hasattr(im, '__iter__') and (isinstance(im[0],(str,bytes)) or (np.asarray(im).ndim == 3)):
             # recursively calculate background for each image
             if not std:
                 return [background(i, ext=ext, region=region, method=method) for i in im]
@@ -1964,17 +1967,17 @@ def background(im, ext=0, region=None, std=False, method='mean', plot=False):
                 bg, st = [], []
                 for i in im:
                     tmp = background(i, ext=ext, region=region, std=True, method=method)
-                    if method is 'median':
+                    if method == 'median':
                         bg.append(tmp)
                     else:
                         bg.append(tmp[0])
                         st.append(tmp[1])
-                if method is 'median':
+                if method == 'median':
                     return bg
                 else:
                     return bg, st
-        else:
-            raise ValueError('string type or string iterable or 3-D array expected, {0} received'.format(type(im)))
+        #else:
+        #    raise ValueError('string type or string iterable or 3-D array expected, {0} received'.format(type(im)))
 
     if isinstance(im, (str,bytes)):
         img = fits.getdata(im,ext).astype(np.float32)
@@ -1985,14 +1988,14 @@ def background(im, ext=0, region=None, std=False, method='mean', plot=False):
         img = img[region[0]:region[2],region[1]:region[3]]
 
     # resistent mean method
-    if method is 'mean':
+    if method == 'mean':
         if std:
             return resmean(img.flatten(), std=True)
         else:
             return resmean(img.flatten())
 
     # median method
-    if method is 'median':
+    if method == 'median':
         return np.median(img.flatten())
 
     # gaussian fit method
@@ -2706,14 +2709,14 @@ def linfit(x, y=None, yerr=None, xerr=None, intercept=True, return_all=False):
         yerr1 = np.ones(n)
     else:
         yerr1 = np.asarray(yerr).astype(float).flatten()
-    if len(yerr1) is 1:
+    if len(yerr1) == 1:
         yerr1 = np.repeat(yerr1,n)
 
     if xerr is None:
         xerr1 = np.ones(n)
     else:
         xerr1 = np.asarray(xerr).astype(float).flatten()
-    if len(xerr1) is 1:
+    if len(xerr1) == 1:
         xerr1 = np.repeat(xerr1,n)
 
     yerr2 = yerr1*yerr1
@@ -2754,7 +2757,7 @@ def power(x, par=[1.,-1.]):
 
  v1.0.0 : JYL @PSI, Oct, 2013
     '''
-    if np.size(par) is 1:
+    if np.size(par) == 1:
         p = np.array([1., par])
     else:
         p = np.asarray(par)
@@ -2812,14 +2815,14 @@ def powfit(x, y=None, yerr=None, xerr=None, scale=True, fast=True):
         yerr1 = np.ones(n)
     else:
         yerr1 = np.asarray(yerr).astype(float).flatten()
-    if len(yerr1) is 1:
+    if len(yerr1) == 1:
         yerr1 = np.repeat(yerr1,n)
 
     if xerr is None:
         xerr1 = np.ones(n)
     else:
         xerr1 = np.asarray(xerr).astype(float).flatten()
-    if len(xerr1) is 1:
+    if len(xerr1) == 1:
         xerr1 = np.repeat(xerr1,n)
 
     if fast:
@@ -3903,9 +3906,9 @@ class Measurement(np.ndarray):
         self['error'] = temp.error
         return self
 
-    def __div__(self, other):
+    def __truediv__(self, other):
         if self.fields is None:
-            return super(Measurement, self).__div__(other)
+            return super(Measurement, self).__truediv__(other)
         else:
             d1, e1 = self.data, self.error
             d2, e2 = self._get_data(other), self._get_error(other)
@@ -3916,9 +3919,9 @@ class Measurement(np.ndarray):
                 out = Measurement(s)
             return self._carryover_fields(other, out)
 
-    def __rdiv__(self, other):
+    def __rtruediv__(self, other):
         if self.fields is None:
-            return super(Measurement, self).__rdiv__(other)
+            return super(Measurement, self).__rtruediv__(other)
         else:
             d1, e1 = self.data, self.error
             d2, e2 = self._get_data(other), self._get_error(other)
@@ -3929,8 +3932,8 @@ class Measurement(np.ndarray):
                 out = Measurement(s)
             return self._carryover_fields(other, out)
 
-    def __idiv__(self, other):
-        temp = self.__div__(other)
+    def __itruediv__(self, other):
+        temp = self.__truediv__(other)
         self['data'] = temp.data
         self['error'] = temp.error
         return self
@@ -4028,7 +4031,7 @@ class Measurement(np.ndarray):
     def astable(self):
         ''' Return a table listing the measurements'''
         if self.fields is None:
-            if self.shape is ():
+            if self.shape == ():
                 return Table([[self.dtype.type(self)]], names='data')
             else:
                 return Table(self, names='data')
@@ -4121,7 +4124,7 @@ def imageclean(im, threshold=3., pos=None, box=20, step=None, untouch=None, mask
  v1.0.0 : 4/29/2015, JYL @PSI
     '''
 
-    box2 = box/2
+    box2 = box//2
     if step is None:
         step = box2
     if pos is None:
@@ -4140,7 +4143,7 @@ def imageclean(im, threshold=3., pos=None, box=20, step=None, untouch=None, mask
         subim = im[y-box2:y+box2,x-box2:x+box2]#*(1-mask[y-box2:y+box2,x-box2:x+box2])
         submsk = np.zeros_like(subim,dtype=int)
         m,std = resmean(subim,threshold,std=True)
-        submsk[abs(subim-m) > std*3] = 1
+        submsk[abs(subim-m) > std*threshold] = 1
         mask[y-box2:y+box2,x-box2:x+box2] = submsk
         im1[y-box2:y+box2,x-box2:x+box2][submsk==1] = m
 

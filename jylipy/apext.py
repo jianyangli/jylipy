@@ -471,6 +471,7 @@ class MPFitter(object):
             if x is None:
                 raise ValueError('input coordinates must be provided in keywords `x#`')
             var.append(x)
+        var = tuple(var)
         if weights is None:
             obj =  np.ravel(model(*var) - y)
         else:
@@ -480,7 +481,8 @@ class MPFitter(object):
             return 0, obj
         else:
             #print fjac.shape
-            pderiv = np.squeeze(model.fit_deriv(*((var,)+tuple(model.parameters))))
+            #print(var)#+tuple(model.parameters))
+            pderiv = np.squeeze(model.fit_deriv(*(var+tuple(model.parameters))))
             #print np.asarray(pderiv).T.shape
             #fjac[:] = np.asarray(pderiv).T.flatten()
             #print np.concatenate((obj[np.newaxis,:],np.asarray(pderiv)),axis=0).T.shape
