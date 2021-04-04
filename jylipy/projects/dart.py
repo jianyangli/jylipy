@@ -124,6 +124,8 @@ class ScalingLaw():
 
     @u.quantity_input(x=u.m)
     def v(self, x):
+        """Velocity of ejecta at radial distance x from the central point of
+        impact"""
         if (self.p is None) or (self.n2 is None) or (self.C1 is None):
             return np.nan
         w = x/self.impactor.a
@@ -163,6 +165,7 @@ class ScalingLaw():
     def M_total(self):
         """Total ejected mass"""
         return 3*self.k*self.impactor.m/(4*np.pi)*self.density_ratio*((self.n2*self.R/self.impactor.a)**3-self.n1**3)
+
 
 class SFDModel():
     """Size frequency distribution (SFD) model class
@@ -265,7 +268,6 @@ class SFDModel():
                 (r1**(-self.area_cumulative_alpha) - r2**(-self.area_cumulative_alpha)) / (r1**(-self.mass_cumulative_alpha) - r2**(-self.mass_cumulative_alpha))
 
 
-
 class Didymos():
     """Didymos properties from DRA V2.22"""
     Dp = 780 * u.m
@@ -274,9 +276,148 @@ class Didymos():
     H = 18.16 * u.mag   # absolute magnitude
     G = 0.20   # IAU HG model G parameter
     Ageo = 0.15   # geometric albedo
+    dist = 1.19 * u.km  # distance between the center of primary and secondary
 
     @property
     def A(self):
         """Total cross-sectional area"""
         return np.pi*(self.Dp/2)**2 + np.pi*(self.Ds/2)**2
 
+    @property
+    def Vp(self):
+        return 4/3*np.pi*(self.Dp/2)**3
+
+    @property
+    def Vs(self):
+        return 4/3*np.pi*(self.Ds/2)**3
+
+    @property
+    def Mp(self):
+        return self.Vp*self.rho
+
+    @property
+    def Ms(self):
+        return self.Vs*self.rho
+
+
+didy = Didymos()
+
+
+@u.quantity_input(r=u.m)
+def ejecta_g(r):
+    gp = (c.G * didy.Mp / (r+didy.dist+didy.Ds/2)**2).decompose()
+    gs = (c.G * didy.Ms / (r+didy.Ds/2)**2).decompose()
+    return -(gp+gs).decompose()
+
+@u.quantity_input(r=u.m)
+def ejecta_vesc(r):
+    Ep = c.G * didy.Mp / (r+didy.dist+didy.Ds/2)
+    Es = c.G * didy.Ms / (r+didy.Ds/2)
+    return np.sqrt(2*(Ep+Es)).decompose()
+
+
+# Solver class for 1D motion equation in gravity field
+class MotionInGravity1DSolver():
+    """Solve motion equation in gravity based on initial conditinon
+
+    1D case implemented for now
+    """
+
+    @u.quantity_input(r0=u.m, v0=u.m/u.s)
+    def __init__(self, g, r0, v0):
+        """
+        g : function
+            The gravitational acceleration function.  g(r) returnes
+            gravitational acceleration.  g(r) needs to take astropy Quantity
+            as input and returns the acceleration as a Quantity
+        r0, v0 : Quantity
+            Initial position r0 and velocity v0
+        """
+        self.g = g
+        self.r0 = [r0, v0]
+        self._rmax = None
+        self._tmax = None
+
+    @staticmethod
+    def _model(x, t, g):
+        """
+        Motion equation evaluation
+        """
+        r = x[0]
+        v = x[1]
+        xdot = [[], []]
+        xdot[0] = v
+        xdot[1] = g(r*u.m).to('m/s2').value
+        return xdot
+
+    @u.quantity_input(t=u.s)
+    def solve(self, t, **kwargs):
+        from scipy.integrate import odeint
+        _ = kwargs.pop('args', None)
+        _ = kwargs.pop('tfirst', None)
+        r0 = [self.r0[0].to('m').value, self.r0[1].to('m/s').value]
+        st = odeint(MotionInGravity1DSolver._model, r0, t.to('s').value,
+                    args=(self.g,), **kwargs)
+        r = st[:,0]*u.m
+        v = st[:,1]*u.m/u.s
+        return [r, v]
+
+
+class DARTEjectaMotion(MotionInGravity1DSolver, Didymos):
+    """DART ejecta motion solver"""
+
+    @u.quantity_input(r0=u.m, v0=u.m/u.s)
+    def __init__(self, r0, v0):
+        MotionInGravity1DSolver.__init__(self, ejecta_g, r0, v0)
+
+    @property
+    def rmax(self):
+        """Maximum distance particle will move"""
+        if self._rmax is None:
+            if self.r0[1] >= ejecta_vesc(self.r0[0]):
+                self._rmax = np.inf*u.m
+            else:
+                v0 = self.r0[1]
+                import astropy.constants as c
+                Ds2 = self.Ds/2
+                V = v0*v0/(2*c.G)
+                E0 = self.Mp/(self.dist+Ds2)+self.Ms/Ds2
+                a = V-E0
+                b = (V-E0)*(self.dist+2*Ds2) + self.Mp + self.Ms
+                c = (V-E0)*Ds2*(self.dist+Ds2) + self.Mp*Ds2 + \
+                        self.Ms*(self.dist+Ds2)
+                self._rmax = ((-np.sqrt(b**2-4*a*c) - b) / (2 * a)).decompose()
+        return self._rmax
+
+    @property
+    def tmax(self):
+        """Maximum time a particle will move before fall back to the original
+        distance"""
+        if self._tmax is None:
+            rmax = self.rmax
+            if rmax == np.inf*u.m:
+                self._tmax = np.inf*u.s
+            else:
+                v0 = self.r0[1]
+                t = rmax/v0
+                ts = np.concatenate([[0], np.linspace(t, t*2, 1000)])
+                rs = self.solve(ts)[0]
+                while (rs.max()<rmax*(1-0.00001)):
+                    ts = np.concatenate([[0], np.linspace(ts[1:].max(),
+                                         ts[1:].max()*2, 1000)])
+                    rs = self.solve(ts)[0]
+                from scipy.interpolate import interp1d
+                tr = interp1d(rs.to('m').value, ts.to('s').value,
+                              fill_value='extrapolate')
+                self._tmax = tr(rmax)*2*u.s
+        return self._tmax
+
+    @u.quantity_input(t=u.s)
+    def robust_solve(self, t, **kwargs):
+        """Solve the motion equation and set returned value to NAN after
+        particle returns to initial position"""
+        r = np.zeros_like(t.value)*np.nan
+        v = np.zeros_like(t.value)*np.nan
+        ww = t<self.tmax
+        r[ww], v[ww] = self.solve(t[ww])
+        return [r, v]
