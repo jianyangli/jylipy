@@ -416,8 +416,8 @@ class DARTEjectaMotion(MotionInGravity1DSolver, Didymos):
     def robust_solve(self, t, **kwargs):
         """Solve the motion equation and set returned value to NAN after
         particle returns to initial position"""
-        r = np.zeros_like(t.value)*np.nan
-        v = np.zeros_like(t.value)*np.nan
+        r = np.zeros_like(t.value)*u.m*np.nan
+        v = np.zeros_like(t.value)*u.m/u.s*np.nan
         ww = t<self.tmax
         r[ww], v[ww] = self.solve(t[ww])
         return [r, v]
