@@ -96,7 +96,7 @@ def subcoord(time, target, observer='earth', bodyframe=None, saveto=None, planet
    Change the table headers to start with capital letters
    Improve the program structure
     '''
-
+    from spiceypy.utils.exceptions import SpiceSPKINSUFFDATA
     # Determine whether kernel pool for body frame exists
     if bodyframe is None:
         bodyframe = target+'_fixed'
@@ -127,58 +127,73 @@ def subcoord(time, target, observer='earth', bodyframe=None, saveto=None, planet
 
     # Iterate over time
     for t in et:
-
-        # Target position (r, RA, Dec)
-        pos1, lt1 = spice.spkpos(target, t, 'J2000', 'lt+s', observer)
-        pos1 = np.array(pos1)
-        rr, ra, dec = spice.recrad(pos1)
-        delta.append(rr*units.km.to(units.au))
-        tgtdec.append(np.rad2deg(dec))
-        tgtra.append(np.rad2deg(ra))
-
-        # Heliocentric distance
-        pos2, lt2 = spice.spkpos('sun', t-lt1, 'J2000', 'lt+s', target)
-        rh.append(norm(pos2)*units.km.to('au'))
-
-        # Phase angle
-        phase.append(vecsep(-pos1, pos2, directional=False))
-
-        # Sun angle
-        m = np.array(spice.twovec(-pos1, 3, [0,0,1.], 1))
-        rr, lon, lat = spice.recrad(m.dot(pos2))
-        sunpa.append(np.rad2deg(lon))
-        suninc.append(np.rad2deg(lat))
-
-        if kp is not None:
-
-            # Sub-observer point
-            pos1, lt1 = spice.spkpos(target, t, bodyframe, 'lt+s', observer)
+        try:
+            # Target position (r, RA, Dec)
+            pos1, lt1 = spice.spkpos(target, t, 'J2000', 'lt+s', observer)
             pos1 = np.array(pos1)
-            if planetographic:
-                lon, lat, alt = spice.recpgr(target, -pos1, r_e, flt)
-            else:
-                rr, lon, lat = spice.recrad(-pos1)
-            solat.append(np.rad2deg(lat))
-            solon.append(np.rad2deg(lon))
+            rr, ra, dec = spice.recrad(pos1)
+            delta.append(rr*units.km.to(units.au))
+            tgtdec.append(np.rad2deg(dec))
+            tgtra.append(np.rad2deg(ra))
 
-            # Sub-solar point
-            pos2, lt2 = spice.spkpos('sun', t-lt1, bodyframe, 'lt+s', target)
-            lon, lat, alt = spice.recpgr(target, pos2, r_e, 0.9)
-            #print np.rad2deg(lon), np.rad2deg(lat)
-            rr, lon, lat = spice.recrad(pos2)
-            #print np.rad2deg(lon), np.rad2deg(lat)
-            if planetographic:
-                lon, lat, alt = spice.recpgr(target, pos2, r_e, flt)
-            else:
+            # Heliocentric distance
+            pos2, lt2 = spice.spkpos('sun', t-lt1, 'J2000', 'lt+s', target)
+            rh.append(norm(pos2)*units.km.to('au'))
+
+            # Phase angle
+            phase.append(vecsep(-pos1, pos2, directional=False))
+
+            # Sun angle
+            m = np.array(spice.twovec(-pos1, 3, [0,0,1.], 1))
+            rr, lon, lat = spice.recrad(m.dot(pos2))
+            sunpa.append(np.rad2deg(lon))
+            suninc.append(np.rad2deg(lat))
+
+            if kp is not None:
+
+                # Sub-observer point
+                pos1, lt1 = spice.spkpos(target, t, bodyframe, 'lt+s', observer)
+                pos1 = np.array(pos1)
+                if planetographic:
+                    lon, lat, alt = spice.recpgr(target, -pos1, r_e, flt)
+                else:
+                    rr, lon, lat = spice.recrad(-pos1)
+                solat.append(np.rad2deg(lat))
+                solon.append(np.rad2deg(lon))
+
+                # Sub-solar point
+                pos2, lt2 = spice.spkpos('sun', t-lt1, bodyframe, 'lt+s', target)
+                lon, lat, alt = spice.recpgr(target, pos2, r_e, 0.9)
+                #print np.rad2deg(lon), np.rad2deg(lat)
                 rr, lon, lat = spice.recrad(pos2)
-            sslon.append(np.rad2deg(lon))
-            sslat.append(np.rad2deg(lat))
+                #print np.rad2deg(lon), np.rad2deg(lat)
+                if planetographic:
+                    lon, lat, alt = spice.recpgr(target, pos2, r_e, flt)
+                else:
+                    rr, lon, lat = spice.recrad(pos2)
+                sslon.append(np.rad2deg(lon))
+                sslat.append(np.rad2deg(lat))
 
-            # North pole angle
-            pole = [polera, poledec]
-            rr, lon, lat = spice.recrad(m.dot(sph2xyz(pole)))
-            polepa.append(np.rad2deg(lon))
-            poleinc.append(np.rad2deg(lat))
+                # North pole angle
+                pole = [polera, poledec]
+                rr, lon, lat = spice.recrad(m.dot(sph2xyz(pole)))
+                polepa.append(np.rad2deg(lon))
+                poleinc.append(np.rad2deg(lat))
+        except SpiceSPKINSUFFDATA:
+            delta.append(np.nan)
+            tgtdec.append(np.nan)
+            tgtra.append(np.nan)
+            rh.append(np.nan)
+            phase.append(np.nan)
+            sunpa.append(np.nan)
+            suninc.append(np.nan)
+            if kp is not None:
+                solat.append(np.nan)
+                solon.append(np.nan)
+                sslon.append(np.nan)
+                sslat.append(np.nan)
+                polepa.append(np.nan)
+                poleinc.append(np.nan)
 
     if kp is None:
         tbl = Table((time, rh, delta, phase, tgtra, tgtdec), names='Time rh Range Phase RA Dec'.split())
