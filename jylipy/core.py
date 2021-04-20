@@ -2348,7 +2348,7 @@ def makenrt(shape, center=None):
     return np.array((r, t))
 
 
-def centroiding(im, ext=0, ds9=None, newframe=True, coord='image', refine=False, box=5, verbose=True):
+def centroiding(im, ext=None, ds9=None, newframe=True, coord='image', refine=False, box=5, verbose=True):
     '''
  Interactively centroiding tool
 
