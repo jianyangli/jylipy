@@ -2734,7 +2734,7 @@ def linfit(x, y=None, yerr=None, xerr=None, intercept=True, return_all=False):
 
     siga, sigb = np.sqrt(sxx/Delta), np.sqrt(ss/Delta)
     if yerr is None:
-        siga, sigb = (np.array([siga, sigb])*np.sqrt(chisq)).flat
+        siga, sigb = (np.array([siga, sigb])*np.sqrt(redchisq)).flat
         q = None
     else:
         from scipy.special import gammainc
