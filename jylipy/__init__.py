@@ -27,6 +27,7 @@ from . import pysis_ext
 from . import astrometry
 from . import mpc
 from . import alma
+from . import polaranalysis
 #from . import spiceypy1
 
 # In testing

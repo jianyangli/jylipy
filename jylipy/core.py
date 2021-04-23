@@ -2746,6 +2746,67 @@ def linfit(x, y=None, yerr=None, xerr=None, intercept=True, return_all=False):
         return np.array([a, b]), np.array([siga, sigb]), redchisq, q, cc
 
 
+class PolyFit():
+    """Polyfit class wrapper for `numpy.polyfit`
+    """
+
+    def __init__(self, x, y, deg, w=None):
+        """
+        Parameters
+        ----------
+        x, y : arrays
+            Arrays to be fitted.  See `numpy.polyfit`
+        deg : int
+            Degree of the fitting polynomial.  See `numpy.polyfit`
+        w : array of the same shape of x
+            Weights to apply to the y-coordinates of the samples.
+            See `numpy.polyfit`.
+        """
+        self.x = x
+        self.y = y
+        self.info = {'w': w, 'deg': deg}
+
+    def __call__(self, rcond=None, full=False):
+        """
+        Parameters
+        ----------
+        rcond : float, optional
+            See `numpy.polyfit`
+        full : bool, optional
+            Populate .info dictionary with residuals, ranks, and singular
+            values.  By default, only the covariance (`.info['cov']`) and
+            formal errors (.info['sigma']) are populated.
+
+        Returns
+        -------
+        p : array
+            Polynomial coefficients.  See `numpy.polyfit`.
+        """
+        self.par, self.info['cov'] = np.polyfit(self.x, self.y,
+                    self.info['deg'], rcond=rcond, w=self.info['w'], cov=True)
+        self.info['rcond'] = rcond
+        sz = self.info['cov'].shape
+        if len(sz) == 2:
+            self.info['sigma'] = np.sqrt(np.diag(self.info['cov']))
+        else:
+            self.info['sigma'] = \
+                        np.sqrt(self.info['cov'][range(sz[0]), range(sz[1])])
+
+        if full:
+            self.par, self.info['residual'], self.info['rank'], \
+            self.info['singular_values'], _ = \
+                    np.polyfit(self.x, self.y, self.info['deg'], rcond=rcond,
+                               w=self.info['w'], full=True)
+        return self.par.copy()
+
+
+class LinearFit(PolyFit):
+    """Linear fit class
+    """
+    def __init__(self, x, y, w=None):
+        super().__init__(x, y, 1, w=w)
+
+
 def power(x, par=[1.,-1.]):
     '''Calculate power law y = par[0] * x**par[1]
 
