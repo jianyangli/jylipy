@@ -173,7 +173,7 @@ class RadialProfile(PolarProjection):
         return self.info['ra'], self.im_polar[:, az_ind]
 
     def radial_par(self, az, r1=5, r2=30, full=False):
-        """Return parameters for radial profiles
+        """Return linear model parameters for radial profiles
 
         Radial profiles are fitted with model:
             y = a * x**b
@@ -191,8 +191,8 @@ class RadialProfile(PolarProjection):
             If `True`, then return the fitted parameters together with
             the `LinearFit` class object that contains more information
             about the fit.  Note, however, that the information stored
-            in the `LinearFit` corresponding to the fit in log space,
-            including the parameter errors in `.info['sigma']`.
+            in the `LinearFit` object corresponds to the fit in log
+            space, including the parameter errors in `.info['sigma']`.
 
         Returns
         -------
@@ -200,7 +200,7 @@ class RadialProfile(PolarProjection):
             The fitted slope and interception parameters
         """
         r, pf = self.radial_profile(az)
-        idx = (r > r1) & (r < r2)
+        idx = (r > r1) & (r < r2) & (pf.min(axis=1) > 0)
         r = np.log10(r[idx])
         pf = np.log10(pf[idx])
 

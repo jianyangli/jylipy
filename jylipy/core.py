@@ -233,7 +233,7 @@ class Image(CCDData):
     '''Image class'''
 
     def __init__(self, *args, **kwargs):
-        super(Image, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         if self.data.ndim != 2:
             raise TypeError('Image can only be 2-dimensional, {0} dimensional data received'.format(self.data.ndim))
 
