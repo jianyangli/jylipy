@@ -191,15 +191,18 @@ class ImageSet():
             _index = np.r_[index]
         return _index
 
-    def write(self, outfile, format='ascii', save_images=False, **kwargs):
+    def write(self, outfile, format=None, save_images=False, **kwargs):
         """Write centers to output file
 
         Parameters
         ----------
         outfile : str
             Output file name
-        format : ['ascii', 'fits'], optional
+        format : [None, 'ascii', 'fits'], optional
             Format of output file.
+            If `None`, then the format is implied by the extension of
+            `outfile`.  If no extension or extension not recognized,
+            then an error will be issued.
             If 'ascii', then the centers are flattened if
             `self.file.ndim` > 1, and saved to an ASCII table.  The
             first column is either image file names if provided, or
@@ -235,6 +238,14 @@ class ImageSet():
             cols.insert(0, table.Column(self._1d['file'], name='file'))
             cols.insert(1, table.Column(self._1d['_ext'], name='ext'))
         out = table.Table(cols)
+        if format is None:
+            format = ''
+            from os.path import splitext
+            ext = splitext(outfile)[1].lower()
+            if ext in ['.fits', '.fit']:
+                format = 'fits'
+            elif ext in ['.csv', '.tab']:
+                format = 'ascii'
         if format == 'ascii':
             out.write(outfile, **kwargs)
         elif format == 'fits':
@@ -261,15 +272,18 @@ class ImageSet():
                 overwrite = kwargs.pop('overwrite', False)
                 hdulist.writeto(outname, overwrite=overwrite)
 
-    def read(self, infile, format='ascii', **kwargs):
+    def read(self, infile, format=None, **kwargs):
         """Read centers from input file
 
         Parameters
         ----------
         infile : str
             Input file name
-        format : ['ascii', 'fits'], optional
+        format : [None, 'ascii', 'fits'], optional
             Format of input file.
+            If `None`, then the format is implied by the extension of
+            `outfile`.  If no extension or extension not recognized,
+            then an error will be issued.
             If 'ascii':  If file names are available from the input file,
             then they will replace whatever in `.file` attribute, and
             any loaded images will be cleared.  The centers and status
@@ -282,6 +296,14 @@ class ImageSet():
         **kwargs : dict, optional
             Other keyword arguments accepted by the `astropy.io.ascii.read`.
         """
+        if format is None:
+            format = ''
+            from os.path import splitext
+            ext = splitext(infile)[1].lower()
+            if ext in ['.fits', '.fit']:
+                format = 'fits'
+            elif ext in ['.csv', '.tab']:
+                format = 'ascii'
         if format == 'ascii':
             intable = ascii.read(infile, **kwargs)
             ndim = 0
@@ -330,9 +352,6 @@ class ImageSet():
         else:
             self._shape = shape
             self._size = int(np.array(shape).prod())
-        if self.image is None:
-            self.image = np.zeros(self._shape, dtype='O')
-            self.image[:] = None
         if self.file is not None:
             self.file = self.file.reshape(self._shape)
         # process attributes
@@ -503,16 +522,14 @@ class Centroid(ImageSet):
             if verbose:
                 print()
 
-    @classmethod
-    def from_fits(cls, infile):
-        obj = super(cls, cls).from_fits(infile)
-        obj.center = np.stack([obj._yc, obj._xc], axis=-1).reshape(
-                obj._shape + (2,))
-        if not hasattr(obj._status, '__iter__'):
-            status = obj._status
-            obj._status = np.zeros(obj._shape, dtype=bool)
-            obj._status[:] = status
-        return obj
+    def read(self, infile, **kwargs):
+        super().read(infile, **kwargs)
+        self.center = np.stack([self._yc, self._xc], \
+                axis=-1).reshape(self._shape + (2,))
+        if not hasattr(self._status, '__iter__'):
+            status = self._status
+            self._status = np.zeros(self._shape, dtype=bool)
+            self._status[:] = status
 
 
 def centroid(im, center=None, error=None, mask=None, method=0, box=6,
