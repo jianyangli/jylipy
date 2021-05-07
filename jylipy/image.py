@@ -2,7 +2,7 @@
 Image processing and analysis related classes and functions
 """
 
-__all__ = ['Centroid']
+__all__ = ['Centroid', 'ImageSet']
 
 import numpy as np
 from astropy.io import fits, ascii
@@ -10,24 +10,28 @@ from astropy import nddata, table
 from photutils.centroids import centroid_2dg, centroid_com
 from .saoimage import getds9
 
-class Centroid():
-    """Image centroiding
+
+class ImageSet():
+    """Convenience class to organize a set of images.
 
     Attributes
     ----------
     .image : 3D or higher dimension array of shape (..., N, M), images
         to be centroided.  The shape of each image is (N, M).
     .file : string array, FITS file names of images to be centroided
-    .ext : string, number, or array of them
+    ._ext : string, number, or array of them
         The FITS extensions of images in the source files.  If array,
         it has the same shape as `.file`.
-    .center : float array of shape (..., 2), centers, the shape of
-        (...) is the same as `.file` or `.image[...]`.
-    .status : bool array
-        Centroiding status.  Same shape as `.file` or `.image[...]`.
+    .loader : function
+        Image loader to provide flexibility in accessing various image
+        formats.
+    .attr : list
+        A list of other attributes set by `**kwargs` to `__init__()`.
+    ._1d : dict
+        The 1D views of `.image`, `.file`, `._ext`, and all listed in
+        `.attr`.
     """
-
-    def __init__(self, im, ext=0, box=5):
+    def __init__(self, im, ext=0, loader=None, **kwargs):
         """
         Parameters
         ----------
@@ -41,10 +45,18 @@ class Centroid():
             The extension of FITS files that stores the images to be
             loaded.  If sequence, then it must have the same shape as
             input file names.
-        box : int or sequence of int, optional
-            Box size for centroid refining.  See `mskpy.gcentroid`.  If
-            sequence, it must have the same shape as input file names
-            or images.
+        loader : function, optional
+            A function to load an image from input file.  It provides
+            flexibility in accessing various image formats.  The call
+            signature of the loader is
+                im = loader(input, **kwargs)
+            where input is a string of file name, and it returns an image
+            in a 2D array.
+            If `loader` == `None`, then a FITS file will be assumed.
+        **kwargs : int or sequence of int, optional
+            Any other arguments needed.  If a scaler, it is assumed to
+            be the same for all images.  If sequences, it must have the
+            same shape as input file names or images.
         """
         # process input images/files
         im = np.array(im)
@@ -54,7 +66,6 @@ class Centroid():
                 self.file = np.array([im])
             else:
                 self.file = im
-            self._file1d = self.file.reshape(-1)
             self.image = None
             self._shape = self.file.shape
             self._size = self.file.size
@@ -71,35 +82,62 @@ class Centroid():
                 _to = self.image.reshape(-1)
                 for i in range(len(_from)):
                     _to[i] = _from[i]
-            self._image1d = self.image.reshape(-1)
+            self.file = None
+            self._shape = self.image.shape
+            self._size = self.image.size
+        elif im.dtype.kind == 'O':
+            types = [x.dtype.kind in ['i', 'u', 'f'] for x in im.reshape(-1)]
+            if not np.all(types):
+                raise ValueError('unrecognized image type')
+            self.image = np.zeros(im.shape, dtype='O')
+            _from = im.reshape(-1)
+            _to = self.image.reshape(-1)
+            for i in range(len(_from)):
+                _to[i] = _from[i]
             self.file = None
             self._shape = self.image.shape
             self._size = self.image.size
         else:
             raise ValueError('unrecognized input type')
         # FITS extension
-        self.ext = ext
-        if (not isinstance(self.ext, str)) and \
-                hasattr(self.ext, '__iter__') and \
-                (np.array(self.ext).shape != self._shape):
-            raise ValueError('invalide extensions from `ext`')
-        if isinstance(self.ext, str) or \
-                (not hasattr(self.ext, '__iter__')):
-            self._ext = np.array([self.ext] * self._size)
+        if isinstance(ext, str) or (not hasattr(ext, '__iter__')):
+            self._ext = ext
         else:
-            self._ext = self.ext.reshape(-1)
-        # box size
-        self.box = box
-        if hasattr(self.box, '__iter__') and \
-                (np.array(self.box).shape != self._shape):
-            raise ValueError('invalide shape for `box`')
-        if hasattr(self.box, '__iter__'):
-            self._box = self.box.reshape(-1)
-        else:
-            self._box = np.array([self.box] * self._size)
-        # preset other attributes
-        self.center = np.zeros(self._shape + (2,))
-        self.status = np.zeros(self._shape, dtype=bool)
+            if np.asarray(ext).shape != self._shape:
+                raise ValueError('`ext` must have the same shape as `file` '
+                        'or `image`')
+            self._ext = np.asarray(ext)
+        # other keywrods
+        self.attr = []
+        if len(kwargs) > 0:
+            for k, v in kwargs.items():
+                n = '_'+k
+                self.attr.append(n)
+                if isinstance(v, str) or (not hasattr(v, '__iter__')):
+                    setattr(self, n, v)
+                else:
+                    if np.asarray(v).shape != self._shape:
+                        raise ValueError('invalide shape for kwargs {}: '
+                                'expect '. format(k) + str(self._shape) + \
+                                ', got ' + str(np.asarray(v).shape))
+                    setattr(self, n, np.asarray(v))
+        self.loader = loader
+        # generate flat views
+        self._generate_flat_views()
+
+    def _generate_flat_views(self):
+        self._1d = {}
+        self._1d['image'] = None if (self.image is None) else \
+                    self.image.reshape(-1)
+        self._1d['file'] = None if (self.file is None) else \
+                    self.file.reshape(-1)
+        attr = ['_ext'] + self.attr
+        for k in attr:
+            v = getattr(self, k)
+            if isinstance(v, np.ndarray):
+                self._1d[k] = v.reshape(-1)
+            else:
+                self._1d[k] = np.array([v] * self._size)
 
     def _load_image(self, i):
         """Load the ith image in flattened file name list
@@ -109,8 +147,239 @@ class Centroid():
         if self.image is None:
             self.image = np.zeros_like(self.file, dtype='O')
             self.image[:] = None
-            self._image1d = self.image.reshape(-1)
-        self._image1d[i] = fits.open(self._file1d[i])[self._ext[i]].data
+            self._1d['image'] = self.image.reshape(-1)
+        if self.loader is None:
+            self._1d['image'][i] = \
+                    fits.open(self._1d['file'][i])[self._1d['_ext'][i]].data
+        else:
+            self._1d['image'][i] = self.loader(self._1d['file'][i])
+
+    def _ravel_indices(self, index):
+        """Convert index to 1d index
+
+        Parameters
+        ----------
+        index : None, or int, slice, list of int, or tuple of them
+            If `None`, return 1d indices of all items
+            If int, slice, or list of int, then specify the 1d index
+                (index of flattened `._1d['file']` or `._1d['image']`)
+            If tuple, then specify the multi-dimentional index.
+
+        Return
+        ------
+        index1d : 1d array or tuple of 1d arrays
+            The index of flattened `._1d['file']` or `._1d['image']`
+        """
+        if index is None:
+            _index = np.r_[range(self._size)]
+        elif isinstance(index, tuple):
+            # multi-dimensional indices
+            _index = ()
+            for i, ind in enumerate(index):
+                if isinstance(ind, slice) and (ind.stop is None):
+                    ind = slice(ind.start, self._shape[i], ind.step)
+                _index = _index + (np.r_[ind], )
+            len_index = len(_index)
+            if len_index < len(self._shape):
+                for i in range(len(self._shape) - len_index):
+                    _index = _index + (np.r_[range(self._shape[len_index+i])],)
+            _index = np.ravel_multi_index(_index, self._shape)
+            if not hasattr(_index, '__iter__'):
+                _index = [_index]
+        else:
+            # 1d indices
+            _index = np.r_[index]
+        return _index
+
+    def write(self, outfile, format='ascii', save_images=False, **kwargs):
+        """Write centers to output file
+
+        Parameters
+        ----------
+        outfile : str
+            Output file name
+        format : ['ascii', 'fits'], optional
+            Format of output file.
+            If 'ascii', then the centers are flattened if
+            `self.file.ndim` > 1, and saved to an ASCII table.  The
+            first column is either image file names if provided, or
+            image indices otherwise.  The second and third columns are
+            centers (x, y), with headings 'xc', 'yc'.  The last column
+            is 'status', with value 1 means center is measured successfully
+            and 0 means center is not measured.
+            If 'fits', then the centers are saved in a FITS array in the
+            primary extension, status in the first extension, and the
+            image file names in a binary table in the second extension
+            if provided.
+        save_images : bool, optional
+            If `True`, then if `.file` is None and images are provided,
+            then save images to a FITS file named
+            `'{}_images.fits'.format(outfile)`.
+        **kwargs : dict, optional
+            Other keyword arguments accepted by the `astropy.io.ascii.write`
+            or `astropy.io.fits.HDUList.writeto`.
+
+        The data will be organized in a table and saved in either an ASCII
+        file or a FITS file.  The table will include file names (if
+        available), extension number (if applicable), and all information
+        supplied by **kwargs.  If the image set is a multi-dimensional
+        array, then the dimension and shape of the set is also saved in
+        the FITS binary table headers if the output is a FITS file.  If
+        the output is an ASCII file, then the shape information of image
+        set will be discarded and all data saved in flat arrays.
+        """
+        cols = []
+        for k in self.attr:
+            cols.append(table.Column(self._1d[k], name=k.strip('_')))
+        if self.file is not None:
+            cols.insert(0, table.Column(self._1d['file'], name='file'))
+            cols.insert(1, table.Column(self._1d['_ext'], name='ext'))
+        out = table.Table(cols)
+        if format == 'ascii':
+            out.write(outfile, **kwargs)
+        elif format == 'fits':
+            outfits = fits.HDUList(fits.PrimaryHDU())
+            tblhdu = fits.BinTableHDU(out, name='info')
+            tblhdu.header['ndim'] = len(self._shape)
+            for i in range(len(self._shape)):
+                tblhdu.header['axis{}'.format(i)] = self._shape[i]
+            outfits.append(tblhdu)
+            outfits.writeto(outfile, **kwargs)
+        else:
+            raise ValueError('unrecognized output format')
+        if save_images:
+            if self.file is None:
+                from os import path
+                hdu0 = fits.PrimaryHDU()
+                hdu0.header['ndim'] = len(self._shape)
+                for i in range(len(self._shape)):
+                    hdu0.header['axis{}'.format(i)] = self._shape[i]
+                hdulist = fits.HDUList([hdu0])
+                for im in self._1d['image']:
+                    hdulist.append(fits.ImageHDU(im))
+                outname = '{}_images.fits'.format(path.splitext(outfile)[0])
+                overwrite = kwargs.pop('overwrite', False)
+                hdulist.writeto(outname, overwrite=overwrite)
+
+    def read(self, infile, format='ascii', **kwargs):
+        """Read centers from input file
+
+        Parameters
+        ----------
+        infile : str
+            Input file name
+        format : ['ascii', 'fits'], optional
+            Format of input file.
+            If 'ascii':  If file names are available from the input file,
+            then they will replace whatever in `.file` attribute, and
+            any loaded images will be cleared.  The centers and status
+            will be reshaped to the same shape as `.file` or `.image`.
+            If 'fits', then the centers and status will be loaded, and
+            if file names are avaialble from input file, then they will
+            replace whatever in `.file` attribute, and reshaped to the
+            same shape as centers and status.  Any loaded images will
+            be cleared in this case.
+        **kwargs : dict, optional
+            Other keyword arguments accepted by the `astropy.io.ascii.read`.
+        """
+        if format == 'ascii':
+            intable = ascii.read(infile, **kwargs)
+            ndim = 0
+        elif format == 'fits':
+            with fits.open(infile) as _f:
+                intable = table.Table(_f['info'].data)
+                ndim = _f['info'].header['ndim']
+                shape = ()
+                for i in range(ndim):
+                    shape = shape + (_f['info'].header['axis{}'.format(i)],)
+        else:
+            raise ValueError('unrecognized input format')
+        keys = intable.keys()
+        if 'file' in keys:
+            self.file = np.array(intable['file'])
+            self._ext = np.array(intable['ext'])
+            keys.remove('file')
+            keys.remove('ext')
+            self.image = None
+        else:
+            from os import path
+            imgfile = '{}_images.fits'.format(path.splitext(infile)[0])
+            if not path.isfile(imgfile):
+                raise IOError('input image file not found')
+            self.file = None
+            self._ext = None
+            # load image
+            with fits.open(imgfile) as _f:
+                ndim = _f[0].header['ndim']
+                shape = ()
+                for i in range(ndim):
+                    shape = shape + (_f[0].header['axis{}'.format(i)],)
+                self.image = np.zeros(shape, dtype='O')
+                image1d = self.image.reshape(-1)
+                for i in range(len(_f)-1):
+                    image1d[i] = _f[i+1].data
+        self.attr = []
+        for k in keys:
+            n = '_' + k
+            self.attr.append(n)
+            setattr(self, n, np.array(intable[k]))
+        # adjust shape
+        if ndim == 0:
+            self._shape = len(intable),
+            self._size = self._shape[0]
+        else:
+            self._shape = shape
+            self._size = int(np.array(shape).prod())
+        if self.image is None:
+            self.image = np.zeros(self._shape, dtype='O')
+            self.image[:] = None
+        if self.file is not None:
+            self.file = self.file.reshape(self._shape)
+        # process attributes
+        keys = self.attr if self._ext is None else ['_ext'] + self.attr
+        for k in keys:
+            v = getattr(self, k)
+            if np.all(v == v[0]):
+                setattr(self, k, v[0])
+        # generate flat view
+        self._generate_flat_views()
+
+    @classmethod
+    def from_fits(cls, infile):
+        obj = cls('')
+        obj.read(infile, format='fits')
+        return obj
+
+
+class Centroid(ImageSet):
+    """Image centroiding
+
+    Extra attributes from `ImageSet`
+    --------------------------------
+    .center : float array of shape (..., 2), centers, the shape of
+        (...) is the same as `.file` or `.image[...]`.
+    ._status : bool array
+        Centroiding status.  Same shape as `.file` or `.image[...]`.
+    """
+    def __init__(self, *args, box=5, **kwargs):
+        """
+        Parameters
+        ----------
+        *args, **kwargs : see `ImageSet`
+        box : int or sequence of int, optional
+            Box size for centroid refining.  See `mskpy.gcentroid`.  If
+            sequence, it must have the same shape as input file names
+            or images.
+        """
+        kwargs['box'] = box
+        super().__init__(*args, **kwargs)
+        # preset other attributes
+        self.center = np.zeros(self._shape + (2,))
+        self._status = np.zeros(self._shape, dtype=bool)
+        self._1d['_yc'] = self.center[..., 0].reshape(-1)
+        self._1d['_xc'] = self.center[..., 1].reshape(-1)
+        self._1d['_status'] = self._status.reshape(-1)
+        self.attr.extend(['_xc', '_yc', '_status'])
 
     def centroiding(self, ds9=None, newframe=False, refine=True, box=5,
                     verbose=True):
@@ -144,19 +413,17 @@ class Centroid():
         retry = False
         if ds9 is None:
             ds9 = getds9('Centroid')
-        _center = self.center.reshape(-1, 2)
-        _status = self.status.reshape(-1)
         while i < self._size:
-            if (self.image is None) or (self._image1d[i] is None):
+            if (self.image is None) or (self._1d['image'][i] is None):
                 if verbose:
                     print('Image {} in the list: {}.'.format(i,
-                            self._file1d[i]))
+                            self._1d['file'][i]))
                 self._load_image(i)
             else:
                 if verbose:
                     print('Image {} in the list.'.format(i))
             if not retry:
-                ds9.imdisp(self._image1d[i], newframe=newframe,
+                ds9.imdisp(self._1d['image'][i], newframe=newframe,
                         verbose=verbose)
             else:
                 if verbose:
@@ -166,14 +433,15 @@ class Centroid():
             if len(ct) != 0:
                 ct = [float(ct[i]) for i in [1,0]]
                 if refine:
-                    _center[i] = centroid(self._image1d[i], ct,
-                            box=self._box[i], verbose=verbose)
+                    self._1d['_yc'][i], self._1d['_xc'][i] = \
+                            centroid(self._1d['image'][i], ct,
+                            box=self._1d['_box'][i], verbose=verbose)
                 else:
-                    _center[i] = ct
+                    self._1d['_yc'][i], self._1d['_xc'][i] = ct
                 if verbose:
                     print('Centroid at (x, y) = ({:.4f}, {:.4f})'.format(
-                            _center[i][0], _center[i][1]))
-                _status[i] = True
+                            self._1d['_yc'][i], self._1d['_xc'][i]))
+                self._1d['_status'][i] = True
                 j += 1
             else:
                 # enter interactive session
@@ -210,28 +478,8 @@ class Centroid():
             Print out information
         """
         # process index
-        if index is None:
-            _index = np.r_[range(self._size)]
-        elif isinstance(index, tuple):
-            # multi-dimensional indices
-            _index = ()
-            for i, ind in enumerate(index):
-                if isinstance(ind, slice) and (ind.stop is None):
-                    ind = slice(ind.start, self._shape[i], ind.step)
-                _index = _index + (np.r_[ind], )
-            len_index = len(_index)
-            if len_index < len(self._shape):
-                for i in range(len(self._shape) - len_index):
-                    _index = _index + (np.r_[range(self._shape[len_index+i])],)
-            _index = np.ravel_multi_index(_index, self._shape)
-            if not hasattr(_index, '__iter__'):
-                _index = [_index]
-        else:
-            # 1D indices
-            _index = np.r_[index]
+        _index = self._ravel_indices(index)
         # _center, _status, _image1d, _box
-        _status = self.status.reshape(-1)
-        _center = self.center.reshape(-1, 2)
         n = 1
         nn = len(_index)
         for i in _index:
@@ -240,150 +488,30 @@ class Centroid():
                     print('Image {} of {}:'.format(n, nn))
                 else:
                     print('Image {} of {}: {}'.format(n, nn,
-                            self._file1d[i]))
-            if not _status[i]:
+                            self._1d['file'][i]))
+            if not self._1d['_status'][i]:
                 if verbose:
                     print('...centroid not measured, skipped\n')
                 continue  # skip if hasn't measured
-            if (self.image is None) or (self._image1d[i] is None):
+            if (self.image is None) or (self._1d['image'][i] is None):
                 self._load_image(i)
-            _center[i] = centroid(self._image1d[i], _center[i],
-                    box=self._box[i], verbose=verbose)
+            self._1d['_yc'][i], self._1d['_xc'][i] = \
+                    centroid(self._1d['image'][i],\
+                            (self._1d['_yc'][i], self._1d['_xc'][i]),
+                            box=self._1d['_box'][i], verbose=verbose)
             n += 1
             if verbose:
                 print()
 
-    def write(self, outfile, format='ascii', **kwargs):
-        """Write centers to output file
-
-        Parameters
-        ----------
-        outfile : str
-            Output file name
-        format : ['ascii', 'fits'], optional
-            Format of output file.
-            If 'ascii', then the centers are flattened if
-            `self.file.ndim` > 1, and saved to an ASCII table.  The
-            first column is either image file names if provided, or
-            image indices otherwise.  The second and third columns are
-            centers (x, y), with headings 'xc', 'yc'.  The last column
-            is 'status', with value 1 means center is measured successfully
-            and 0 means center is not measured.
-            If 'fits', then the centers are saved in a FITS array in the
-            primary extension, status in the first extension, and the
-            image file names in a binary table in the second extension
-            if provided.
-        **kwargs : dict, optional
-            Other keyword arguments accepted by the `astropy.io.ascii.write`
-            or `astropy.io.fits.HDUList.writeto`.
-        """
-        if format == 'ascii':
-            outdata = np.ma.array(self.center,
-                    mask=np.repeat(self.status[:,np.newaxis], 2, axis=1))
-            yc = outdata[..., 0].flatten()
-            xc = outdata[..., 1].flatten()
-            box = self._box
-            status = self.status.flatten()
-            if self.file is None:
-                out = table.Table([xc, yc, box, status.astype(int)],
-                            names=['xc', 'yc', 'box', 'status'])
-            else:
-                file = self._file1d
-                ext = self._ext
-                out = table.Table([self._file1d, self._ext, xc, yc, box,
-                            status.astype(int)],
-                            names=['file', 'ext', 'xc', 'yc', 'box', 'status'])
-            out.write(outfile, **kwargs)
-        elif format == 'fits':
-            out = fits.HDUList(fits.PrimaryHDU(self.center))
-            out.append(fits.ImageHDU(self.status.astype(int), name='status'))
-            if self.file is not None:
-                files = fits.BinTableHDU(table.Table([self._file1d, self._ext,
-                        self._box], names=['file', 'ext', 'box']), name='file')
-                files.header['ndim'] = self.file.ndim
-                for i in range(self.file.ndim):
-                    files.header['axis{}'.format(i)] = self.file.shape[i]
-                out.append(files)
-            out.writeto(outfile, **kwargs)
-        else:
-            raise ValueError('unrecognized output format')
-
-    def read(self, infile, format='ascii', **kwargs):
-        """Read centers from input file
-
-        Parameters
-        ----------
-        infile : str
-            Input file name
-        format : ['ascii', 'fits'], optional
-            Format of input file.
-            If 'ascii':  If file names are available from the input file,
-            then they will replace whatever in `.file` attribute, and
-            any loaded images will be cleared.  The centers and status
-            will be reshaped to the same shape as `.file` or `.image`.
-            If 'fits', then the centers and status will be loaded, and
-            if file names are avaialble from input file, then they will
-            replace whatever in `.file` attribute, and reshaped to the
-            same shape as centers and status.  Any loaded images will
-            be cleared in this case.
-        **kwargs : dict, optional
-            Other keyword arguments accepted by the `astropy.io.ascii.read`.
-        """
-        if format == 'ascii':
-            intable = ascii.read(infile)
-            if len(intable.keys()) > 3:
-                self.file = np.array(intable['file'])
-                self.ext = np.array(intable['ext'])
-                self._ext = self.ext.reshape(-1)
-                self._box = np.array(intable['box'])
-                self.box = self._box[0] if np.all(self._box == self._box[0]) \
-                        else self._box
-                self._shape = self.file.shape
-                self._size = self.file.size
-                self.image = np.zeros(self._size, dtype='O')
-                self.image[:] = None
-                self._file1d = self.file.reshape(-1)
-                self._image1d = self.image.reshape(-1)
-            if self._size != len(intable['xc']):
-                raise ValueError("input file doesn't match the number "
-                        "of images")
-            self.center = np.array([intable['yc'], intable['xc']]).T. \
-                    reshape(self._shape+(2,))
-            self.status = np.array(intable['status']).astype(bool). \
-                    reshape(self._shape)
-        elif format == 'fits':
-            with fits.open(infile) as _f:
-                if len(_f) == 3:
-                    ndim = _f['file'].header['ndim']
-                    shape = ()
-                    for i in range(ndim):
-                        shape = shape + \
-                                (_f['file'].header['axis{}'.format(i)],)
-                    self.file = _f['file'].data['file'].reshape(shape)
-                    self._file1d = self.file.reshape(-1)
-                    self.ext = _f['file'].data['ext'].reshape(shape)
-                    self._ext = self.ext.reshape(-1)
-                    self._box = _f['file'].data['box']
-                    self.box = self._box[0] \
-                            if np.all(self._box == self._box[0]) else \
-                            self._box.reshape(shape)
-                    self._shape = shape
-                    self._size = self.file.size
-                    self.image = np.zeros(self._shape, dtype='O')
-                    self.image[:] = None
-                    self._image1d = self.image.reshape(-1)
-                if _f[0].data.shape[:-1] != self._shape:
-                    raise ValueError("input file doesn't match the "
-                            "number/shape of images")
-                self.center = _f[0].data
-                self.status = _f['status'].data.astype(bool)
-        else:
-            raise ValueError('unrecognized input format')
-
     @classmethod
     def from_fits(cls, infile):
-        obj = cls('')
-        obj.read(infile, format='fits')
+        obj = super(cls, cls).from_fits(infile)
+        obj.center = np.stack([obj._yc, obj._xc], axis=-1).reshape(
+                obj._shape + (2,))
+        if not hasattr(obj._status, '__iter__'):
+            status = obj._status
+            obj._status = np.zeros(obj._shape, dtype=bool)
+            obj._status[:] = status
         return obj
 
 
