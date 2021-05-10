@@ -2,13 +2,14 @@
 Image processing and analysis related classes and functions
 """
 
-__all__ = ['Centroid', 'ImageSet']
+__all__ = ['Centroid', 'ImageSet', 'Background']
 
 import numpy as np
 from astropy.io import fits, ascii
 from astropy import nddata, table
 from photutils.centroids import centroid_2dg, centroid_com
 from .saoimage import getds9
+from .core import resmean, gaussfit
 
 
 class ImageSet():
@@ -376,9 +377,13 @@ class Centroid(ImageSet):
     Extra attributes from `ImageSet`
     --------------------------------
     .center : float array of shape (..., 2), centers, the shape of
-        (...) is the same as `.file` or `.image[...]`.
+        (...) is the same as `.file` or `.image`.
+    ._yc, ._xc : float array of the same shape as `.file` or `.image`
+        The (y, x) coordinates of centers
     ._status : bool array
-        Centroiding status.  Same shape as `.file` or `.image[...]`.
+        Centroiding status.  Same shape as `.file` or `.image`.
+    ._box : int array of the same shape as `.file` or `.image`
+        Box size for centroiding
     """
     def __init__(self, *args, box=5, **kwargs):
         """
@@ -530,6 +535,191 @@ class Centroid(ImageSet):
             status = self._status
             self._status = np.zeros(self._shape, dtype=bool)
             self._status[:] = status
+
+
+class Background(ImageSet):
+    """Image background
+
+    Extra attributes from `ImageSet`
+    --------------------------------
+    .background : float array of the same shape as `.images` or `.file`
+        Measured background
+    ._background_region#, ._background_error_region# : float array of
+        the same shape as `.image` or `.file`
+        The measured background and error of region#, where # is int
+        starting from 0.
+     : float array of the same shape as
+    ._region#_x1, _region#_y1, _region#_x2, _region#_y2 : int arrays
+        The (x, y) coordinates of the lower-left and upper right corners
+        for region#, where # is int starting from 0.
+    ._n_regions : int or int array
+        The number of regions for each image
+    ._gain : float or float array
+        If exist, then it is the gain of images DN = e- * gain, used to
+        calculate photon noise.
+    """
+    def __init__(self, *args, region=None, **kwargs):
+        """
+        Parameters
+        ----------
+        region : None or array-like int
+            The region(s) from which the background is measured.  When
+            it's array-like, the length of the last dimension must be >=4
+            to specify the [y1, x1, y2, x2] pixel coordinates of the
+            lower-left and upper-right corners of region(s).
+            If None: Background is measured from the whole image for all
+                images.
+            If 1d array: Background is measured from one single region
+                for all images.
+            If 2d array of shape (M, N): Background is measured from all
+                M regions specified by `region` for all images.
+            If 3d or higher dimension array of shape (..., M, N):
+                Background is measured from all M regions individually
+                specified for each image.  where ... must have the
+                same shape as `.image` or `.file`.
+        """
+        super().__init__(*args, **kwargs)
+        if region is None:
+            self._region0_x1 = 0
+            self._region0_x2 = 0
+            self._region0_y1 = 0
+            self._region0_y2 = 0
+            self._n_regions = 1
+            self.attr.extend(['n_regions', '_region0_x1', '_region0_x2',
+                              '_region0_y1', '_region0_y2'])
+        else:
+            region = np.array(region, dtype='O')
+            same_number_of_region = True
+            try:
+                region = region.astype('i')
+            except ValueError:
+                pass
+            if region.dtype.kind == 'i':
+                # when numbers of regions for all images are the same
+                if region.shape[-1] < 4:
+                    raise ValueError("the last dimension of 'region' must "
+                        "be >= 4")
+                if region.ndim == 1:
+                    self._region0_y1, self._region0_x1, self._region0_y2, \
+                            self._region0_x2 = region[:4]
+                    self._n_regions = 1
+                    self.attr.extend(['_n_regions',
+                                      '_region0_x1', '_region0_x2',
+                                      '_region0_y1', '_region0_y2'])
+                elif region.ndim == 2:
+                    shape = region.shape
+                    self._n_regions = shape[0]
+                    self.attr.append('_n_regions')
+                    for i in range(shape[0]):
+                        reg = ['_region{}_y1'.format(i),
+                               '_region{}_x1'.format(i),
+                               '_region{}_y2'.format(i),
+                               '_region{}_x2'.format(i)]
+                        for n in range(4):
+                            setattr(self, reg[n], region[i, n])
+                        self.attr.extend(reg)
+                else:
+                    if region.shape[:-2] != self._shape:
+                        raise ValueError("The shape of 'region' is not "
+                            "compatible with the shape of `.file` or `.image`")
+                    shape = region.shape
+                    self._n_regions = shape[-2]
+                    self.attr.append('_n_regions')
+                    _region = region.reshape(-1, shape[-2], shape[-1])
+                    for i in range(self._n_regions):
+                        reg = ['_region{}_y1'.format(i),
+                               '_region{}_x1'.format(i),
+                               '_region{}_y2'.format(i),
+                               '_region{}_x2'.format(i)]
+                        for n in range(4):
+                            setattr(self, reg[n], [])
+                        for j in range(self._size):
+                            for n in range(4):
+                                getattr(self, reg[n]).append(_region[j, i, n])
+                        for n in range(4):
+                            rr = np.array(getattr(self, reg[n]))
+                            rr = rr.reshape(self._shape)
+                            setattr(self, reg[n], rr)
+                        self.attr.extend(reg)
+            else:
+                # when the number of regions for each image is different
+                # To be implemented
+                pass
+        self._generate_flat_views()
+
+    def measure(self, index=None, method='mean'):
+        """Measure background
+
+        Parameters
+        ----------
+        index : None, or int, slice, list of int, or tuple of them
+            Index/indices of images to be measured.
+            If `None`, measure all images
+            If int, slice, or list of int, then they are the index of
+                images in the flattened arrays to be measured
+                (`._1d['file']` or `._1d['image']`)
+            If tuple, then specify the multi-dimentional index of images
+                to be measured.
+        method : str in ['mean', 'gauss','median'], optional
+            The method to measure background.
+            'mean': Uses resistant mean, rather than simple mean.
+            'gauss': Uses a Gaussian fit to the histogram of image/regions
+                to estimate the background and standard deviation.
+            'median': Uses median of image/regions
+        """
+        # gain settings
+        gain = self._1d['_gain'] if '_gain' in self.attr \
+                                                    else np.ones(self._size)
+        # prepare storage
+        max_n_regions = np.array(self._1d['_n_regions']).max()
+        for i in range(max_n_regions):
+            regstr = '_region{}'.format(i)
+            setattr(self, '_background' + regstr, np.zeros(self._shape))
+            setattr(self, '_background_error' + regstr, np.zeros(self._shape))
+            self.attr.append('_background' + regstr)
+            self.attr.append('_background_error' + regstr)
+        self.background = np.zeros(self._shape)
+        self.background_error = np.zeros(self._shape)
+        self.attr.extend(['background', 'background_error'])
+        self._generate_flat_views()
+        # measure background
+        for i in range(self._size):
+            if self.image is None or self._1d['image'][i] is None:
+                self._load_image(i)
+            for j in range(self._1d['_n_regions'][i]):
+                regstr = '_region{}'.format(j)
+                y1 = self._1d[regstr+'_y1'][i]
+                x1 = self._1d[regstr+'_x1'][i]
+                y2 = self._1d[regstr+'_y2'][i]
+                x2 = self._1d[regstr+'_x2'][i]
+                subim = self._1d['image'][i][y1:y2, x1:x2].flatten()
+                if method == 'median':
+                    bg = np.median(subim)
+                    self._1d['_background'+regstr][i] = bg
+                    self._1d['_background_error'+regstr][i] = \
+                                np.sqrt(np.std(subim)**2)# + bg*gain[i])
+                else:
+                    res = resmean(subim, std=True)
+                    if method == 'mean':
+                        self._1d['_background'+regstr][i] = res[0]
+                        self._1d['_background_error'+regstr][i] = \
+                                    np.sqrt(res[1]**2)# + res[0]*gain[i])
+                    elif method == 'gaussian':
+                        hist, bin = np.histogram(subim, bins=100,
+                                range=[res[0]-10*res[1], res[0]+10*res[1]])
+                        par0 = np.insert(res, 0, max(hist))
+                        x = (bin[0:-1] + bin[1:]) / 2
+                        par = gaussfit(x, hist, par0=par0)[0]
+                        self._1d['_background'+regstr][i] = par[1]
+                        self._1d['_background_error'+regstr][i] = \
+                                    np.sqrt(par[2]**2 + par[1]*gain[i])
+            bgs = np.array([self._1d['_background_region{}'.format(j)][i] \
+                    for j in range(self._1d['_n_regions'][i])])
+            bgs_err = np.array([self._1d['_background_error_region{}'. \
+                    format(j)][i] for j in range(self._1d['_n_regions'][i])])
+            bgs_err2 = bgs_err * bgs_err
+            self._1d['background'][i] = np.sum(bgs/bgs_err2)/np.sum(1/bgs_err2)
+            self._1d['background_error'][i] = np.sqrt(1/np.sum(1/bgs_err2))
 
 
 def centroid(im, center=None, error=None, mask=None, method=0, box=6,
