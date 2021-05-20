@@ -8,9 +8,7 @@ class Region(object):
     '''Base class for DS9 regions'''
 
     parname = ('x', 'y')
-    specs = {}
     _shape = None
-    zerobased = True
     size = None
 
     def __init__(self, *args, **kwargs):
@@ -54,8 +52,10 @@ class Region(object):
             self.__dict__[self.parname[i]] = args[i]
         if self._shape is None:
             raise Warning('region shape is not defined')
+        self.specs = {}
         self.specs['color'] = kwargs.pop('color', 'green')
         self.specs['width'] = kwargs.pop('width', 1)
+        self.zerobased = kwargs.pop('zerobased', True)
 
     @property
     def shape(self):
@@ -120,8 +120,9 @@ class Region(object):
                 if k in ['x','y']:
                     par[-1] += 1
         propstr = ''
-        for k in list(self.specs.keys()):
-            propstr = propstr+' '+k+'='+str(self.specs[k])
+        for k, v in self.specs.items():
+            vstr = '"'+str(v)+'"' if isinstance(v, (str, bytes)) else str(v)
+            propstr = propstr + ' {}={}'.format(k, vstr)
         propstr = '#'+propstr
         ds9.set('regions', 'image; {} {} {}'.format(self.shape,
                 ' '.join(str(par)[1:-1].split(',')), propstr))
