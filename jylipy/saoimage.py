@@ -155,6 +155,20 @@ class AnnulusRegion(Region):
     size = ('r_out', 'r_out')
 
 
+class VectorRegion(Region):
+    """Vecotor region"""
+    parname = ('x', 'y', 'length', 'angle')
+    _shape = 'vector'
+    size = ('length', 'length')
+
+
+class TextRegion(Region):
+    """Text region"""
+    parname = ('x', 'y')
+    _shape = 'text'
+    size = ('x', 'y')
+
+
 class RegionList(list):
     """Region list class"""
 
