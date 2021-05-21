@@ -2,12 +2,14 @@
 
 
 import numpy as np
-__all__ = ['Region', 'CircularRegion', 'EllipseRegion', 'BoxRegion', 'AnnulusRegion', 'DS9', 'getds9']
+__all__ = ['Region', 'CircularRegion', 'EllipseRegion', 'BoxRegion',
+           'AnnulusRegion', 'VectorRegion', 'TextRegion', 'PointRegion',
+           'XPointRegion', 'DS9', 'getds9']
 
 class Region(object):
     '''Base class for DS9 regions'''
 
-    parname = ('x', 'y')
+    parname = None
     _shape = None
     size = None
 
@@ -15,13 +17,19 @@ class Region(object):
         '''The initialization of Region class depends on its shape.
         The general form is:
 
-        r = Region(shape, *par, frame=None, ds9=None)
+        r = Region(*par, shape='shape name', parname=('x', 'y', ...))
 
-        shape : str
-          The shape of region, same as defined in DS9
         *par : numbers
-          The parameters for shape, same definition and order as in
-          DS9.get('regions -format saoimage')
+            Parameters for shape, same definition and order as in
+            DS9.get('regions -format saoimage')
+        shape : str
+            Shape of region, same as defined in DS9
+        parname : tuple of str
+            The name of parameters
+
+        It can also take keyword arguments to specify the properties
+        of region, such as color, width, text, etc.
+
 
         To subclass Region for specific shape:
 
@@ -33,18 +41,16 @@ class Region(object):
         The initialization of subclass is now simply:
 
         r = BoxRegion(x, y, a, b, angle)
-
-        v1.0.0 : JYL @PSI, 3/6/2015
-        v1.0.1 : JYL @PSI, 1/5/2017
-          Added property .specs to store the properties of the region, such as
-          color, width, etc.
         '''
-
+        if self.parname is None:
+            self.parname = kwargs.pop('parname', ('x', 'y'))
+        if self._shape is None:
+            self._shape = kwargs.pop('shape', None)
+        if self.size is None:
+            self.size = kwargs.pop('size', None)
         if len(self.parname) != len(args):
             raise TypeError('{0}.__init__() takes {1} arguments ({2} given)'.
                 format(type(self),len(self.parname)+1,len(args)+1))
-        if self._shape is None:
-            self._shape = kwargs.pop('shape', None)
         self.frame = kwargs.pop('frame', None)
         self.ds9 = kwargs.pop('ds9', None)
         self.zerobased = kwargs.pop('zerobased', True)
@@ -55,7 +61,8 @@ class Region(object):
         self.specs = {}
         self.specs['color'] = kwargs.pop('color', 'green')
         self.specs['width'] = kwargs.pop('width', 1)
-        self.zerobased = kwargs.pop('zerobased', True)
+        for k, v in kwargs.items():
+            self.specs[k] = v
 
     @property
     def shape(self):
