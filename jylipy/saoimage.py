@@ -170,6 +170,17 @@ class TextRegion(Region):
     size = ('x', 'y')
 
 
+class PointRegion(Region):
+    """DS9 point region group"""
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._shape = self._shape + ' point'
+
+
+class XPointRegion(PointRegion):
+    _shape = 'X'
+
+
 class RegionList(list):
     """Region list class"""
 
