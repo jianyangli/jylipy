@@ -294,6 +294,16 @@ class DS9(pyds9.DS9):
                 self.restore(restore)
 
     @property
+    def width(self):
+        """DS9 window width"""
+        return int(self.get('width'))
+
+    @property
+    def height(self):
+        """DS9 window height"""
+        return int(self.get('height'))
+
+    @property
     def frames(self):
         return self.get('frame all').split()
 
