@@ -8,7 +8,7 @@ import numpy as np
 from astropy.io import fits, ascii
 from astropy import nddata, table
 from photutils.centroids import centroid_2dg, centroid_com
-from .saoimage import getds9, CircularRegion, CrossPointRegion
+from .saoimage import getds9, CircularRegion, CrossPointRegion, TextRegion, RegionList
 from .core import resmean, gaussfit
 
 
@@ -365,9 +365,10 @@ class ImageSet():
         self._generate_flat_views()
 
     @classmethod
-    def from_fits(cls, infile):
+    def from_fits(cls, infile, loader=None):
         obj = cls('')
         obj.read(infile, format='fits')
+        obj.loader = loader
         return obj
 
 
@@ -563,12 +564,17 @@ class Centroid(ImageSet):
         for i in _index:
             if (self.image is None) or (self._1d['image'][i] is None):
                 self._load_image(i)
-            ds9.set('frame new')
             ds9.imdisp(self._1d['image'][i])
-            r = CircularRegion(self._1d['_xc'][i], self._1d['_yc'][i], 3)
-            r.show(ds9)
-            c = CrossPointRegion(self._1d['_xc'][i], self._1d['_yc'][i])
-            c.show(ds9)
+            xc = self._1d['_xc'][i]
+            yc = self._1d['_yc'][i]
+            ds9.sets(['pan to {} {}'.format(xc, yc),
+                      'zoom to 2'])
+            r = CircularRegion(xc, yc, 3)
+            c = CrossPointRegion(xc, yc)
+            t = TextRegion(xc, yc+ds9.height/2/2-10,
+                    text='{}: {}'.format(i, self._1d['file'][i]),
+                    color='white', font='helvetica 15 bold roman')
+            RegionList([r, c, t]).show(ds9=ds9)
 
 
 class Background(ImageSet):
