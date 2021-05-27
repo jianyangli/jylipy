@@ -188,6 +188,30 @@ class XPointRegion(PointRegion):
     _shape = 'X'
 
 
+class CrossPointRegion(PointRegion):
+    _shape = 'Cross'
+
+
+class CirclePointRegion(PointRegion):
+    _shape = 'Circle'
+
+
+class BoxPointRegion(PointRegion):
+    _shape = 'Box'
+
+
+class DiamondPointRegion(PointRegion):
+    _shape = 'Diamond'
+
+
+class ArrowPointRegion(PointRegion):
+    _shape = 'Arrow'
+
+
+class BoxCirclePointRegion(PointRegion):
+    _shape = 'BoxCircle'
+
+
 class RegionList(list):
     """Region list class"""
 
