@@ -8,7 +8,7 @@ import numpy as np
 from astropy.io import fits, ascii
 from astropy import nddata, table
 from photutils.centroids import centroid_2dg, centroid_com
-from .saoimage import getds9
+from .saoimage import getds9, CircularRegion, CrossPointRegion
 from .core import resmean, gaussfit
 
 
@@ -406,7 +406,7 @@ class Centroid(ImageSet):
         self.attr.extend(['_xc', '_yc', '_status'])
 
     def centroiding(self, ds9=None, newframe=False, refine=True, box=5,
-                    verbose=True):
+                    resume=True, verbose=True):
         """Interactive centroiding
 
         Parameters
@@ -425,6 +425,9 @@ class Centroid(ImageSet):
             `mskpy.gcentroid`.
         box : number, optional
             Box size for centroid refining.  See `mskpy.gcentroid`
+        resume : bool, optional
+            If `True`, then resume centroiding for images with
+            `_status == False`, otherwise do centroiding for all images.
         verbose : bool, optional
             If `False`, then all screen output is suppressed.  Note that
             this only suppresses information output.  All error or
@@ -438,6 +441,9 @@ class Centroid(ImageSet):
         if ds9 is None:
             ds9 = getds9('Centroid')
         while i < self._size:
+            if resume and self._1d['_status'][i]:
+                i += 1
+                continue
             if (self.image is None) or (self._1d['image'][i] is None):
                 if verbose:
                     print('Image {} in the list: {}.'.format(i,
