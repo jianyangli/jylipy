@@ -279,6 +279,10 @@ class RegionList(list):
                     obj.append('('.join(s))
         return obj
 
+    def show(self, **kwargs):
+        for r in self:
+            r.show(**kwargs)
+
 
 import pyds9
 class DS9(pyds9.DS9):
