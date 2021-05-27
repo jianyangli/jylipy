@@ -536,6 +536,34 @@ class Centroid(ImageSet):
             self._status = np.zeros(self._shape, dtype=bool)
             self._status[:] = status
 
+    def show(self, index=None, ds9=None):
+        """Show centroid in DS9
+
+        Parameters
+        ----------
+        ds9 : ds9 instance, or None, optional
+            The target DS9 window.  If `None`, then the first opened
+            DS9 window will be used, or a new window will be opened
+            if none exists.
+        newframe : bool, optional
+            If set `False`, then the image will be displayed in the
+            currently active frame in DS9, and the previous image
+            will be overwritten.  By default, a new frame will be
+            created to display the image.
+        """
+        if ds9 is None:
+            ds9 = getds9('Centroid')
+        _index = self._ravel_indices(index)
+        for i in _index:
+            if (self.image is None) or (self._1d['image'][i] is None):
+                self._load_image(i)
+            ds9.set('frame new')
+            ds9.imdisp(self._1d['image'][i])
+            r = CircularRegion(self._1d['_xc'][i], self._1d['_yc'][i], 3)
+            r.show(ds9)
+            c = CrossPointRegion(self._1d['_xc'][i], self._1d['_yc'][i])
+            c.show(ds9)
+
 
 class Background(ImageSet):
     """Image background
