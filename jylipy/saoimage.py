@@ -294,6 +294,7 @@ class DS9(pyds9.DS9):
     '''Extended pyds9.DS9 class.'''
 
     def __init__(self, restore=None, **kwargs):
+        self.zerobased = kwargs.pop('zerobased', True)
         super(DS9, self).__init__(**kwargs)
         if restore is not None:
             from os.path import isfile
@@ -328,11 +329,59 @@ class DS9(pyds9.DS9):
     def actives(self):
         return self.get('frame active').split()
 
-    def pan(self, x, y):
-        self.set('pan to {} {}'.format(x, y))
+    @property
+    def pan(self):
+        ct = np.int64(self.get('pan').split())
+        if self.zerobased:
+            ct -= 1
+        return ct
 
+    @pan.setter
+    def pan(self, v):
+        v = np.array(v)
+        if self.zerobased:
+            v += 1
+        self.set('pan {} {}'.format(v[0], v[1]))
+
+    @property
+    def zoom(self):
+        return np.float(self.get('zoom'))
+
+    @zoom.setter
     def zoom(self, v):
         self.set('zoom to {}'.format(v))
+
+    @property
+    def cmap(self):
+        return self.get('cmap')
+
+    @cmap.setter
+    def cmap(self, v):
+        self.set('cmap {}'.format(v))
+
+    @property
+    def cmap_value(self):
+        return np.float32(self.get('cmap value').split())
+
+    @cmap_value.setter
+    def cmap_value(self, v):
+        self.set('cmap value {} {}'.format(v[0], v[1]))
+
+    @property
+    def scale(self):
+        return self.get('scale')
+
+    @scale.setter
+    def scale(self, v):
+        self.set('scale {}'.format(v))
+
+    @property
+    def scale_limits(self):
+        return np.float32(self.get('scale limits').split())
+
+    @scale_limits.setter
+    def scale_limits(self, v):
+        self.set('scale limits {} {}'.format(v[0], v[1]))
 
     def zoomin(self):
         self.set('zoom 2')
@@ -805,6 +854,19 @@ class DS9(pyds9.DS9):
             self.set('frame '+f)
             self.sets(cmd)
         self.set('frame '+cf)
+
+
+class DS9DisplayPar():
+    """DS9 display parameters"""
+
+    def __init__(self, ds9):
+        self.ds9 = ds9
+        self.scale = self.ds9.scale
+        self.scale_limits = self.ds9.scale_limits
+        self.cmap = self.ds9.cmap
+        self.cmap_value = self.ds9.cmap_value
+        self.pan = self.ds9.pan
+        self.zoom = self.ds9.zoom
 
 
 def getds9(ds9=None, new=False, restore=None):
