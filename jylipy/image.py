@@ -625,7 +625,7 @@ class Background(ImageSet):
             self._region0_y1 = 0
             self._region0_y2 = 0
             self._n_regions = 1
-            self.attr.extend(['n_regions', '_region0_x1', '_region0_x2',
+            self.attr.extend(['_n_regions', '_region0_x1', '_region0_x2',
                               '_region0_y1', '_region0_y2'])
         else:
             region = np.array(region, dtype='O')
