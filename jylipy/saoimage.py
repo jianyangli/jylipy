@@ -331,7 +331,7 @@ class DS9(pyds9.DS9):
 
     @property
     def pan(self):
-        ct = np.int64(self.get('pan').split())
+        ct = np.float32(self.get('pan').split())
         if self.zerobased:
             ct -= 1
         return ct
@@ -345,11 +345,28 @@ class DS9(pyds9.DS9):
 
     @property
     def zoom(self):
-        return np.float(self.get('zoom'))
+        z = np.float32(self.get('zoom').split())
+        if len(z) == 1:
+            return z[0]
+        else:
+            return z
 
     @zoom.setter
     def zoom(self, v):
-        self.set('zoom to {}'.format(v))
+        if (not hasattr(v, '__iter__')):
+            self.set('zoom to {}'.format(v))
+        elif  len(v) == 1:
+            self.set('zoom to {}'.format(v[0]))
+        else:
+            self.set('zoom to {} {}'.format(v[0], v[1]))
+
+    @property
+    def rotate(self):
+        return float(self.get('rotate'))
+
+    @rotate.setter
+    def rotate(self, v):
+        self.set('rotate to {}'.format(v))
 
     @property
     def cmap(self):
@@ -517,10 +534,10 @@ class DS9(pyds9.DS9):
             elif k == 'q':
                 break
             elif not shift and k == 'r':
-                self.set('rotate +1')
+                self.rotate += 1
                 self.data[self.get('frame')]['rotate'] += 1
             elif shift and k == 'r':
-                self.set('rotate -1')
+                self.rotate -= 1
                 self.data[self.get('frame')]['rotate'] -= 1
                 shift = False
             elif option and k == 's':
