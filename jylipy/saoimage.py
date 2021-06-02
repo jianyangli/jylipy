@@ -11,7 +11,6 @@ class Region(object):
 
     parname = None
     _shape = None
-    size = None
 
     def __init__(self, *args, **kwargs):
         '''The initialization of Region class depends on its shape.
@@ -36,7 +35,6 @@ class Region(object):
         class BoxRegion(Region):
             parname = ('x', 'y', 'a', 'b', 'angle')
             _shape = 'box'
-            size = ('a', 'b')
 
         The initialization of subclass is now simply:
 
@@ -46,8 +44,6 @@ class Region(object):
             self.parname = kwargs.pop('parname', ('x', 'y'))
         if self._shape is None:
             self._shape = kwargs.pop('shape', None)
-        if self.size is None:
-            self.size = kwargs.pop('size', None)
         if len(self.parname) != len(args):
             raise TypeError('{0}.__init__() takes {1} arguments ({2} given)'.
                 format(type(self),len(self.parname)+1,len(args)+1))
@@ -74,30 +70,6 @@ class Region(object):
         for k in self.parname:
             v.append(self.__dict__[k])
         return v
-
-    @property
-    def xmin(self):
-        if self.size is None:
-            raise ValueError('size of region not defined')
-        return self.x-self.__dict__[self.size[0]]/2.
-
-    @property
-    def xmax(self):
-        if self.size is None:
-            raise ValueError('size of region not defined')
-        return self.x+self.__dict__[self.size[0]]/2.
-
-    @property
-    def ymin(self):
-        if self.size is None:
-            raise ValueError('size of region not defined')
-        return self.y-self.__dict__[self.size[1]]/2.
-
-    @property
-    def ymax(self):
-        if self.size is None:
-            raise ValueError('size of region not defined')
-        return self.y+self.__dict__[self.size[1]]/2.
 
     def __repr__(self):
         return '<'+super(Region, self).__repr__().split()[0].split('.')[-1]+ \
@@ -139,42 +111,75 @@ class CircularRegion(Region):
     '''DS9 circular region class'''
     parname = ('x','y','r')
     _shape = 'circle'
-    size = ('r', 'r')
+
+    @property
+    def extent(self):
+        """(xmin, xmax, ymin, ymax)"""
+        return np.array([self.par[0] - self.par[2], \
+                         self.par[0] + self.par[2], \
+                         self.par[1] - self.par[2], \
+                         self.par[1] + self.par[2]])
 
 
 class EllipseRegion(Region):
     '''DS9 ellipse region class'''
     parname = ('x','y','a','b','angle')
     _shape = 'ellipse'
-    size = ('a','b')
 
 
 class BoxRegion(Region):
     '''DS9 box region class'''
     parname = ('x', 'y', 'a', 'b', 'angle')
     _shape = 'box'
-    size = ('a','b')
+
+    def _extent(self):
+        a = np.deg2rad(self.par[4])
+        cosa = np.cos(a)
+        sina = np.sin(a)
+        dx = self.par[2] * cosa - self.par[3] * sina
+        dy = self.par[2] * sina + self.par[3] * cosa
+        return dx, dy
+
+    @property
+    def corners(self):
+        """array of shape (4, 2), coordinates of four corners"""
+        a = np.deg2rad(self.par[4])
+        cosa = np.cos(a)
+        sina = np.sin(a)
+        dx1 = self.par[2] * cosa - self.par[3] * sina
+        dy1 = self.par[2] * sina + self.par[3] * cosa
+        dx2 = - self.par[2] * cosa - self.par[3] * sina
+        dy2 = - self.par[2] * sina + self.par[3] * cosa
+        c1 = [self.par[0] + dx1/2, self.par[1] + dy1/2]
+        c2 = [self.par[0] + dx2/2, self.par[1] + dy2/2]
+        c3 = [self.par[0] - dx1/2, self.par[1] - dy1/2]
+        c4 = [self.par[0] - dx2/2, self.par[1] - dy2/2]
+        return np.array([c1, c2, c3, c4])
+
+    @property
+    def extent(self):
+        """(xmin, xmax, ymin, ymax)"""
+        c = self.corners
+        return np.array([c[:, 0].min(), c[:, 0].max(),
+                         c[:, 1].min(), c[:, 1].max()])
 
 
 class AnnulusRegion(Region):
     '''DS9 annulus region class'''
     parname = ('x', 'y', 'r_in', 'r_out')
     _shape = 'annulus'
-    size = ('r_out', 'r_out')
 
 
 class VectorRegion(Region):
     """Vecotor region"""
     parname = ('x', 'y', 'length', 'angle')
     _shape = 'vector'
-    size = ('length', 'length')
 
 
 class TextRegion(Region):
     """Text region"""
     parname = ('x', 'y')
     _shape = 'text'
-    size = ('x', 'y')
 
 
 class PointRegion(Region):
