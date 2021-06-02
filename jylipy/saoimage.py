@@ -302,10 +302,18 @@ class DS9(pyds9.DS9):
         """DS9 window width"""
         return int(self.get('width'))
 
+    @width.setter
+    def width(self, value):
+        self.set('width {}'.format(value))
+
     @property
     def height(self):
         """DS9 window height"""
         return int(self.get('height'))
+
+    @height.setter
+    def height(self, value):
+        self.set('height {}'.format(value))
 
     @property
     def frames(self):
@@ -314,6 +322,21 @@ class DS9(pyds9.DS9):
     @property
     def actives(self):
         return self.get('frame active').split()
+
+    def pan(self, x, y):
+        self.set('pan to {} {}'.format(x, y))
+
+    def zoom(self, v):
+        self.set('zoom to {}'.format(v))
+
+    def zoomin(self):
+        self.set('zoom 2')
+
+    def zoomout(self):
+        self.set('zoom 0.5')
+
+    def zoomfit(self):
+        self.set('zoom to fit')
 
     def cursor(self, coord='image', value=False):
         '''Return cursor position (y, x) in 0-based indices
