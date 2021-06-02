@@ -706,7 +706,7 @@ class Background(ImageSet):
                                 getattr(self, reg[n]).append(_region[j][i][n])
                         else:
                             for n in range(4):
-                                getattr(self, reg[n]).append(np.nan)
+                                getattr(self, reg[n]).append(0)
                     for n in range(4):
                         rr = np.array(getattr(self, reg[n]))
                         rr = rr.reshape(self._shape)
@@ -742,12 +742,13 @@ class Background(ImageSet):
         max_n_regions = np.array(self._1d['_n_regions']).max()
         for i in range(max_n_regions):
             regstr = '_region{}'.format(i)
-            setattr(self, '_background' + regstr, np.zeros(self._shape))
-            setattr(self, '_background_error' + regstr, np.zeros(self._shape))
+            setattr(self, '_background' + regstr, np.full(self._shape, np.nan))
+            setattr(self, '_background_error' + regstr,
+                                        np.full(self._shape, np.nan))
             self.attr.append('_background' + regstr)
             self.attr.append('_background_error' + regstr)
-        self.background = np.zeros(self._shape)
-        self.background_error = np.zeros(self._shape)
+        self.background = np.full(self._shape, np.nan)
+        self.background_error = np.full(self._shape, np.nan)
         self.attr.extend(['background', 'background_error'])
         self._generate_flat_views()
         # measure background
@@ -756,16 +757,15 @@ class Background(ImageSet):
                 self._load_image(i)
             for j in range(self._1d['_n_regions'][i]):
                 regstr = '_region{}'.format(j)
-                y1 = self._1d[regstr+'_y1'][i]
-                x1 = self._1d[regstr+'_x1'][i]
-                y2 = self._1d[regstr+'_y2'][i]
-                x2 = self._1d[regstr+'_x2'][i]
+                y1 = round(self._1d[regstr+'_y1'][i])
+                x1 = round(self._1d[regstr+'_x1'][i])
+                y2 = round(self._1d[regstr+'_y2'][i])
+                x2 = round(self._1d[regstr+'_x2'][i])
                 imsz = self._1d['image'][i].shape
                 if (np.array([y1, x1, y2, x2]) == 0).all():
                     y2 = imsz[0] - 1
                     x2 = imsz[1] - 1
-                if np.isfinite([y1, x1, y2, x2]).all() \
-                        and (y1 >= 0) and (y1 < imsz[0]) \
+                if (y1 >= 0) and (y1 < imsz[0]) \
                         and (x1 >= 0) and (x1 < imsz[1]) \
                         and (y2 >= 0) and (y2 < imsz[0]) \
                         and (x2 >= 0) and (x2 < imsz[1]) \
@@ -797,18 +797,19 @@ class Background(ImageSet):
                                     np.sqrt(par[2]**2 + par[1]*gain[i])
                 else:
                     # invalid region, skip
-                    self._1d['_background'+regstr][i] = np.nan
-                    self._1d['_background_error'+regstr][i] = np.nan
+                    import warning
+                    warning.warn("invalide region skipped:\n  Image {}, "
+                        "region ({} {} {} {})".format(self._1d['file'][i],
+                            y1, x1, y2, x2))
 
             bgs = np.array([self._1d['_background_region{}'.format(j)][i] \
                     for j in range(self._1d['_n_regions'][i])])
             bgs_err = np.array([self._1d['_background_error_region{}'. \
                     format(j)][i] for j in range(self._1d['_n_regions'][i])])
             bgs_err2 = bgs_err * bgs_err
-            self._1d['background'][i] = np.nansum(bgs/bgs_err2) \
-                                        / np.nansum(1/bgs_err2)
-            self._1d['background_error'][i] = np.sqrt(1 / np.nansum(1 \
-                                                                / bgs_err2))
+            dom = np.nansum(1 / bgs_err2)
+            self._1d['background'][i] = np.nansum(bgs / bgs_err2) / dom
+            self._1d['background_error'][i] = np.sqrt(1 / dom)
 
 
 def centroid(im, center=None, error=None, mask=None, method=0, box=6,
