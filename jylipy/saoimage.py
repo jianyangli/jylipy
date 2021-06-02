@@ -494,12 +494,12 @@ class DS9(pyds9.DS9):
             elif k == 'd':
                 self.set('frame delete')
             elif k == 'f':
-                self.set('zoom to fit')
+                self.zoomfit()
             elif option and k == 'h':
                 self.set('header')
                 option = False
             elif k == 'i':
-                self.set('zoom 2')
+                self.zoomin()
             elif k == 'm':
                 self.set('match frame image')
                 self.set('match scale')
@@ -507,7 +507,7 @@ class DS9(pyds9.DS9):
             elif k == 'n':
                 self.set('frame next')
             elif k == 'o':
-                self.set('zoom 0.5')
+                self.zoomout()
             elif not option and k == 'p':
                 self.set('frame prev')
                 option = False
