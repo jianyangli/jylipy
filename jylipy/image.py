@@ -734,6 +734,7 @@ class Background(ImageSet):
                 to estimate the background and standard deviation.
             'median': Uses median of image/regions
         """
+        from astropy.stats import sigma_clipped_stats
         # gain settings
         gain = self._1d['_gain'] if '_gain' in self.attr \
                                                     else np.ones(self._size)
@@ -759,34 +760,55 @@ class Background(ImageSet):
                 x1 = self._1d[regstr+'_x1'][i]
                 y2 = self._1d[regstr+'_y2'][i]
                 x2 = self._1d[regstr+'_x2'][i]
-                subim = self._1d['image'][i][y1:y2, x1:x2].flatten()
-                if method == 'median':
-                    bg = np.median(subim)
-                    self._1d['_background'+regstr][i] = bg
-                    self._1d['_background_error'+regstr][i] = \
-                                np.sqrt(np.std(subim)**2)# + bg*gain[i])
-                else:
-                    res = resmean(subim, std=True)
-                    if method == 'mean':
-                        self._1d['_background'+regstr][i] = res[0]
+                imsz = self._1d['image'][i].shape
+                if (np.array([y1, x1, y2, x2]) == 0).all():
+                    y2 = imsz[0] - 1
+                    x2 = imsz[1] - 1
+                if np.isfinite([y1, x1, y2, x2]).all() \
+                        and (y1 >= 0) and (y1 < imsz[0]) \
+                        and (x1 >= 0) and (x1 < imsz[1]) \
+                        and (y2 >= 0) and (y2 < imsz[0]) \
+                        and (x2 >= 0) and (x2 < imsz[1]) \
+                        and (y1 < y2) and (x1 < x2):
+                    # measure background from valid region
+                    if (np.array([y1, x1, y2, x2]) == 0).all():
+                        subim = self._1d['image'][i]
+                    else:
+                        subim = self._1d['image'][i][y1:y2, x1:x2]
+                    mean, median, stddev = sigma_clipped_stats(subim.data,
+                                                           subim.mask)
+                    if method == 'median':
+                        self._1d['_background'+regstr][i] = median
                         self._1d['_background_error'+regstr][i] = \
-                                    np.sqrt(res[1]**2)# + res[0]*gain[i])
+                                    np.sqrt(stddev**2 + bg*gain[i])
+                    elif method == 'mean':
+                        self._1d['_background'+regstr][i] = mean
+                        self._1d['_background_error'+regstr][i] = \
+                                    np.sqrt(stddev**2 + mean*gain[i])
                     elif method == 'gaussian':
+                        subim = subim.data[~subim.mask]
                         hist, bin = np.histogram(subim, bins=100,
-                                range=[res[0]-10*res[1], res[0]+10*res[1]])
-                        par0 = np.insert(res, 0, max(hist))
+                                range=[mean-10*stddev, mean+10*stddev])
+                        par0 = [max(hist), mean, stddev]
                         x = (bin[0:-1] + bin[1:]) / 2
                         par = gaussfit(x, hist, par0=par0)[0]
                         self._1d['_background'+regstr][i] = par[1]
                         self._1d['_background_error'+regstr][i] = \
                                     np.sqrt(par[2]**2 + par[1]*gain[i])
+                else:
+                    # invalid region, skip
+                    self._1d['_background'+regstr][i] = np.nan
+                    self._1d['_background_error'+regstr][i] = np.nan
+
             bgs = np.array([self._1d['_background_region{}'.format(j)][i] \
                     for j in range(self._1d['_n_regions'][i])])
             bgs_err = np.array([self._1d['_background_error_region{}'. \
                     format(j)][i] for j in range(self._1d['_n_regions'][i])])
             bgs_err2 = bgs_err * bgs_err
-            self._1d['background'][i] = np.sum(bgs/bgs_err2)/np.sum(1/bgs_err2)
-            self._1d['background_error'][i] = np.sqrt(1/np.sum(1/bgs_err2))
+            self._1d['background'][i] = np.nansum(bgs/bgs_err2) \
+                                        / np.nansum(1/bgs_err2)
+            self._1d['background_error'][i] = np.sqrt(1 / np.nansum(1 \
+                                                                / bgs_err2))
 
 
 def centroid(im, center=None, error=None, mask=None, method=0, box=6,
