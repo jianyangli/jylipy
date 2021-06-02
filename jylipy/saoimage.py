@@ -415,7 +415,8 @@ class DS9(pyds9.DS9):
         x, y = cursor()'''
         x, y = self.get('imexam coordinate '+coord).split()
         if value:
-            return float(x)-1, float(y)-1, float(self.get(' '.join(['data', coord, x, y, '1 1 yes'])))
+            return float(x)-1, float(y)-1, \
+                float(self.get(' '.join(['data', coord, x, y, '1 1 yes'])))
         else:
             return float(x)-1, float(y)-1
 
@@ -641,12 +642,15 @@ class DS9(pyds9.DS9):
                             if ext >= len(info):
                                 if verbose:
                                     print()
-                                    print('Error: Extension '+repr(ext)+' does not exist!')
+                                    print('Error: Extension ' + repr(ext) \
+                                        +' does not exist!')
                                 st.append(2)
-                            elif (info[ext][3] in ('ImageHDU','CompImageHDU')) and (len(info[ext][5])>1):
+                            elif (info[ext][3] in ('ImageHDU','CompImageHDU'))\
+                                    and (len(info[ext][5])>1):
                                 if verbose:
                                     print()
-                                    print('Error: Extension '+repr(ext)+' contains no image!')
+                                    print('Error: Extension ' + repr(ext) \
+                                            +' contains no image!')
                                     print()
                                 st.append(3)
                             else:
@@ -743,9 +747,11 @@ class DS9(pyds9.DS9):
                 x, y = key[1:]
                 x, y = float(x), float(y)
                 if centroid:
-                    y, x = jylipy.centroid(self.get_arr2np(),center=[y,x],verbose=verbose)
+                    y, x = jylipy.centroid(self.get_arr2np(), center=[y,x],
+                            verbose=verbose)
                 aperture.append(P.CircularAperture((x,y), radius[i%nr]))
-                self.set('regions','image; circle('+','.join([str(x),str(y),str(radius[i%nr])])+')')
+                self.set('regions','image; circle('
+                        + ','.join([str(x),str(y),str(radius[i%nr])])+')')
                 i += 1
                 print(('Aperture 1: ({0}, {1})'.format(x, y)))
                 print()
@@ -770,22 +776,28 @@ class DS9(pyds9.DS9):
                     for x, y in pos:
                         if zerobased:
                             x, y = x+1, y+1
-                        self.set('regions', 'image; circle('+','.join([str(x),str(y),str(aperture.r)])+')')
+                        self.set('regions', 'image; circle(' \
+                                + ','.join([str(x),str(y),str(aperture.r)]) \
+                                +')')
                 elif hasattr(aperture, 'r_in'):  # annulus aperture
                     for x, y in pos:
                         if zerobased:
                             x, y = x+1, y+1
-                        self.set('regions', 'image; annulus('+','.join([str(x),str(y),str(aperture.r_in),str(aperture.r_out)])+')')
+                        self.set('regions', 'image; annulus(' \
+                            + ','.join([str(x), str(y), str(aperture.r_in), \
+                                        str(aperture.r_out)])+')')
                 else:
                     pass
             else:
                 l = len(aperture)
                 if l == 3:  # circular aperture
                     x,y,r = aperture
-                    self.set('regions', 'image; circle('+','.join([str(x),str(y),str(r)])+')')
+                    self.set('regions', 'image; circle(' \
+                            + ','.join([str(x),str(y),str(r)])+')')
                 elif l == 4:  # annulus aperture
                     x,y,r1,r2 = aperture
-                    self.set('regions', 'image; annulus('+','.join([str(x),str(y),str(r1),str(r2)])+')')
+                    self.set('regions', 'image; annulus(' \
+                            + ','.join([str(x),str(y),str(r1),str(r2)])+')')
                 else:
                     pass
         else:
@@ -844,13 +856,15 @@ class DS9(pyds9.DS9):
         v1.0.0 : 5/8/2015, JYL @PSI
         '''
         if len(outfile.split('.')) < 2:
-            raise ValueError('The format of image file is not specified.  Please include an extension in the file name.')
+            raise ValueError("The format of image file is not specified. "
+                "Please include an extension in the file name.")
 
         from os.path import basename
         if all:
             nfm = len(self.n_actives)
             tmp = outfile.split('.')
-            fmtstr = '.'.join(tmp[:-1])+'_%0'+repr(int(np.ceil(np.log10(nfm))))+'d'+'.'+tmp[-1]
+            fmtstr = '.'.join(tmp[:-1]) + '_%0' \
+                        + repr(int(np.ceil(np.log10(nfm))))+'d'+'.'+tmp[-1]
             for i in range(nfm):
                 self.set('saveimage '+fmtstr % i)
                 self.set('frame next')
@@ -877,22 +891,31 @@ class DS9DisplayPar(dict):
     """DS9 display parameters"""
 
     @classmethod
-    def from_ds9(cls, ds9, frames='current'):
+    def from_ds9(cls, ds9, frame='current'):
+        """Collect display parameters from DS9
+
+        Parameters
+        ----------
+        ds9 : `pyds9.DS9`
+            The DS9 window to collect parameters
+        frame : 'current', 'all', int, str, int array, str array, optional
+            The DS9 frames to be processed
+        """
         par_names = ['scale', 'scale_limits', 'cmap', 'cmap_value',
                      'pan', 'zoom', 'rotate']
         obj = cls()
         obj.par_names = par_names
-        if frames == 'all':
+        if frame == 'all':
             obj['frame'] = np.array(ds9.frames)
             obj._len = len(obj['frame'])
-        elif frames == 'current':
+        elif frame == 'current':
             obj['frame'] = ds9.get('frame')
             obj._len = None
         else:
-            if isinstance(frames, str) or (not hasattr(frames, '__iter__')):
-                obj['frame'] = np.array([frames])
+            if isinstance(frame, str) or (not hasattr(frame, '__iter__')):
+                obj['frame'] = np.array([frame])
             else:
-                obj['frame'] = np.array(frames)
+                obj['frame'] = np.array(frame)
             obj._len = len(obj['frame'])
         if obj._len is None:
             for k in par_names:
@@ -908,20 +931,62 @@ class DS9DisplayPar(dict):
             for k in par_names:
                 obj[k] = np.array(obj[k])
             ds9.set('frame {}'.format(current_frame))
-        if isinstance(frames, str) or (not hasattr(frames, '__iter__')):
+        if (frame not in ['all', 'current']) \
+                and (isinstance(frame, str) or \
+                     (not hasattr(frame, '__iter__'))):
             for k, v in obj.items():
                 obj[k] = v[0]
             obj._len = None
         return obj
 
     @classmethod
-    def from_csv(cls, file):
-        pass
+    def from_table(cls, indata):
+        """Collect display parameters from a table"""
+        keys = []
+        cols = []
+        for k in indata.keys():
+            try:
+                _ = int(k.split('_')[-1])
+                this_key ='_'.join(k.split('_')[:-1])
+                if this_key in keys:
+                    cols[-1].append(k)
+                else:
+                    keys.append(this_key)
+                    cols.append([k])
+            except ValueError:
+                keys.append(k)
+                cols.append([k])
+        obj = cls()
+        for k, c in zip(keys, cols):
+            data = indata[c].as_array()
+            obj[k] = np.squeeze(data.view(dtype=(data.dtype[0], np.shape(c))))
+        obj._len = len(indata)
+        if len(indata) == 1:
+            for k in obj.keys():
+                obj[k] = obj[k][0]
+            obj._len = None
+        return obj
+
+    @classmethod
+    def from_csv(cls, file, **kwargs):
+        """Collect display parameters from csv file
+
+        Parameters
+        ----------
+        file : str
+            Input csv file
+        **kwargs : keyword parameters for `astropy.io.ascii.read`
+        """
+        from astropy.io import ascii
+        from astropy import table
+        indata = ascii.read(file, **kwargs)
+        return cls.from_table(indata)
 
     def __len__(self):
         return self._len
 
-    def to_csv(self, file):
+    def as_table(self):
+        """Convert parameters to an `astropy.table.Table`"""
         from astropy.table import Table, Column
         out = Table()
         if len(self) is None:
@@ -942,7 +1007,11 @@ class DS9DisplayPar(dict):
                     for i in range(v.shape[1]):
                         c = Column(v[:,i], name=k+'_{}'.format(i))
                         out.add_column(c)
-        out.write(file)
+        return out
+
+    def to_csv(self, file, overwrite=False):
+        """Save parameters to a csv table"""
+        self.as_table.write(file, overwrite=overwrite)
 
 
 def getds9(ds9=None, new=False, restore=None):
