@@ -659,13 +659,13 @@ class Background(ImageSet):
                             setattr(self, reg[n], region[i, n])
                         self.attr.extend(reg)
                 else:
-                    if region.shape[:-2] != self._shape:
+                    shape = region.shape
+                    if shape[:-2] != self._shape:
                         raise ValueError("The shape of 'region' is not "
                             "compatible with the shape of `.file` or `.image`")
-                    shape = region.shape
+                    _region = region.reshape(-1, shape[-2], shape[-1])
                     self._n_regions = shape[-2]
                     self.attr.append('_n_regions')
-                    _region = region.reshape(-1, shape[-2], shape[-1])
                     for i in range(self._n_regions):
                         reg = ['_region{}_y1'.format(i),
                                '_region{}_x1'.format(i),
@@ -683,8 +683,35 @@ class Background(ImageSet):
                         self.attr.extend(reg)
             else:
                 # when the number of regions for each image is different
-                # To be implemented
-                pass
+                shape = region.shape
+                if region.shape != self._shape:
+                    raise ValueError("The shape of 'region' is not compatible "
+                        "with the shape of `.file` or `.image`")
+                _region = region.reshape(-1)
+                self._n_regions = np.array([len(r) for r in _region]).\
+                        reshape(self._shape)
+                self.attr.append('_n_regions')
+                n_reg_1d = self._n_regions.reshape(-1)
+                n_reg_max = self._n_regions.max()
+                for i in range(n_reg_max):
+                    reg = ['_region{}_y1'.format(i),
+                           '_region{}_x1'.format(i),
+                           '_region{}_y2'.format(i),
+                           '_region{}_x2'.format(i)]
+                    for n in range(4):
+                        setattr(self, reg[n], [])
+                    for j in range(self._size):
+                        if i < n_reg_1d[j]:
+                            for n in range(4):
+                                getattr(self, reg[n]).append(_region[j][i][n])
+                        else:
+                            for n in range(4):
+                                getattr(self, reg[n]).append(np.nan)
+                    for n in range(4):
+                        rr = np.array(getattr(self, reg[n]))
+                        rr = rr.reshape(self._shape)
+                        setattr(self, reg[n], rr)
+                    self.attr.extend(reg)
         self._generate_flat_views()
 
     def measure(self, index=None, method='mean'):
