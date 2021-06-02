@@ -8,7 +8,8 @@ import numpy as np
 from astropy.io import fits, ascii
 from astropy import nddata, table
 from photutils.centroids import centroid_2dg, centroid_com
-from .saoimage import getds9, CircularRegion, CrossPointRegion, TextRegion, RegionList
+from .saoimage import getds9, CircularRegion, CrossPointRegion, TextRegion, \
+    BoxRegion, RegionList
 from .core import resmean, gaussfit
 
 
@@ -810,6 +811,35 @@ class Background(ImageSet):
             dom = np.nansum(1 / bgs_err2)
             self._1d['background'][i] = np.nansum(bgs / bgs_err2) / dom
             self._1d['background_error'][i] = np.sqrt(1 / dom)
+
+    def show(self, ds9=None, index=None, region_specs=None):
+        """Display images and show regions in DS9"""
+        if ds9 is None:
+            ds9 = getds9('Background')
+        indices = self._ravel_indices(index)
+        for i in indices:
+            if self.image is None or self._1d['image'][i] is None:
+                self._load_image(i)
+            ds9.imdisp(self._1d['image'][i])
+            ds9.zoomfit()
+            for j in range(self._1d['_n_regions'][i]):
+                regstr = '_region{}'.format(j)
+                y1 = round(self._1d[regstr+'_y1'][i])
+                x1 = round(self._1d[regstr+'_x1'][i])
+                y2 = round(self._1d[regstr+'_y2'][i])
+                x2 = round(self._1d[regstr+'_x2'][i])
+                imsz = self._1d['image'][i].shape
+                if (np.array([y1, x1, y2, x2]) == 0).all():
+                    y2 = imsz[0] - 1
+                    x2 = imsz[1] - 1
+                xc = (x1 + x2) / 2
+                yc = (y1 + y2) / 2
+                a = x2 - x1
+                b = y2 - y1
+                r = BoxRegion(xc, yc, a, b, 0)
+                if region_specs is not None:
+                    r.specs.update(region_specs)
+                r.show(ds9)
 
 
 def centroid(im, center=None, error=None, mask=None, method=0, box=6,
