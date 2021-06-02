@@ -873,17 +873,40 @@ class DS9(pyds9.DS9):
         self.set('frame '+cf)
 
 
-class DS9DisplayPar():
+class DS9DisplayPar(dict):
     """DS9 display parameters"""
 
-    def __init__(self, ds9):
-        self.ds9 = ds9
-        self.scale = self.ds9.scale
-        self.scale_limits = self.ds9.scale_limits
-        self.cmap = self.ds9.cmap
-        self.cmap_value = self.ds9.cmap_value
-        self.pan = self.ds9.pan
-        self.zoom = self.ds9.zoom
+    @classmethod
+    def from_ds9(cls, ds9, allframes=False):
+        par_names = ['scale', 'scale_limits', 'cmap', 'cmap_value',
+                     'pan', 'zoom', 'rotate']
+        obj = cls()
+        obj.par_names = par_names
+        if allframes:
+            for k in par_names:
+                obj[k] = []
+            obj._len = len(ds9.frames)
+            for i in range(obj._len):
+                for k in par_names:
+                    obj[k].append(getattr(ds9, k))
+            for k in par_names:
+                obj[k] = np.array(obj[k])
+
+        else:
+            obj._len = 1
+            for k in par_names:
+                obj[k] = getattr(ds9, k)
+        return obj
+
+    def __len__(self):
+        return self._len
+
+    def to_csv(self, file):
+        from astropy.table import Table, Column
+        out = Table()
+        for k in self.par_names:
+            sz = self[k].shape
+            c = Column(self[k])
 
 
 def getds9(ds9=None, new=False, restore=None):
