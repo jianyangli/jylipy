@@ -877,26 +877,46 @@ class DS9DisplayPar(dict):
     """DS9 display parameters"""
 
     @classmethod
-    def from_ds9(cls, ds9, allframes=False):
+    def from_ds9(cls, ds9, frames='current'):
         par_names = ['scale', 'scale_limits', 'cmap', 'cmap_value',
                      'pan', 'zoom', 'rotate']
         obj = cls()
         obj.par_names = par_names
-        if allframes:
+        if frames == 'all':
+            obj['frame'] = np.array(ds9.frames)
+            obj._len = len(obj['frame'])
+        elif frames == 'current':
+            obj['frame'] = ds9.get('frame')
+            obj._len = None
+        else:
+            if isinstance(frames, str) or (not hasattr(frames, '__iter__')):
+                obj['frame'] = np.array([frames])
+            else:
+                obj['frame'] = np.array(frames)
+            obj._len = len(obj['frame'])
+        if obj._len is None:
+            for k in par_names:
+                obj[k] = getattr(ds9, k)
+        else:
             for k in par_names:
                 obj[k] = []
-            obj._len = len(ds9.frames)
-            for i in range(obj._len):
+            current_frame = ds9.get('frame')
+            for f in obj['frame']:
+                ds9.set('frame {}'.format(f))
                 for k in par_names:
                     obj[k].append(getattr(ds9, k))
             for k in par_names:
                 obj[k] = np.array(obj[k])
-
-        else:
-            obj._len = 1
-            for k in par_names:
-                obj[k] = getattr(ds9, k)
+            ds9.set('frame {}'.format(current_frame))
+        if isinstance(frames, str) or (not hasattr(frames, '__iter__')):
+            for k, v in obj.items():
+                obj[k] = v[0]
+            obj._len = None
         return obj
+
+    @classmethod
+    def from_csv(cls, file):
+        pass
 
     def __len__(self):
         return self._len
@@ -904,9 +924,25 @@ class DS9DisplayPar(dict):
     def to_csv(self, file):
         from astropy.table import Table, Column
         out = Table()
-        for k in self.par_names:
-            sz = self[k].shape
-            c = Column(self[k])
+        if len(self) is None:
+            for k, v in self.items():
+                if hasattr(v, '__iter__'):
+                    for i in range(len(v)):
+                        c = Column(v[i], name=k+'_{}'.format(i))
+                        out.add_column(c)
+                else:
+                    c = Column(v, name=k)
+                    out.add_column(c)
+        else:
+            for k, v in self.items():
+                if v.ndim == 1:
+                    c = Column(v, name=k)
+                    out.add_column(c)
+                else:
+                    for i in range(v.shape[1]):
+                        c = Column(v[:,i], name=k+'_{}'.format(i))
+                        out.add_column(c)
+        out.write(file)
 
 
 def getds9(ds9=None, new=False, restore=None):
