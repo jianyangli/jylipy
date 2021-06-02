@@ -751,10 +751,11 @@ class Background(ImageSet):
         self.background_error = np.full(self._shape, np.nan)
         self.attr.extend(['background', 'background_error'])
         self._generate_flat_views()
-        # measure background
+        # loop through all images to measure background
         for i in range(self._size):
             if self.image is None or self._1d['image'][i] is None:
                 self._load_image(i)
+            # loop through all regions
             for j in range(self._1d['_n_regions'][i]):
                 regstr = '_region{}'.format(j)
                 y1 = round(self._1d[regstr+'_y1'][i])
@@ -762,6 +763,7 @@ class Background(ImageSet):
                 y2 = round(self._1d[regstr+'_y2'][i])
                 x2 = round(self._1d[regstr+'_x2'][i])
                 imsz = self._1d['image'][i].shape
+                # all zero means using whole image
                 if (np.array([y1, x1, y2, x2]) == 0).all():
                     y2 = imsz[0] - 1
                     x2 = imsz[1] - 1
@@ -771,10 +773,7 @@ class Background(ImageSet):
                         and (x2 >= 0) and (x2 < imsz[1]) \
                         and (y1 < y2) and (x1 < x2):
                     # measure background from valid region
-                    if (np.array([y1, x1, y2, x2]) == 0).all():
-                        subim = self._1d['image'][i]
-                    else:
-                        subim = self._1d['image'][i][y1:y2, x1:x2]
+                    subim = self._1d['image'][i][y1:y2, x1:x2]
                     mean, median, stddev = sigma_clipped_stats(subim.data,
                                                            subim.mask)
                     if method == 'median':
@@ -796,12 +795,13 @@ class Background(ImageSet):
                         self._1d['_background_error'+regstr][i] = \
                                     np.sqrt(par[2]**2 + par[1]*gain[i])
                 else:
-                    # invalid region, skip
+                    # skip invalid region
                     import warning
                     warning.warn("invalide region skipped:\n  Image {}, "
                         "region ({} {} {} {})".format(self._1d['file'][i],
                             y1, x1, y2, x2))
 
+            # calculate average background for image
             bgs = np.array([self._1d['_background_region{}'.format(j)][i] \
                     for j in range(self._1d['_n_regions'][i])])
             bgs_err = np.array([self._1d['_background_error_region{}'. \
