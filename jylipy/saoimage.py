@@ -1009,9 +1009,9 @@ class DS9DisplayPar(dict):
                         out.add_column(c)
         return out
 
-    def to_csv(self, file, overwrite=False):
-        """Save parameters to a csv table"""
-        self.as_table().write(file, overwrite=overwrite)
+    def write(self, file, **kwargs):
+        """Write parameters to file"""
+        self.as_table().write(file, **kwargs)
 
 
 def getds9(ds9=None, new=False, restore=None):
