@@ -6,9 +6,10 @@ import numpy as np
 import spiceypy as spice
 from collections import OrderedDict
 from ..core import Image, ImageMeasurement, readfits, ascii_read, sflux
-from ..apext import Table, nddata, units
+from ..apext import Table
+import astropy.units as u
+from astropy.io import fits, ascii
 import ccdproc
-from astropy.nddata import StdDevUncertainty
 
 
 filter_table = '/Users/jyli/work/references/HST/WFC3/WFC3_Filter_List.csv'
@@ -16,16 +17,15 @@ wfc3dir = '/Users/jyli/work/references/HST/WFC3/'
 
 def load_filter():
     flist = ascii_read(filter_table)
-    flist['PHOTPLAM'].unit = units.nm
-    flist['PHOTFLAM'].unit = units.Unit('W m-2 um-1')
-    flist['PHOTBW'].unit = units.nm
-    flist['SolarFlux'].unit = units.Unit('W m-2 um-1')
+    flist['PHOTPLAM'].unit = u.nm
+    flist['PHOTFLAM'].unit = u.Unit('W m-2 um-1')
+    flist['PHOTBW'].unit = u.nm
+    flist['SolarFlux'].unit = u.Unit('W m-2 um-1')
     return flist
 
 def filter_bandpass(flt):
     '''Return filter bandpass in a Table'''
     from os.path import isfile
-    from astropy.io import fits
     flist = ascii_read(filter_table)
     thfile = flist.query('Filter',flt,'ThroughputFile')
     if len(thfile) == 0:
@@ -71,7 +71,6 @@ def aspect(files, out=None, target=None, kernel=None, keys=None, verbose=False):
     '''
 
     from jylipy.vector import vecpa, vecsep
-    from astropy.io import ascii, fits
     from numpy.linalg.linalg import norm
 
     # Load SPICE kernel if needed
@@ -200,9 +199,6 @@ def solarflux(filters, spec=None):
    Equivalent solar flux(es)
     '''
 
-    from astropy.io import ascii, fits
-    import astropy.units as u
-
     flist = ascii.read(filter_table)
 
     if isinstance(filters, (str,bytes)):
@@ -284,49 +280,55 @@ def listfilters(jsviewer=True):
 #       self.calibration = copy(getattr(obj, 'calibration', {}))
 
 
-class UVISImage(Image): pass
+class UVISImage(Image):
+    @classmethod
+    def read(cls, inputfile):
+        from astropy.nddata import StdDevUncertainty, FlagCollection
+        if not (inputfile.endswith('_flt.fits') \
+                or inputfile.endswith('_drz.fits')):
+            raise ValueError('input file extension not recognized')
+        fitsfile = fits.open(inputfile)
+        header = OrderedDict()
+        header['primary'] = fitsfile.pop(0).header
+        data = []
+        if inputfile.endswith('_flt.fits'):  # _flt file
+            if header['primary']['aperture'].find('SUB') == -1:
+                sci = np.concatenate((fitsfile[0].data,fitsfile[3].data))
+                err = np.concatenate((fitsfile[1].data,fitsfile[4].data))
+                dq = np.concatenate((fitsfile[2].data,fitsfile[5].data))
+                header['sci'] = fitsfile[0].header,fitsfile[3].header
+                header['err'] = fitsfile[1].header,fitsfile[4].header
+                header['dq'] = fitsfile[2].header,fitsfile[5].header
+            else:
+                for k in 'sci err dq'.split():
+                    header[k] = fitsfile[k].header
+                sci = fitsfile[0].data
+                err = fitsfile[1].data
+                dq = fitsfile[2].data
+            obj = cls(sci, unit='electron', uncertainty=StdDevUncertainty(err),
+                        mask=(dq != 0), meta=header, flags=dq)
+        else:  # _drz file
+            obj = cls(fitsfile[0].data, unit='electron/s', meta=header)
+            header['sci'] = fitsfile[0].header
+            header['wht'] = fitsfile[1].header
+            header['ctx'] = fitsfile[2].header
+            flags = FlagCollection(shape=fitsfile[0].data.shape)
+            flags['wht'] = fitsfile[1].data
+            flags['ctx'] = fitsfile[2].data
+            obj = ccdproc.create_deviation(obj,
+                    gain=header['primary']['exptime']*u.s,
+                    readnoise=3*u.electron)
+        return obj
 
 
 def read_uvis(inputfile):
-    from astropy.io import fits
-    if not (inputfile.endswith('_flt.fits') or inputfile.endswith('_drz.fits')):
-        raise ValueError('input file extension not recognized')
-    fitsfile = fits.open(inputfile)
-    header = OrderedDict()
-    header['primary'] = fitsfile.pop(0).header
-    data = []
-    if inputfile.endswith('_flt.fits'):  # _flt file
-        if header['primary']['aperture'].find('SUB') == -1:
-            sci = np.concatenate((fitsfile[0].data,fitsfile[3].data))
-            err = np.concatenate((fitsfile[1].data,fitsfile[4].data))
-            dq = np.concatenate((fitsfile[2].data,fitsfile[5].data))
-            header['sci'] = fitsfile[0].header,fitsfile[3].header
-            header['err'] = fitsfile[1].header,fitsfile[4].header
-            header['dq'] = fitsfile[2].header,fitsfile[5].header
-        else:
-            for k in 'sci err dq'.split():
-                header[k] = fitsfile[k].header
-            sci = fitsfile[0].data
-            err = fitsfile[1].data
-            dq = fitsfile[2].data
-        obj = UVISImage(sci, unit='electron', uncertainty=StdDevUncertainty(err), mask=(dq != 0), meta=header, flags=dq)
-    else:  # _drz file
-        obj = UVISImage(fitsfile[0].data, unit='electron/s', meta=header)
-        header['sci'] = fitsfile[0].header
-        header['wht'] = fitsfile[1].header
-        header['ctx'] = fitsfile[2].header
-        flags = nddata.FlagCollection(shape=fitsfile[0].data.shape)
-        flags['wht'] = fitsfile[1].data
-        flags['ctx'] = fitsfile[2].data
-        obj = ccdproc.create_deviation(obj, gain=header['primary']['exptime']*units.s, readnoise=3*units.electron)
-
-    return obj
+    return UVISImage.read(inputfile)
 
 
 class UVISCalibration(object):
 
     pamfits = [wfc3dir+'Pixel_Area_Map/UVIS'+str(x)+'wfc3_map.fits' for x in [1,2]]
-    pxlscl = 0.04 * units.arcsec
+    pxlscl = 0.04 * u.arcsec
 
     def __init__(self):
         self.pam = [readfits(f,ext=1) for f in self.pamfits]
@@ -392,13 +394,13 @@ def read_jit(fn):
     jit = Table().read(fn)
     for k in list(jit.keys()):
         if jit[k].unit == 'seconds':
-            jit[k].unit = units.s
+            jit[k].unit = u.s
         elif jit[k].unit == 'arcsec':
-            jit[k].unit = units.arcsec
+            jit[k].unit = u.arcsec
         elif jit[k].unit == 'degrees':
-            jit[k].unit = units.deg
+            jit[k].unit = u.deg
         elif jit[k].unit == 'Gauss':
-            jit[k].unit = units.G
+            jit[k].unit = u.G
 
     return jit
 
@@ -412,12 +414,12 @@ def load_aperture(show_in_browser=False):
     '''
 
     aper = ascii_read(wfc3dir+'Aperture_File.csv')
-    aper['v2pos'].unit = units.arcsec
-    aper['v3pos'].unit = units.arcsec
-    aper['xscl'].unit = units.arcsec
-    aper['yscl'].unit = units.arcsec
-    aper['v3x'].unit = units.deg
-    aper['v3y'].unit = units.deg
+    aper['v2pos'].unit = u.arcsec
+    aper['v3pos'].unit = u.arcsec
+    aper['xscl'].unit = u.arcsec
+    aper['yscl'].unit = u.arcsec
+    aper['v3x'].unit = u.deg
+    aper['v3y'].unit = u.deg
     if show_in_browser:
         aper.show_in_browser()
     return aper
@@ -430,7 +432,6 @@ def obslog(files):
     cases with the full directory path
 
     '''
-    from astropy.io import fits
     from collections import OrderedDict
 
     if isinstance(files, (str,bytes)):
@@ -466,6 +467,6 @@ def obslog(files):
     log = Table(values)
     for e,k,u in keys:
         if u != '':
-            log[k].unit = units.Unit(u)
+            log[k].unit = u.Unit(u)
 
     return log
