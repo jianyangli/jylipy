@@ -8,6 +8,7 @@ from collections import OrderedDict
 from ..core import Image, ImageMeasurement, readfits, ascii_read, sflux
 from ..apext import Table
 import astropy.units as u
+from astropy.table import QTable
 from astropy.io import fits, ascii
 import ccdproc
 
@@ -335,54 +336,66 @@ class UVISCalibration(object):
         self.photcal = load_filter()
 
 
-def load_pam(aperture=None, filter=None):
-    '''Load pixel area map
+class PAM():
+    """Pixel area map class"""
 
-    v1.0.0: JYL @PSI, 5/4/2016'''
-
-    if aperture == None:
-        aperture = 'UVIS'
-    aperture = aperture.lower()
-    if aperture.upper() not in load_aperture()['Aperture']:
-        raise ValueError('invalid aperture {0}'.format(aperture))
-
+    pam1file = wfc3dir + 'Pixel_Area_Map/UVIS1wfc3_map.fits'
+    pam2file = wfc3dir + 'Pixel_Area_Map/UVIS2wfc3_map.fits'
     amps = [['FQ387N','FQ437N','FQ508N','FQ619N','FQ889N'],
             ['FQ378N','FQ492N','FQ674N','FQ750N','FQ937N'],
             ['FQ232N','FQ422M','FQ575N','FQ634N','FQ906N'],
             ['FQ243N','FQ436N','FQ672N','FQ727N','FQ924N']]
 
-    pamfits = [wfc3dir+'Pixel_Area_Map/UVIS'+str(x)+'wfc3_map.fits' for x in [1,2]]
-    if aperture.find('uvis1') != -1:
-        pams = readfits(pamfits[0],ext=1,verbose=False)
-    elif aperture.find('uvis2') != -1:
-        pams = readfits(pamfits[1],ext=1,verbose=False)
-    elif aperture.find('quad') != -1:
-        if filter == None:
-            raise ValueError('`filter'' has to be specified for ''QUAR'' apertures')
-        if (filter in amps[0]) or (filter in amps[1]):
-            pams = readfits(pamfits[0],ext=1,verbose=False)
-        elif (filter in amps[2]) or (filter in amps[3]):
-            pams = readfits(pamfits[1],ext=1,verbose=False)
-    else:
-        pams = np.concatenate([readfits(x,ext=1,verbose=False) for x in pamfits][::-1])
-    if aperture.find('c1k1c') != -1:
-        return pams[:1024,:1025]
-    if aperture.find('c512c') != -1:
-        return pams[:512,:512]
-    if aperture.find('m1k1c') != -1:
-        return pams[-1024:,-1025:]
-    if aperture.find('m512c') != -1:
-        return pams[-512:,-512:]
-    if (aperture.find('2k2a') != -1) or (aperture.find('2k2c') != -1):
-        return pams[1:,:2047]
-    if (aperture.find('2k2b') != -1) or (aperture.find('2k2d') != -1):
-        return pams[1:,2049:]
-    if aperture.find('quad') != -1:
-        if (filter in amps[0]) or (filter in amps[2]):
-            return pams[1:,:2047]
-        else:
-            return pams[1:,2049:]
-    return pams
+    def __init__(self, datafiles=[pam1file, pam2file]):
+        with fits.open(datafiles[0]) as f_:
+            self._pam1 = f_[1].data.copy()
+        with fits.open(datafiles[1]) as f_:
+            self._pam2 = f_[1].data.copy()
+        self._A = self._pam1[-512:, :513]
+        self._B = self._pam1[-512:, -513:]
+        self._C = self._pam2[:512, :513]
+        self._D = self._pam2[:512, -513:]
+
+    def __call__(self, aperture='UVIS', filter=None, binning=1):
+        """Return the PAM corresponding to specified aperture and/or filter"""
+        if aperture not in Aperture()['Aperture']:
+            raise ValueError('invalid aperture {}'.format(aperture))
+        if aperture == 'UVIS':
+            pam = np.r_[self._pam2, self._pam1]
+        elif aperture.find('UVIS1') != -1:
+            pam = self._pam1
+        elif aperture.find('UVIS2') != -1:
+            pam = self._pam2
+        elif aperture.find('QUAD') != -1:
+            if filter == None:
+                raise ValueError("filter must be specified for 'QARD' "
+                                 "apertures")
+            if filter in self.amps[0]+self.amps[1]:
+                pam = self._pam1
+            elif filter in amps[2] + self.amps[3]:
+                pam = self._pam2
+        # 2k subarrays
+        if (aperture.find('2K2A') != -1) or (aperture.find('2K2C') != -1):
+            return pam[1:,:2047]
+        if (aperture.find('2K2B') != -1) or (aperture.find('2K2D') != -1):
+            return pam[1:,2049:]
+        # quad
+        if aperture.find('quad') != -1:
+            if filter in amp[0] + amps[2]:
+                return pam[1:,:2047]
+            else:
+                return pam[1:,2049:]
+        # 1k subarrays
+        if aperture.find('C1K1C') != -1:
+            return pam[:1024, :1025]
+        if aperture.find('M1K1C') != -1:
+            return pam[-1024:,-1025:]
+        # 512 subarrays: M512C, C512C
+        if aperture.find('C512C') != -1:
+            return pam[:512,:512]
+        if aperture.find('M512C') != -1:
+            return pam[-512:,-512:]
+        return pam
 
 
 def read_jit(fn):
