@@ -405,24 +405,20 @@ def read_jit(fn):
     return jit
 
 
-def load_aperture(show_in_browser=False):
-    '''Load WFC3 aperture file
-    Source of aperture file: http://www.stsci.edu/hst/observatory/apertures/wfc3.html
-    Updated June 21, 2012
-
-    v1.0.0 : 5/1/2016, JYL @PSI
-    '''
-
-    aper = ascii_read(wfc3dir+'Aperture_File.csv')
-    aper['v2pos'].unit = u.arcsec
-    aper['v3pos'].unit = u.arcsec
-    aper['xscl'].unit = u.arcsec
-    aper['yscl'].unit = u.arcsec
-    aper['v3x'].unit = u.deg
-    aper['v3y'].unit = u.deg
-    if show_in_browser:
-        aper.show_in_browser()
-    return aper
+class Aperture(QTable):
+    """WFC3 aperture list"""
+    def __init__(self, *args, aperture_list=wfc3dir+'Aperture_File.csv',
+                 **kwargs):
+        if len(args) == 0:
+            super().__init__(ascii.read(aperture_list))
+            self['v2pos'].unit = u.arcsec
+            self['v3pos'].unit = u.arcsec
+            self['xscl'].unit = u.arcsec
+            self['yscl'].unit = u.arcsec
+            self['v3x'].unit = u.deg
+            self['v3y'].unit = u.deg
+        else:
+            super().__init__(*args, **kwargs)
 
 
 def obslog(files):
