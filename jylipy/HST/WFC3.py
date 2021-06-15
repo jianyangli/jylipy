@@ -2,14 +2,17 @@
 #
 #
 
+from warnings import warn
 import numpy as np
 import spiceypy as spice
 from collections import OrderedDict
-from ..core import Image, ImageMeasurement, readfits, ascii_read, sflux
+from ..core import Image, ImageMeasurement, readfits, ascii_read, sflux, rebin
 from ..apext import Table
+from ..image import ImageSet
 import astropy.units as u
-from astropy.table import QTable
+from astropy.table import QTable, Column, Table
 from astropy.io import fits, ascii
+from astropy.nddata import StdDevUncertainty
 import ccdproc
 
 
@@ -358,10 +361,18 @@ class PAM():
 
     def __call__(self, aperture='UVIS', filter=None, binning=1):
         """Return the PAM corresponding to specified aperture and/or filter"""
+        if binning not in [1, 2, 3]:
+            raise ValueError('binning must be in [1, 2, 3].')
         if aperture not in Aperture()['Aperture']:
             raise ValueError('invalid aperture {}'.format(aperture))
         if aperture == 'UVIS':
             pam = np.r_[self._pam2, self._pam1]
+            if binning == 3:
+                return rebin(pam, (3,3), mean=True)[:, 1:-1]
+            elif binning == 2:
+                raise ValueError("NO IDEA ABOUT BINNING == 2")
+            else:
+                return pam
         elif aperture.find('UVIS1') != -1:
             pam = self._pam1
         elif aperture.find('UVIS2') != -1:
@@ -395,6 +406,12 @@ class PAM():
             return pam[:512,:512]
         if aperture.find('M512C') != -1:
             return pam[-512:,-512:]
+        # quad filters
+        if aperture.find('QUAD') != -1:
+            if filter in self.amps[0]+self.amps[2]:
+                return pam[1:, :2047]
+            else:
+                return pam[1:, 2049:]
         return pam
 
 
@@ -479,3 +496,178 @@ def obslog(files):
             log[k].unit = u.Unit(u)
 
     return log
+
+
+class AperturePhotometry(ImageSet):
+    """Aperture photometry of UVIS images
+
+    Parameters
+    ----------
+    yc, xc : the coordinates of centroids, required
+    uvis_aper : UVIS aperture name from FITS header keyword 'APERTURE', required
+    filter : Filter name from FITS header keyword 'FILTER', required
+    exptime : Exposure time in seconds, from FITS header key 'EXPTIME'
+    bin : Image binning, from FITS header key 'BINAXIS1' or 'BINAXIS2', optional
+    background : Background measurement, optional.  If provided, then background
+        will be subtracted from photometric measurements.
+    background_error : Background measurement error, optional.  If provided,
+        then it will be included in the photometric measurement errors.
+
+    Image can be passed or loaded by the specified loader as numpy arrays, or
+    `astropy.nddata.NDData`.  If `astropy.nddata.NDData`, then the error can
+    be provided in attribute `.uncertainty`.  If provided, then it will be used
+    to estimate the error in photometry.  A mask can also be provided in
+    attribute `.mask`, and will be used in photometry if available.
+
+    Photometry is saved in attribute `.phot` as an `astropy.unit.Quantity`, and
+    the uncertainty is saved in `.photerr` if available.
+    """
+
+    def __init__(self, *args, **kwargs):
+        keys = kwargs.keys()
+        if ('xc' not in keys) or ('yc' not in keys):
+            raise ValueError('`yc` and `xc` are required keyword arguments.')
+        required_keys = ['uvis_aper', 'filter', 'exptime']
+        for k in required_keys:
+            if k not in keys:
+                raise ValueError('`{}` is a required argument.'.format(k))
+        optional_keys = ['bin', 'background', 'background_error']
+        for k in optional_keys:
+            if k not in keys:
+                warn('`{}` is not provided.')
+        super().__init__(*args, **kwargs)
+
+    def apphot(self, aperture):
+        """Measure aperture photometry
+
+        aperture : number or array
+            Aperture radii
+        """
+        from photutils import aperture_photometry, CircularAperture
+        self.aperture = aperture
+        if not hasattr(aperture, '__iter__'):
+            aperture = [aperture]
+        n_aper = len(aperture)
+        pam = PAM()
+        phot = np.zeros((self._size, n_aper))
+        photerr = np.zeros((self._size, n_aper))
+        for i in range(self._size):
+            if self.image is None or self._1d['image'][i] is None:
+                self._load_image(i)
+            uvis_aper = self._1d['image'][i]
+            binning = self._1d['_bin'][i] if '_bin' in self.attr else 1
+            im_pam = pam(aperture=self._1d['_uvis_aper'][i],
+                         filter=self._1d['_filter'][i],
+                         binning=binning)
+            im = getattr(self._1d['image'][i], 'data', self._1d['image']) \
+                    * im_pam
+            err = getattr(self._1d['image'][i], 'uncertainty', None)
+            if err is not None:
+                if isinstance(err, StdDevUncertainty):
+                    err = err.array
+                err = err * im_pam
+            mask = getattr(self._1d['image'][i], 'mask', None)
+            apers = [CircularAperture((self._1d['_xc'][i], self._1d['_yc'][i]),
+                        r) for r in aperture]
+            phot_table = aperture_photometry(im, apers, error=err, mask=mask)
+            phot_cols = ['aperture_sum_{}'.format(i) for i in range(n_aper)]
+            p = phot_table[phot_cols].as_array().view((float, n_aper))
+            phot[i] = p.flatten()
+            if '_background' in self.attr:
+                ap_area = np.array([x.area for x in apers])
+                bg = self._1d['_background'][i] * ap_area
+                phot[i] -= bg
+            phot[i] /= self._1d['_exptime'][i]
+            if err is not None:
+                err_cols = ['aperture_sum_err_{}'.format(i) for i in \
+                        range(n_aper)]
+                e = phot_table[err_cols].as_array().view((float, n_aper))
+                photerr[i] = e.flatten()
+                if '_background_error' in self.attr:
+                    bgerr = self._1d['_background_error'][i] * ap_area
+                    photerr[i] = np.sqrt(photerr[i]**2 + bgerr**2)
+                photerr[i] /= self._1d['_exptime'][i]
+        self.phot = phot * u.electron / u.s
+        if not (photerr == 0).all():
+            self.photerr = photerr * u.electron / u.s
+
+    def write(self, filename, **kwargs):
+        """Write photometry to output file
+
+        The results will be saved to a FITS file with the following structure:
+            .phot : primary extension
+            .aperture : 1st extension, name ['aper']
+            .photerr : 2st extension, name ['error'] if available
+            other information as a table : last extension, name ['params']
+        """
+        hdu = fits.PrimaryHDU(self.phot.value)
+        hdu.header['bunit'] = str(self.phot.unit)
+        outfits = fits.HDUList([hdu])
+        outfits.append(fits.ImageHDU(self.aperture, name='aper'))
+        if hasattr(self, 'photerr'):
+            hdu = fits.ImageHDU(self.photerr.value, name='error')
+            hdu.header['bunit'] = str(self.photerr.unit)
+            outfits.append(hdu)
+        cols = []
+        for k in self.attr:
+            cols.append(Column(self._1d[k], name=k.strip('_')))
+        if self.file is not None:
+            cols.insert(0, Column(self._1d['file'], name='file'))
+        out = Table(cols)
+        tblhdu = fits.BinTableHDU(out, name='params')
+        tblhdu.header['ndim'] = len(self._shape)
+        for i in range(len(self._shape)):
+            tblhdu.header['axis{}'.format(i)] = self._shape[i]
+        outfits.append(tblhdu)
+        outfits.writeto(filename, **kwargs)
+
+    def read(self, filename, **kwargs):
+        """Read photometry from input file
+
+        Parameters
+        ----------
+        infile : str
+            Input file name
+        **kwargs : dict, optional
+            Other keyword arguments accepted by the `astropy.io.ascii.read`.
+        """
+        with fits.open(infile) as f_:
+            self.phot = f_[0].data * u.Unit(f_[0].header['bunit'])
+            self.aperture = f_['aper'].data
+            if len(f_) == 4:
+                self.photerr = f_['error'] * u.Unit(f_['error'].header['bunit'])
+            intable = Table(f_['params'].data)
+            ndim = f_['params'].header['ndim']
+            shape = ()
+            for i in range(ndim):
+                shape = shape + (f_['params'].header['axis{}'.format(i)],)
+        keys = intable.keys()
+        if 'file' in keys:
+            self.file = np.array(intable['file'])
+            keys.remove('file')
+            self.image = None
+        else:
+            self.file = None
+            self._ext = None
+        self.attr = []
+        for k in keys:
+            n = '_' + k
+            self.attr.append(n)
+            setattr(self, n, np.array(intable[k]))
+        # adjust shape
+        if ndim == 0:
+            self._shape = len(intable),
+            self._size = self._shape[0]
+        else:
+            self._shape = shape
+            self._size = int(np.array(shape).prod())
+        if self.file is not None:
+            self.file = self.file.reshape(self._shape)
+        # process attributes
+        keys = self.attr if self._ext is None else ['_ext'] + self.attr
+        for k in keys:
+            v = getattr(self, k)
+            if np.all(v == v[0]):
+                setattr(self, k, v[0])
+        # generate flat view
+        self._generate_flat_views()
