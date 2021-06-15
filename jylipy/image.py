@@ -21,9 +21,6 @@ class ImageSet():
     .image : 3D or higher dimension array of shape (..., N, M), images
         to be centroided.  The shape of each image is (N, M).
     .file : string array, FITS file names of images to be centroided
-    ._ext : string, number, or array of them
-        The FITS extensions of images in the source files.  If array,
-        it has the same shape as `.file`.
     .loader : function
         Image loader to provide flexibility in accessing various image
         formats.
@@ -33,7 +30,7 @@ class ImageSet():
         The 1D views of `.image`, `.file`, `._ext`, and all listed in
         `.attr`.
     """
-    def __init__(self, im, ext=0, loader=None, **kwargs):
+    def __init__(self, im, loader=None, **kwargs):
         """
         Parameters
         ----------
@@ -101,14 +98,6 @@ class ImageSet():
             self._size = self.image.size
         else:
             raise ValueError('unrecognized input type')
-        # FITS extension
-        if isinstance(ext, str) or (not hasattr(ext, '__iter__')):
-            self._ext = ext
-        else:
-            if np.asarray(ext).shape != self._shape:
-                raise ValueError('`ext` must have the same shape as `file` '
-                        'or `image`')
-            self._ext = np.asarray(ext)
         # other keywrods
         self.attr = []
         if len(kwargs) > 0:
@@ -133,8 +122,7 @@ class ImageSet():
                     self.image.reshape(-1)
         self._1d['file'] = None if (self.file is None) else \
                     self.file.reshape(-1)
-        attr = ['_ext'] + self.attr
-        for k in attr:
+        for k in self.attr:
             v = getattr(self, k)
             if isinstance(v, np.ndarray):
                 self._1d[k] = v.reshape(-1)
@@ -151,8 +139,9 @@ class ImageSet():
             self.image[:] = None
             self._1d['image'] = self.image.reshape(-1)
         if self.loader is None:
+            ext = self._1d['_ext'][i] if '_ext' in self._1d.keys() else 0
             self._1d['image'][i] = \
-                    fits.open(self._1d['file'][i])[self._1d['_ext'][i]].data
+                    fits.open(self._1d['file'][i])[ext].data
         else:
             self._1d['image'][i] = self.loader(self._1d['file'][i])
 
@@ -238,7 +227,6 @@ class ImageSet():
             cols.append(table.Column(self._1d[k], name=k.strip('_')))
         if self.file is not None:
             cols.insert(0, table.Column(self._1d['file'], name='file'))
-            cols.insert(1, table.Column(self._1d['_ext'], name='ext'))
         out = table.Table(cols)
         if format is None:
             format = ''
@@ -321,9 +309,7 @@ class ImageSet():
         keys = intable.keys()
         if 'file' in keys:
             self.file = np.array(intable['file'])
-            self._ext = np.array(intable['ext'])
             keys.remove('file')
-            keys.remove('ext')
             self.image = None
         else:
             from os import path
@@ -331,7 +317,6 @@ class ImageSet():
             if not path.isfile(imgfile):
                 raise IOError('input image file not found')
             self.file = None
-            self._ext = None
             # load image
             with fits.open(imgfile) as _f:
                 ndim = _f[0].header['ndim']
@@ -357,7 +342,7 @@ class ImageSet():
         if self.file is not None:
             self.file = self.file.reshape(self._shape)
         # process attributes
-        keys = self.attr if self._ext is None else ['_ext'] + self.attr
+        keys = self.attr
         for k in keys:
             v = getattr(self, k)
             if np.all(v == v[0]):
