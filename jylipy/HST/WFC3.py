@@ -20,7 +20,7 @@ filter_table = '/Users/jyli/work/references/HST/WFC3/WFC3_Filter_List.csv'
 wfc3dir = '/Users/jyli/work/references/HST/WFC3/'
 
 def load_filter():
-    flist = ascii_read(filter_table)
+    flist = QTable(ascii.read(filter_table))
     flist['PHOTPLAM'].unit = u.nm
     flist['PHOTFLAM'].unit = u.Unit('W m-2 um-1')
     flist['PHOTBW'].unit = u.nm
@@ -537,7 +537,7 @@ class AperturePhotometry(ImageSet):
                 warn('`{}` is not provided.')
         super().__init__(*args, **kwargs)
 
-    def apphot(self, aperture):
+    def apphot(self, aperture, photcal=False, **photcal_kwargs):
         """Measure aperture photometry
 
         aperture : number or array
@@ -587,27 +587,76 @@ class AperturePhotometry(ImageSet):
                     bgerr = self._1d['_background_error'][i] * ap_area
                     photerr[i] = np.sqrt(photerr[i]**2 + bgerr**2)
                 photerr[i] /= self._1d['_exptime'][i]
-        self.phot = phot * u.electron / u.s
+        countrate = (phot * u.electron / u.s)
+        self.countrate = countrate.reshape(self._shape + (n_aper,))
         if not (photerr == 0).all():
-            self.photerr = photerr * u.electron / u.s
+            countrate_error = photerr * u.electron / u.s
+            self.countrate_error = countrate_error.reshape(self._shape \
+                                                            + (n_aper,))
+        if photcal:
+            self.photcal(**photcal_kwargs)
+
+    def photcal(self, STmag=False, ABmag=False):
+        """Convert count rate to flux and Vega magnitude.
+
+        """
+        if not hasattr(self, 'countrate'):
+            raise ValueError('count rate not available.')
+        filter_table = load_filter()
+        photflam = []
+        vegamag = []
+        stmag = []
+        abmag = []
+        for i, x in enumerate(self._1d['_filter']):
+            w = x == filter_table['Filter']
+            row = filter_table[w]
+            photflam.append(row['PHOTFLAM'])
+            vegamag.append(row['VEGAmag'])
+            stmag.append(row['STmag'])
+            abmag.append(row['ABmag'])
+        photflam = np.reshape(np.squeeze(photflam), self._shape)
+        vegamag = np.reshape(np.squeeze(vegamag), self._shape)
+        stmag = np.reshape(np.squeeze(stmag), self._shape)
+        abmag = np.reshape(np.squeeze(abmag), self._shape)
+        self.flux = np.moveaxis(np.moveaxis(self.countrate, -1, 0) * photflam,
+                                0, -1)
+        self.mag = -2.5 * np.log10(self.countrate.value) * u.mag
+        mag = np.moveaxis(self.mag.value, -1, 0)
+        self.VEGAmag = np.moveaxis(mag + vegamag, 0, -1) * u.mag
+        if STmag:
+            self.STmag = np.moveaxis(mag + stmag, 0, -1) * u.mag
+        if ABmag:
+            self.ABmag = np.moveaxis(mag + abmag, 0, -1) * u.mag
+        if hasattr(self, 'countrate_error'):
+            self.flux_error = (self.countrate_error.T * photflam).T
+            self.mag_error = 2.5 * np.log10((self.countrate_error \
+                                                / self.countrate) + 1) * u.mag
 
     def write(self, filename, **kwargs):
         """Write photometry to output file
 
-        The results will be saved to a FITS file with the following structure:
-            .phot : primary extension
-            .aperture : 1st extension, name ['aper']
-            .photerr : 2st extension, name ['error'] if available
-            other information as a table : last extension, name ['params']
+        The results will be saved to a multi-extension FITS file with the
+        following structure:
+            Primary extension only saves some information in the header
+            1st extension ['params'] : Binary table listing the measuring
+                parameters
+            2nd extension ['aperture'] : .aperture
+            3rd extension ['countrat'] : .countrate
+            4th extension ['flux'] : .flux
+            5th extension ['mag'] : .mag, instrument magnitude
+            6th extension ['vegamag'] : .VEGAmag
+            7th extension ['stmag'] : .STmag
+            8th extension ['abmag'] : .ABmag
+            9th extension ['crerror'] : .countrate_error if available
+            10th extension ['flxerror'] : .flux_error if available
+            11th extension ['magerror'] : .mag_error if available
         """
-        hdu = fits.PrimaryHDU(self.phot.value)
-        hdu.header['bunit'] = str(self.phot.unit)
+        hdu = fits.PrimaryHDU()
+        for i in range(len(self._shape)):
+            hdu.header['axis{}'.format(i)] = self._shape[i]
+            hdu.header['ndim'] = len(self._shape)
         outfits = fits.HDUList([hdu])
-        outfits.append(fits.ImageHDU(self.aperture, name='aper'))
-        if hasattr(self, 'photerr'):
-            hdu = fits.ImageHDU(self.photerr.value, name='error')
-            hdu.header['bunit'] = str(self.photerr.unit)
-            outfits.append(hdu)
+        # 1st extension
         cols = []
         for k in self.attr:
             cols.append(Column(self._1d[k], name=k.strip('_')))
@@ -615,32 +664,85 @@ class AperturePhotometry(ImageSet):
             cols.insert(0, Column(self._1d['file'], name='file'))
         out = Table(cols)
         tblhdu = fits.BinTableHDU(out, name='params')
-        tblhdu.header['ndim'] = len(self._shape)
-        for i in range(len(self._shape)):
-            tblhdu.header['axis{}'.format(i)] = self._shape[i]
         outfits.append(tblhdu)
+        # 2nd extension
+        outfits.append(fits.ImageHDU(self.aperture, name='aperture'))
+        # 3rd
+        hdu = fits.ImageHDU(self.countrate.value, name='countrat')
+        hdu.header['bunit'] = str(self.countrate.unit)
+        outfits.append(hdu)
+        # 4th - 11th
+        if hasattr(self, 'flux'):
+            hdu = fits.ImageHDU(self.flux.value, name='flux')
+            hdu.header['bunit'] = str(self.flux.unit)
+            outfits.append(hdu)
+        if hasattr(self, 'mag'):
+            hdu = fits.ImageHDU(self.mag.value, name='mag')
+            hdu.header['bunit'] = str(self.mag.unit)
+            outfits.append(hdu)
+        if hasattr(self, 'VEGAmag'):
+            hdu = fits.ImageHDU(self.VEGAmag.value, name='vegamag')
+            hdu.header['bunit'] = 'VEGAmag'
+            outfits.append(hdu)
+        if hasattr(self, 'STmag'):
+            hdu = fits.ImageHDU(self.STmag.value, name='stmag')
+            hdu.header['bunit'] = 'STmag'
+            outfits.append(hdu)
+        if hasattr(self, 'ABmag'):
+            hdu = fits.ImageHDU(self.ABmag.value, name='abmag')
+            hdu.header['bunit'] = 'ABmag'
+            outfits.append(hdu)
+        if hasattr(self, 'countrate_error'):
+            hdu = fits.ImageHDU(self.countrate_error.value, name='cterror')
+            hdu.header['bunit'] = str(self.countrate_error.unit)
+            outfits.append(hdu)
+        if hasattr(self, 'flux_error'):
+            hdu = fits.ImageHDU(self.flux_error.value, name='fluxerror')
+            hdu.header['bunit'] = str(self.flux_error.unit)
+            outfits.append(hdu)
+        if hasattr(self, 'mag_error'):
+            hdu = fits.ImageHDU(self.mag_error.value, name='magerror')
+            hdu.header['bunit'] = 'mag'
+            outfits.append(hdu)
         outfits.writeto(filename, **kwargs)
 
-    def read(self, filename, **kwargs):
+    def read(self, infile):
         """Read photometry from input file
 
         Parameters
         ----------
         infile : str
             Input file name
-        **kwargs : dict, optional
-            Other keyword arguments accepted by the `astropy.io.ascii.read`.
         """
         with fits.open(infile) as f_:
-            self.phot = f_[0].data * u.Unit(f_[0].header['bunit'])
-            self.aperture = f_['aper'].data
-            if len(f_) == 4:
-                self.photerr = f_['error'] * u.Unit(f_['error'].header['bunit'])
-            intable = Table(f_['params'].data)
-            ndim = f_['params'].header['ndim']
+            extnames = [x.header['extname'] for x in f_[1:]]
+            ndim = f_[0].header['ndim']
             shape = ()
             for i in range(ndim):
-                shape = shape + (f_['params'].header['axis{}'.format(i)],)
+                shape = shape + (f_[0].header['axis{}'.format(i)],)
+            intable = Table(f_['params'].data)
+            self.aperture = f_['aperture'].data
+            self.countrate = f_['countrat'].data \
+                                 * u.Unit(f_['countrat'].header['bunit'])
+            if 'FLUX' in extnames:
+                self.flux = f_['flux'].data * u.Unit(f_['flux'].header['bunit'])
+            if 'MAG' in extnames:
+                self.mag = f_['mag'].data * u.Unit(f_['mag'].header['bunit'])
+            if 'VEGAMAG' in extnames:
+                self.VEGAmag = f_['vegamag'].data * u.mag
+            if 'STMAG' in extnames:
+                self.STmag = f_['stmag'].data * u.mag
+            if 'ABMAG' in extnames:
+                self.ABmag = f_['abmag'].data * u.mag
+            if 'CTERROR' in extnames:
+                self.countrate_error = f_['cterror'].data \
+                                * u.Unit(f_['cterror'].header['bunit'])
+            if 'FLUXERROR' in extnames:
+                self.flux_error = f_['fluxerror'].data \
+                                * u.Unit(f_['fluxerror'].header['bunit'])
+            if 'MAGERROR' in extnames:
+                self.mag_error = f_['magerror'].data \
+                                * u.Unit(f_['magerror'].header['bunit'])
         keys = intable.keys()
         if 'file' in keys:
             self.file = np.array(intable['file'])
@@ -664,10 +766,16 @@ class AperturePhotometry(ImageSet):
         if self.file is not None:
             self.file = self.file.reshape(self._shape)
         # process attributes
-        keys = self.attr if self._ext is None else ['_ext'] + self.attr
-        for k in keys:
+        for k in self.attr:
             v = getattr(self, k)
             if np.all(v == v[0]):
                 setattr(self, k, v[0])
         # generate flat view
         self._generate_flat_views()
+
+    @classmethod
+    def from_fits(cls, infile, loader=None):
+        obj = cls('', xc=0, yc=0, uvis_aper=0, filter=0, exptime=0)
+        obj.read(infile)
+        obj.loader = loader
+        return obj
