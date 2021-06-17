@@ -36,7 +36,8 @@ def filter_bandpass(flt):
         raise ValueError('{0} not found'.format(flt))
     thfile = wfc3dir+'Filter_Throughput/'+thfile[0]
     if not isfile(thfile):
-        raise IOError('{0}: Filter throughput file not found: {1}'.format(flt,thfile))
+        raise IOError('{0}: Filter throughput file not found: {1}'.format(flt,
+                        thfile))
     return Table(fits.open(thfile)[1].data)
 
 
@@ -89,11 +90,13 @@ def aspect(files, out=None, target=None, kernel=None, keys=None, verbose=False):
         if kernel is not None:
             spice.furnsh(kernel)
             if spice.bodn2c(target) is None:
-                print('Target name not in SPICE name space.  Geometry keys ignored')
+                print("Target name not in SPICE name space.  Geometry"
+                    " keys ignored")
                 geo = False
 
     # Set up table columns
-    fitskeys = 'RootName Date-Obs Time-Obs ExpStart ExpEnd Filter ExpTime Orientat'.split()
+    fitskeys = 'RootName Date-Obs Time-Obs ExpStart'.split() \
+                + 'ExpEnd Filter ExpTime Orientat'.split()
     fitsfmt = '{:s} {:s} {:s} {:.7f} {:.7f} {:s} {:.2f}'.split()
     if keys is not None:
         if not isinstance(keys, (str,bytes)):
@@ -106,8 +109,10 @@ def aspect(files, out=None, target=None, kernel=None, keys=None, verbose=False):
     nfk = len(fitskeys + keys)
 
     if geo:
-        spicekeys = 'Rh Range Phase PxlScl NorPA SunPA SunAlt VelPA VelAlt'.split()
-        spicefmt = '{:.5f} {:.5f} {:.2f} {:.2f} {:.2f} {:.2f} {:.2f} {:.2f} {:.2f}'.split()
+        spicekeys = 'Rh Range Phase PxlScl NorPA SunPA'.split() \
+                    + 'SunAlt VelPA VelAlt'.split()
+        spicefmt = '{:.5f} {:.5f} {:.2f} {:.2f} {:.2f}'.split() \
+                    + '{:.2f} {:.2f} {:.2f} {:.2f}'.split()
         unt = 'AU AU deg km deg deg deg deg deg'.split()
     else:
         spicekeys = []
@@ -136,7 +141,8 @@ def aspect(files, out=None, target=None, kernel=None, keys=None, verbose=False):
             az = (360-img[1].header['orientat']) % 360
             pos1, ltime1 = spice.spkezr(target, et, 'j2000', 'lt+s', 'earth')
             losxyz = pos1[0:3]
-            pos2, ltime2 = spice.spkezr('sun', et-ltime1, 'j2000', 'lt+s', target)
+            pos2, ltime2 = spice.spkezr('sun', et-ltime1, 'j2000', 'lt+s',
+                                        target)
             velxyz = pos2[3:6]
             sunxyz = pos2[0:3]
             sun = vecpa(losxyz, sunxyz)
@@ -215,8 +221,12 @@ def solarflux(filters, spec=None):
         if thfile != np.ma.core.MaskedConstant:
             try:
                 th = fits.open(thfile)
-                sflx = sflux(th[1].data['Wavelength']*u.angstrom, th[1].data['THROUGHPUT'], spec=spec)
-                mag = -2.5*np.log10((sflx/(flist['PHOTFLAM'][z].data[0]*u.Unit('W m-2 um-1'))).decompose().value)+flist['VEGAmag'][z].data[0]
+                sflx = sflux(th[1].data['Wavelength'] * u.angstrom,
+                                th[1].data['THROUGHPUT'], spec=spec)
+                mag = -2.5 * np.log10((sflx \
+                            / (flist['PHOTFLAM'][z].data[0] \
+                                * u.Unit('W m-2 um-1'))).decompose().value) \
+                        +flist['VEGAmag'][z].data[0]
                 sf.append([sflx,mag])
 
             except IOError:
@@ -331,7 +341,8 @@ def read_uvis(inputfile):
 
 class UVISCalibration(object):
 
-    pamfits = [wfc3dir+'Pixel_Area_Map/UVIS'+str(x)+'wfc3_map.fits' for x in [1,2]]
+    pamfits = [wfc3dir+'Pixel_Area_Map/UVIS'+str(x)+'wfc3_map.fits' \
+                for x in [1,2]]
     pxlscl = 0.04 * u.arcsec
 
     def __init__(self):
