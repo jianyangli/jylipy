@@ -779,3 +779,24 @@ class AperturePhotometry(ImageSet):
         obj.read(infile)
         obj.loader = loader
         return obj
+
+    def explode(self, outfile, overwrite=True):
+        """Separate photometry by filters
+        """
+        from os.path import splitext
+        flts = np.unique(self._filter)
+        flds = ['countrate', 'flux', 'mag', 'VEGAmag', 'STmag', 'ABmag',
+                'countrate_error', 'flux_error', 'mag_error']
+        rootname, ext = splitext(outfile)
+        for f in flts:
+            ww = self._1d['_filter'] == f
+            kwargs = {}
+            for k in self.attr:
+                kwargs[k.strip('_')] = self._1d[k][ww]
+            ap = AperturePhotometry(self._1d['file'][ww], **kwargs)
+            if hasattr(self, 'aperture'):
+                ap.aperture = self.aperture
+            for x in flds:
+                if hasattr(self, x):
+                    setattr(ap, x, getattr(self, x)[ww])
+            ap.write(rootname+'_'+f+ext, overwrite=overwrite)
