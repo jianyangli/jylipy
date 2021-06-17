@@ -1093,7 +1093,7 @@ def sflux(wv, th, spec=None):
     return result
 
 
-def enhance_1overrho(im, ext=0, center=None, centroid=False, div=True):
+def enhance_1overrho(im, ext=0, center=None, centroid=False, div=True, psf=None):
     '''
  1/rho enhancement tool to study cometary coma morphology.
 
@@ -1116,6 +1116,8 @@ def enhance_1overrho(im, ext=0, center=None, centroid=False, div=True):
    If `True`, the enhancement will be performed with a division of
    the real image to 1/rho model.  Otherwise a subtraction will be
    performed.
+ psf : 2-D array
+   PSF to be convolved with the coma before applied to enhancement
 
  Returns
  -------
@@ -1161,6 +1163,9 @@ def enhance_1overrho(im, ext=0, center=None, centroid=False, div=True):
         # Generate 1/rho model
         sz = img.shape
         comamodel = coma(1.,1.,size=sz, center=ct)
+        if psf is not None:
+            from scipy.signal import convolve2d
+            comamodel = convolve2d(comamodel, psf, mode='same', boundary='wrap')
         scl = comamodel[ct[0]-1:ct[0]+2,ct[1]-1:ct[1]+2].sum()/img[ct[0]-1:ct[0]+2,ct[1]-1:ct[1]+2].sum()
 
         # Enhance image
@@ -1243,9 +1248,9 @@ def azavg(im, ext=0, center=None, centroid=False):
         # Generate azimuthally models
         sz = img.shape
         ct = np.asarray(ct)
-        rmax = int(np.ceil(np.linalg.norm([np.asarray([0,0])-ct, np.asarray([0,sz[1]-1])-ct, np.asarray([sz[0]-1,0])-ct, np.asarray([sz[0]-1,sz[1]-1])-ct],axis=1).max()))
-        azimg = xy2rt(img, center=ct, ramax=rmax, rastep=rmax*2+1, azstep=720, method='splinef2d')
-        radprof = interp1d(np.linspace(0,rmax,rmax*2+1), np.median(azimg,axis=1))
+        rmax = int(np.ceil(np.linalg.norm([np.asarray([0,0])-ct, np.asarray([0,sz[1]-1])-ct, np.asarray([sz[0]-1,0])-ct, np.asarray([sz[0]-1,sz[1]-1])-ct],axis=1).max()/2))
+        azimg = xy2rt(img, center=ct, ramax=rmax, rastep=0.5, azstep=0.5, method='splinef2d')
+        radprof = interp1d(np.linspace(0,rmax,rmax*2+1), np.median(azimg,axis=1), bounds_error=False, fill_value=1)
         dst = dist(-ct[0], sz[0]-ct[0]-1, sz[0], -ct[1], sz[1]-ct[1]-1, sz[1])
         avgim = radprof(dst.reshape(-1)).reshape(sz)
 
@@ -2343,7 +2348,7 @@ def makenrt(shape, center=None):
     return np.array((r, t))
 
 
-def centroiding(im, ext=0, ds9=None, newframe=True, coord='image', refine=False, box=5, verbose=True):
+def centroiding(im, ext=None, ds9=None, newframe=True, coord='image', refine=False, box=5, verbose=True):
     '''
  Interactively centroiding tool
 

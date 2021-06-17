@@ -1,10 +1,15 @@
-# script to stack CSS images
+# CSS utility library
 #
 
 import jylipy as jp
 import numpy as np
+from os.path import join, isfile
+import os
+from astropy.coordinates import SkyCoord
+from astropy.io import fits
+import calviacat as cvc
 
-datadir = '/Volumes/LaCie/work/Comet_2013A1/LCOGT/Data/'
+datadir = '/Volumes/Pegasus/Work/Comet_2013A1/LCOGT/Data/'
 
 
 def load_image(filename,datadir=datadir,header=False,original=False):
@@ -18,7 +23,8 @@ def load_image(filename,datadir=datadir,header=False,original=False):
     else:
         fn = ''
     if not isfile(fn):
-        fn = join(datadir, 'Archive/20170326', filename)
+        fn = join(datadir, 'Archive', filename)
+        print(fn)
     if not isfile(fn):
         fn = fn+'.fz'
     if not isfile(fn):
@@ -63,7 +69,7 @@ def adjust_orientation(filename, center=None, outdir=datadir+'Oriented/'):
 
 
 def background(im):
-    ys, xs = readfits(im)[0].data.shape
+    ys, xs = im.shape
     b1 = jp.background(im,region=[100,100,300,300],method='median')
     b2 = jp.background(im,region=[100,xs-300,300,xs-100],method='median')
     b3 = jp.background(im,region=[ys-300,100,ys-100,300],method='median')
@@ -122,114 +128,6 @@ def show_image(aspect, ds9=None):
         ds9.set('regions','image; text {0} {1} # text='.format(sz[1]+200,sz[0]-150)+'{'+r['Filter']+'}')
 
 
-groups = [['2014-09-30', 'R', 4],
-             ['2014-09-30', 'V', 1],
-             ['2014-09-30', 'I', 2],
-             ['2014-09-30', 'R', 2],
-             ['2014-09-30', 'V', 2],
-             ['2014-09-30', 'B', 2],
-             ['2014-10-01', 'I', 2],
-             ['2014-10-01', 'R', 2],
-             ['2014-10-01', 'V', 2],
-             ['2014-10-10', 'B', 2],
-             ['2014-10-09', 'R', 3],
-             ['2014-10-09', 'I', 3],
-             ['2014-10-11', 'R', 3],
-             ['2014-10-11', 'I', 4],
-             ['2014-10-12', 'R', 3],
-             ['2014-10-12', 'I', 4],
-             ['2014-10-12', 'R', 3],
-             ['2014-10-12', 'I', 4],
-             ['2014-10-13', 'R', 3],
-             ['2014-10-13', 'I', 4],
-             ['2014-10-14', 'R', 3],
-             ['2014-10-14', 'I', 4],
-             ['2014-10-14', 'R', 3],
-             ['2014-10-15', 'R', 3],
-             ['2014-10-15', 'I', 4],
-             ['2014-10-16', 'R', 3],
-             ['2014-10-16', 'I', 4],
-             ['2014-10-17', 'R', 3],
-             ['2014-10-17', 'I', 4],
-             ['2014-10-17', 'R', 3],
-             ['2014-10-17', 'I', 4],
-             ['2014-10-20', 'R', 3],
-             ['2014-10-20', 'I', 4],
-             ['2014-10-21', 'R', 3],
-             ['2014-10-21', 'I', 4],
-             ['2014-10-22', 'R', 3],
-             ['2014-10-22', 'I', 4],
-             ['2014-10-23', 'R', 3],
-             ['2014-10-23', 'I', 4],
-             ['2014-10-24', 'R', 3],
-             ['2014-10-24', 'I', 4],
-             ['2015-03-06', 'V', 2],
-             ['2015-03-06', 'B', 3],
-             ['2015-03-06', 'R', 3],
-             ['2015-03-06', 'I', 1],
-             ['2015-03-07', 'V', 2],
-             ['2015-03-07', 'B', 3],
-             ['2015-03-07', 'R', 3],
-             ['2015-03-07', 'I', 2],
-             ['2015-03-10', 'V', 2],
-             ['2015-03-10', 'B', 3],
-             ['2015-03-10', 'R', 3],
-             ['2015-03-10', 'I', 3],
-             ['2015-03-11', 'B', 3],
-             ['2015-03-11', 'I', 3],
-             ['2015-03-11', 'R', 3],
-             ['2015-03-11', 'V', 3],
-             ['2015-03-12', 'B', 3],
-             ['2015-03-12', 'I', 3],
-             ['2015-03-12', 'R', 3],
-             ['2015-03-12', 'V', 3],
-             ['2015-03-14', 'B', 3],
-             ['2015-03-14', 'I', 3],
-             ['2015-03-14', 'R', 3],
-             ['2015-03-14', 'V', 3],
-             ['2015-03-23', 'B', 3],
-             ['2015-03-23', 'I', 3],
-             ['2015-03-23', 'R', 3],
-             ['2015-03-23', 'V', 3],
-             ['2015-03-23', 'B', 3],
-             ['2015-03-23', 'R', 3],
-             ['2015-03-24', 'B', 3],
-             ['2015-03-24', 'I', 3],
-             ['2015-03-24', 'R', 3],
-             ['2015-03-24', 'V', 2],
-             ['2015-03-24', 'B', 3],
-             ['2015-03-24', 'R', 3],
-             ['2015-03-26', 'B', 3],
-             ['2015-03-26', 'R', 3],
-             ['2015-03-26', 'V', 3],
-             ['2015-03-26', 'I', 3],
-             ['2015-03-26', 'B', 3],
-             ['2015-03-26', 'I', 3],
-             ['2015-03-26', 'R', 3],
-             ['2015-03-26', 'V', 3],
-             ['2015-03-27', 'B', 3],
-             ['2015-03-27', 'I', 3],
-             ['2015-03-27', 'R', 3],
-             ['2015-03-27', 'V', 6],
-             ['2015-03-27', 'I', 3],
-             ['2015-03-28', 'V', 3],
-             ['2015-03-28', 'I', 3],
-             ['2015-03-28', 'B', 3],
-             ['2015-03-28', 'I', 3],
-             ['2015-03-28', 'R', 3],
-             ['2015-03-28', 'V', 3],
-             ['2015-03-28', 'B', 3],
-             ['2015-03-28', 'R', 3],
-             ['2015-03-29', 'B', 3],
-             ['2015-03-29', 'I', 3],
-             ['2015-03-29', 'R', 3],
-             ['2015-03-29', 'V', 3],
-             ['2015-03-29', 'B', 3],
-             ['2015-03-29', 'R', 3],
-             ['2015-03-29', 'V', 3],
-             ['2015-03-29', 'I', 3]]
-
-
 def stack_group(group,datadir=datadir+'Oriented/'):
     from os.path import join
     ims = [jp.readfits(join(datadir,filename),verbose=False) for filename in group['FileName']]
@@ -263,3 +161,158 @@ def show_stacked(date, filt, ext=0, ds9=None):
         for f in aspect.query('filter',filt)[bdr[filt]:]:
             ds9.imdisp(datadir+'Stacked/'+f['filename'],ext=ext)
 
+
+class PhotCal():
+    """Photometric calibration for LCO images
+
+    Photometrically calibrate the magnitude zero points using the '_cat'
+    generated by LCO pipeline with the `calviacat` package.
+    """
+    _filter_mapping = {'skymapper': {'u': ['U'], 'v': ['B'], 'r': ['R', 'rp'],
+                                     'i': ['I', 'ip'], 'g': ['g', 'gp'],
+                                     'z': ['z', 'zs']},
+                       'ps1': {'g': ['V', 'gp'], 'r': ['R', 'rp'],
+                               'i': ['I', 'ip'], 'z': ['z', 'zp', 'zs'],
+                               'y': ['y']},
+                       'atlas': {'g': ['V', 'gp'], 'r': ['R', 'rp'],
+                                 'i': ['I', 'ip'], 'z': ['z', 'zp', 'zs']}}
+
+    @property
+    def cal_filter(self):
+        for f in self._filter_mapping[self.catalog_name]:
+            if self.filter in self._filter_mapping[self.catalog_name][f]:
+                return f
+        return None
+
+    def __init__(self, imgname, catalog,
+                 path=join(os.sep, 'Users', 'jyli', 'Work', 'Comet_2013A1',
+                                                'LCOGT', 'Data', 'Archive')):
+        """
+        imgname - str
+            The name of LCO image to be calibrated.  The image name has a
+            general format of (site)(tel)-(instr)-YYYYMMDD-(frame).
+        catalog : ['ps1', 'atlas', 'skymapper']
+            catalog to be used for calibration
+        path - str
+            Path to data file
+        """
+        self.file = imgname
+        self.path = path
+        catfile = join(self.path, self.file) + '-e91.fits'
+        pipeline = 'BANZAI'
+        if not isfile(catfile):
+            catfile = catfile+'.fz'
+        if not isfile(catfile):
+            catfile = join(self.path, self.file) + '-e90_cat.fits'
+            pipeline = 'ORAC'
+        if not isfile(catfile):
+            catfile = catfile+'.fz'
+        if not isfile(catfile):
+            print(catfile)
+            raise IOError("cat file not found")
+        self._catfile = catfile
+        self._pipeline = pipeline
+        if pipeline == 'BANZAI':
+            self.filter = fits.open(self._catfile)['sci'].header['filter']
+        else:
+            self.filter = fits.open(self._catfile)[0].header['filter']
+        self.catalog_name = catalog
+        if catalog == 'ps1':
+            self.catalog = cvc.PanSTARRS1
+        elif catalog == 'atlas':
+            self.catalog = cvc.RefCat2
+            from os import environ
+            environ['CASJOBS_USERID'] = 'jyli'
+            environ['CASJBOS_PW'] = 'Charac+ers12'
+        elif catalog == 'skymapper':
+            self.catalog = cvc.SkyMapper
+        self._fetch_database = True
+
+    def __call__(self):
+        if self._pipeline == 'BANZAI':
+            with fits.open(self._catfile) as hdu:
+                phot = jp.Table(hdu['cat'].data)
+                phot = phot[phot['FLAG'] == 0]
+                lco = SkyCoord(phot['RA'], phot['DEC'], unit='deg')
+                m_inst = -2.5 * np.log10(phot['FLUX'])
+                m_err = phot['FLUXERR'] / phot['FLUX'] * 1.0857
+        else:
+            with fits.open(self._catfile) as hdu:
+                phot = jp.Table(hdu[1].data)
+                phot = phot[phot['FLAGS'] == 0]
+                lco = SkyCoord(phot['ALPHA_J2000'], phot['DELTA_J2000'],
+                               unit='deg')
+                m_inst = -2.5 * np.log10(phot['FLUX_AUTO'])
+                m_err = phot['FLUXERR_AUTO'] / phot['FLUX_AUTO'] * 1.0857
+
+        cat = self.catalog(self.catalog_name+'_cat.db')
+        if self._fetch_database:
+            if len(cat.search(lco)[0]) < 500:
+                cat.fetch_field(lco)
+        self.zp_mean = 0.
+        self.zp_median = 0.
+        self.zp_uncertainty = 0.
+        self.cal_error = ''
+        self.cal_success = False
+        try:
+            match = cat.xmatch(lco)
+            if match is None:
+                self.cal_success = False
+                self.cal_error = 'No matching stars'
+            else:
+                objids, distances = match
+                zp_mean, zp_median, unc, m, gmi = cat.cal_constant(
+                    objids, m_inst, self.cal_filter)
+                self.cal_success = True
+                self.zp_mean = zp_mean
+                self.zp_median = zp_median
+                self.zp_uncertainty = unc
+                self._mag = {'m_inst': m_inst, 'm_cat': m}
+        except Exception as e:
+            self.cal_error = str(e)
+
+    def plot(self, ax=None, **kwargs):
+        """Plot calibration results
+
+        ax : `matplotlib.pyplot.Axes`
+            axis to plot
+        **kwargs : keyword arguments for `matplotlib.pyplot.scatter`
+        """
+        import matplotlib.pyplot as plt
+        if ax is None:
+            fig = plt.figure()
+            ax = fig.add_subplot(111)
+        color = kwargs.pop('color', 'k')
+        marker = kwargs.pop('marker', '.')
+        ax.scatter(self._mag['m_cat'], self._mag['m_cat']-self._mag['m_inst'],
+                color=color, marker=marker, label='_nolegend_', **kwargs)
+        ax.axhline(self.zp_mean)
+        ax.axhline(self.zp_median, ls='--')
+        ax.fill_between(np.sort(self._mag['m_cat']),
+                self.zp_mean-self.zp_uncertainty,
+                self.zp_mean+self.zp_uncertainty, color='k', alpha=0.2)
+        ax.set_xlabel('Catalog Magnitude')
+        ax.set_ylabel('Zero Point (mag)')
+        ax.legend(['Mean', 'Median'])
+        return ax
+
+def archive_image_name(imgid, fullpath=True):
+    """Return archive image name for given `imgid`
+
+    Searh order:
+    1. BANZAI calibration 'e91', non-compressed '.fits'
+    2. BANZAI calibration 'e91', compressed '.fits.fz'
+    3. ORAC calibration 'e90', non-compressed '.fits'
+    4. ORAC calibration 'e90', compressed '.fits.fz'
+    """
+    from os.path import join, sep, isfile, basename
+    datadir = join(sep, 'Users', 'jyli', 'Work', 'Comet_2013A1', 'LCOGT',
+                        'Data', 'Archive')
+
+    filenames = [join(datadir, imgid)+x for x in ['-e91.fits', '-e91.fits.fz', '-e90.fits', '-e90.fits.fz']]
+    for f in filenames:
+        if isfile(f):
+            if not fullpath:
+                f = basename(f)
+            return f
+    raise ValueError("data file for ID '{}' not found".format(imgid))
