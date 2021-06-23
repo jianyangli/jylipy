@@ -910,14 +910,14 @@ class DS9DisplayPar(dict):
             obj._len = len(obj['frame'])
         elif frame == 'current':
             obj['frame'] = ds9.get('frame')
-            obj._len = None
+            obj._len = 0
         else:
             if isinstance(frame, str) or (not hasattr(frame, '__iter__')):
                 obj['frame'] = np.array([frame])
             else:
                 obj['frame'] = np.array(frame)
             obj._len = len(obj['frame'])
-        if obj._len is None:
+        if obj._len == 0:
             for k in par_names:
                 obj[k] = getattr(ds9, k)
         else:
@@ -936,7 +936,7 @@ class DS9DisplayPar(dict):
                      (not hasattr(frame, '__iter__'))):
             for k, v in obj.items():
                 obj[k] = v[0]
-            obj._len = None
+            obj._len = 0
         return obj
 
     @classmethod
@@ -964,7 +964,7 @@ class DS9DisplayPar(dict):
         if len(indata) == 1:
             for k in obj.keys():
                 obj[k] = obj[k][0]
-            obj._len = None
+            obj._len = 0
         return obj
 
     @classmethod
@@ -989,14 +989,14 @@ class DS9DisplayPar(dict):
         """Convert parameters to an `astropy.table.Table`"""
         from astropy.table import Table, Column
         out = Table()
-        if len(self) is None:
+        if len(self) == 0:
             for k, v in self.items():
-                if hasattr(v, '__iter__'):
+                if (not isinstance(v, str)) and hasattr(v, '__iter__'):
                     for i in range(len(v)):
-                        c = Column(v[i], name=k+'_{}'.format(i))
+                        c = Column([v[i]], name=k+'_{}'.format(i))
                         out.add_column(c)
                 else:
-                    c = Column(v, name=k)
+                    c = Column([v], name=k)
                     out.add_column(c)
         else:
             for k, v in self.items():
