@@ -4,6 +4,7 @@ Image processing and analysis related classes and functions
 
 __all__ = ['Centroid', 'ImageSet', 'Background']
 
+import warnings
 import numpy as np
 from astropy.io import fits, ascii
 from astropy import nddata, table
@@ -182,6 +183,15 @@ class ImageSet():
             _index = np.r_[index]
         return _index
 
+    def to_table(self):
+        cols = []
+        for k in self.attr:
+            cols.append(table.Column(self._1d[k], name=k.strip('_')))
+        if self.file is not None:
+            cols.insert(0, table.Column(self._1d['file'], name='file'))
+        out = table.Table(cols)
+        return out
+
     def write(self, outfile, format=None, save_images=False, **kwargs):
         """Write centers to output file
 
@@ -222,12 +232,7 @@ class ImageSet():
         the output is an ASCII file, then the shape information of image
         set will be discarded and all data saved in flat arrays.
         """
-        cols = []
-        for k in self.attr:
-            cols.append(table.Column(self._1d[k], name=k.strip('_')))
-        if self.file is not None:
-            cols.insert(0, table.Column(self._1d['file'], name='file'))
-        out = table.Table(cols)
+        out = self.to_table()
         if format is None:
             format = ''
             from os.path import splitext
@@ -782,8 +787,7 @@ class Background(ImageSet):
                                     np.sqrt(par[2]**2 + par[1]*gain[i])
                 else:
                     # skip invalid region
-                    import warning
-                    warning.warn("invalide region skipped:\n  Image {}, "
+                    warnings.warn("invalide region skipped:\n  Image {}, "
                         "region ({} {} {} {})".format(self._1d['file'][i],
                             y1, x1, y2, x2))
 
