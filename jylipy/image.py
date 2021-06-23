@@ -831,6 +831,59 @@ class Background(ImageSet):
                 r.show(ds9)
 
 
+class CollectFITSHeaderInfo(ImageSet):
+    """Collect FITS header information
+
+    Class can be initialized with `fields` keyword that specify the FITS keyword
+    and corresponding FITS extension (number or name):
+
+    >>> fields = [('obs-date', 0), ('obs-time', 0), ('exptime', 0)]
+    >>> info = CollectFITSHeaderInfo(files, fields=fields)
+
+    Alternatively, for a specific type of image, a subclass can be defined to
+    pre-define the fields to be collected:
+
+    >>> class CollectObsParams(CollectFITSHeaderInfo):
+    >>>     fields = [('obs-date', 0), ('obs-time', 0), ('exptime', 0)]
+    >>>
+    >>> info = CollectObsParams()
+    """
+    def __init__(self, *args, fields=None, **kwargs):
+        """
+        fields : array like of (str, int or str)
+            Each element in the array specify the FITS header keyword to be
+            collected, and the extension number or name that contain this
+            keyword in the header.
+        """
+        if 'loader' in kwargs.keys():
+            warnings.warn("`loader` keyword is ignored.  Only FITS files "
+                         "are accepted")
+            _ = kwargs.pop('loader')
+        super().__init__(*args, **kwargs)
+        if fields is not None:
+            self.fields = fields
+        if not hasattr(self, 'fields'):
+            self.fields = None
+
+    def collect(self, verbose=True):
+        """Collect header information"""
+        if self.fields is None:
+            if verbose:
+                print('Fields not specified.  No information is collected.')
+            return
+        keys = ['_' + x[0] for x in self.fields]
+        self.attr.extend(keys)
+        for k in keys:
+            setattr(self, k, [])
+        for i in range(self._size):
+            with fits.open(self._1d['file'][i]) as f_:
+                for k, e in self.fields:
+                    getattr(self, '_'+k).append(f_[e].header[k])
+        for k in keys:
+            setattr(self, k, np.array(getattr(self, k)))
+        self._generate_flat_views()
+
+
 def centroid(im, center=None, error=None, mask=None, method=0, box=6,
         tol=0.01, maxiter=50, threshold=None, verbose=False):
     """Wrapper for photutils.centroiding functions
