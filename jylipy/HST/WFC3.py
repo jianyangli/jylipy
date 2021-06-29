@@ -545,7 +545,7 @@ class AperturePhotometry(ImageSet):
         optional_keys = ['bin', 'background', 'background_error']
         for k in optional_keys:
             if k not in keys:
-                warn('`{}` is not provided.')
+                warn('`{}` is not provided.'.format(k))
         super().__init__(*args, **kwargs)
 
     def apphot(self, aperture, photcal=False, **photcal_kwargs):
@@ -614,21 +614,13 @@ class AperturePhotometry(ImageSet):
         if not hasattr(self, 'countrate'):
             raise ValueError('count rate not available.')
         filter_table = load_filter()
-        photflam = []
-        vegamag = []
-        stmag = []
-        abmag = []
-        for i, x in enumerate(self._1d['_filter']):
-            w = x == filter_table['Filter']
-            row = filter_table[w]
-            photflam.append(row['PHOTFLAM'])
-            vegamag.append(row['VEGAmag'])
-            stmag.append(row['STmag'])
-            abmag.append(row['ABmag'])
-        photflam = np.reshape(np.squeeze(photflam), self._shape)
-        vegamag = np.reshape(np.squeeze(vegamag), self._shape)
-        stmag = np.reshape(np.squeeze(stmag), self._shape)
-        abmag = np.reshape(np.squeeze(abmag), self._shape)
+        index = [np.where(filter_table['Filter'] == x) for x in \
+                self._1d['_filter']]
+        par_tbl = filter_table[index]
+        photflam = np.squeeze(par_tbl['PHOTFLAM']) / u.Unit('electron/s')
+        vegamag = np.squeeze(par_tbl['VEGAmag'])
+        stmag = np.squeeze(par_tbl['STmag'])
+        abmag = np.squeeze(par_tbl['ABmag'])
         self.flux = np.moveaxis(np.moveaxis(self.countrate, -1, 0) * photflam,
                                 0, -1)
         self.mag = -2.5 * np.log10(self.countrate.value) * u.mag
@@ -786,18 +778,29 @@ class AperturePhotometry(ImageSet):
 
     @classmethod
     def from_fits(cls, infile, loader=None):
-        obj = cls('', xc=0, yc=0, uvis_aper=0, filter=0, exptime=0)
+        kwargs_dummy = dict(xc=0, yc=0, uvis_aper=0, filter=0, exptime=0, bin=0,
+                background=0, background_error=0)
+        obj = cls('', **kwargs_dummy)
         obj.read(infile)
         obj.loader = loader
         return obj
 
-    def explode(self, outfile, overwrite=True):
-        """Separate photometry by filters
+    def explode(self, by, outfile, overwrite=True):
+        """Separate photometry by specified keys
+
+        Parameters
+        ----------
+        by : str
+            The parameter name used to separate photometry
+        outfile : str
+            Rootname of output file.
+        overwrite : bool, optional
+            Overwrite existing files.
         """
         from os.path import splitext
-        flts = np.unique(self._filter)
-        flds = ['countrate', 'flux', 'mag', 'VEGAmag', 'STmag', 'ABmag',
-                'countrate_error', 'flux_error', 'mag_error']
+        flts = np.unique(getattr(self, '_'+by))
+        measured_flds = ['countrate', 'flux', 'mag', 'VEGAmag', 'STmag',
+                'ABmag', 'countrate_error', 'flux_error', 'mag_error']
         rootname, ext = splitext(outfile)
         for f in flts:
             ww = self._1d['_filter'] == f
@@ -807,7 +810,7 @@ class AperturePhotometry(ImageSet):
             ap = AperturePhotometry(self._1d['file'][ww], **kwargs)
             if hasattr(self, 'aperture'):
                 ap.aperture = self.aperture
-            for x in flds:
+            for x in measured_flds:
                 if hasattr(self, x):
                     setattr(ap, x, getattr(self, x)[ww])
             ap.write(rootname+'_'+f+ext, overwrite=overwrite)
