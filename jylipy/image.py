@@ -2,7 +2,8 @@
 Image processing and analysis related classes and functions
 """
 
-__all__ = ['Centroid', 'ImageSet', 'Background']
+__all__ = ['Centroid', 'ImageSet', 'Background', 'CollectFITSHeaderInfo',
+           'centroid']
 
 import warnings
 import numpy as np
