@@ -182,6 +182,11 @@ class TextRegion(Region):
     _shape = 'text'
 
 
+class ProjectionRegion(Region):
+    parname = ('x1', 'y1', 'x2', 'y2', 'width')
+    _shape = 'projection'
+
+
 class PointRegion(Region):
     """DS9 point region group"""
     def __init__(self, *args, **kwargs):
