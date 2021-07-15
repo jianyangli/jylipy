@@ -229,6 +229,21 @@ class BoxCirclePointRegion(PointRegion):
 class RegionList(list):
     """Region list class"""
 
+    _mapping = {'circle': CircularRegion,
+                'ellipse': EllipseRegion,
+                'box': BoxRegion,
+                'annulus': AnnulusRegion,
+                'vector': VectorRegion,
+                'text': TextRegion,
+                'projection': ProjectionRegion,
+                'x_point': XPointRegion,
+                'circle_point': CirclePointRegion,
+                'box_point': BoxPointRegion,
+                'diamond_point': DiamondPointRegion,
+                'cross_point': CrossPointRegion,
+                'arrow_point': ArrowPointRegion,
+                'boxcircle_point': BoxCirclePointRegion}
+
     @classmethod
     def from_ds9(cls, d, frame=None, system='image'):
         """Return a list of region objects from DS9 window
@@ -272,25 +287,35 @@ class RegionList(list):
                 spec = obj.global_specs.copy()
                 spec['ds9'] = d
                 s = s.split('#')
+                if s[0] == '':
+                    s = s[1].strip().split(')')
+                    s[0] = s[0] + ')'
+                    if s[1] == '':
+                        _ = s.pop()
+                shape, par = s[0].strip().split('(')
+                par = eval('(' + par)
                 if len(s) > 1:
-                    for sp in s[1].strip().split(' '):
+                    s = s[1].strip()
+                    if s.find('font') == -1:
+                        s = s.split(' ')
+                    else:
+                        t = s.split('"')
+                        t[0] = t[0].replace('font=', '')
+                        s = t[0].strip().split(' ') + t[2].strip().split(' ') + ['font="'+t[1]+'"']
+                    for sp in s:
+                        #print(sp)
                         k, v = sp.split('=')
                         spec[k] = v
-                s = s[0].split('(')
-                if s[0] == 'circle':
-                    par = eval('('+s[1])
-                    obj.append(CircularRegion(*par, **spec))
-                elif s[0] == 'ellipse':
-                    par = eval('('+s[1])
-                    obj.append(EllipseRegion(*par, **spec))
-                elif s[0] == 'box':
-                    par = eval('('+s[1])
-                    obj.append(BoxRegion(*par, **spec))
-                elif s[0] == 'annulus':
-                    par = eval('('+s[1])
-                    obj.append(AnnulusRegion(*par, **spec))
+                    #if 'text' in spec.keys():
+                    #    spec['text'] = spec['text'].strip('{').strip('}')
+                if shape == 'point':
+                    shape = spec['point'] + '_' + 'point'
+                    _ = spec.pop('point')
+                if shape in obj._mapping:
+                    obj.append(obj._mapping[shape](*par, **spec))
                 else:
-                    obj.append('('.join(s))
+                    obj.append('{} {} {}'.format(shape, str(par), str(spec)))
+                #print()
         return obj
 
     def show(self, **kwargs):
