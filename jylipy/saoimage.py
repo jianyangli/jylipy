@@ -81,7 +81,7 @@ class Region(object):
             par.append(self.__dict__[k])
         return str(self.shape)+str(tuple(par))
 
-    def show(self, ds9=None, frame=None):
+    def show(self, ds9=None, frame=None, print_cmd=False):
         if ds9 is None:
             ds9 = self.ds9
         if ds9 is None:
@@ -103,8 +103,12 @@ class Region(object):
             vstr = '"'+str(v)+'"' if isinstance(v, (str, bytes)) else str(v)
             propstr = propstr + ' {}={}'.format(k, vstr)
         propstr = '#'+propstr
-        ds9.set('regions', 'image; {} {} {}'.format(self.shape,
-                ' '.join(str(par)[1:-1].split(',')), propstr))
+        cmdstr = 'image; {} {} {}'.format(self.shape,
+                ' '.join(str(par)[1:-1].split(',')), propstr)
+        if print_cmd:
+            print("ds9.set('regions', '{}')".format(cmdstr))
+        else:
+            ds9.set('regions', cmdstr)
 
 
 class CircularRegion(Region):
