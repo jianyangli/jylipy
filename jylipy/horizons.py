@@ -219,7 +219,7 @@ def getsbspk(name, start, stop, outfile, recno=None, overwrite=False, verbose=Tr
                     tn.write((str(recs[n])+'\n').encode('ascii'))
                     ret = tn.read_until(b'<cr>:')
                     ret = ret[ret.find(b'**'):ret.rfind(b'**')]
-                    if ret[:160].lower().find(nms[n].lower()) < 0:
+                    if ret[:160].lower().find(nms[n].lower().encode()) < 0:
                         print((nms[n]+': Error: Object not found.  Skipped.'))
                         n += 1
                         if n == len(nms):
