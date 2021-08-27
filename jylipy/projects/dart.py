@@ -58,14 +58,16 @@ class ScalingLaw():
     """
 
     def __init__(self, mu, nu, H1=None, H2=None, impactor=None, target=None, \
-                               p=None, n1=None, n2=None, C1=None, k=None, regime=None):
+                               p=None, n1=None, n2=None, C1=None, k=None, \
+                               regime=None):
         """
         H, mu, nu : number
-          scaling law parameters
+            scaling law parameters
         impactor : Impactor class object
         target : Target class object
         p, n1, n2, C1, k : number
-          Other scaling constants based on the definition in Housen & Holsapple (2011).
+            Other scaling constants based on the definition in Housen &
+            Holsapple (2011).
         """
         self.mu = mu
         self.nu = nu
@@ -108,13 +110,16 @@ class ScalingLaw():
     def regime(self):
         """Cratering regime, gravity or strength"""
         if self._regime is None:
-            if (self.impactor is None) or (self.target is None) or (self.H1 is None) \
-                or (self.H2 is None) or (self.mu is None) or (self.nu is None):
+            if (self.impactor is None) or (self.target is None) \
+                    or (self.H1 is None) or (self.H2 is None) \
+                    or (self.mu is None) or (self.nu is None):
                 return 'unknown'
-            grav = self.target.g * self.impactor.a / (self.impactor.U * self.impactor.U)
-            strg = (self.H1 / self.H2)**((2+self.mu)/self.mu) * \
-                   self.density_ratio**self.nu * \
-                   (self.target.Y / (self.target.rho * self.impactor.U * self.impactor.U))**((2+self.mu)/2)
+            grav = self.target.g * self.impactor.a \
+                                        / (self.impactor.U * self.impactor.U)
+            strg = (self.H1 / self.H2)**((2+self.mu)/self.mu) \
+                    * self.density_ratio**self.nu \
+                    * (self.target.Y / (self.target.rho * self.impactor.U \
+                        * self.impactor.U))**((2+self.mu)/2)
             if grav > strg:
                 return 'gravity'
             else:
@@ -129,21 +134,24 @@ class ScalingLaw():
         if (self.p is None) or (self.n2 is None) or (self.C1 is None):
             return np.nan
         w = x/self.impactor.a
-        return (self.C1 * (w * self.density_ratio**self.nu)**(-1/self.mu) * (1 - x/(self.n2*self.R))**self.p).decompose() * self.impactor.U
+        return (self.C1 * (w * self.density_ratio**self.nu)**(-1/self.mu) \
+            * (1 - x/(self.n2*self.R))**self.p).decompose() * self.impactor.U
 
     @property
     def R_gravity(self):
         """Gravity dominated impact crater radius"""
         e1 = (2 + self.mu - 6*self.nu) / (3 * (2 + self.mu))
         e2 = -self.mu / (2 + self.mu)
-        return (self.H1 * self.density_ratio**e1 * self.gravity_parameter**e2 / self.rho_over_m).decompose()
+        return (self.H1 * self.density_ratio**e1 * self.gravity_parameter**e2 \
+                / self.rho_over_m).decompose()
 
     @property
     def R_strength(self):
         """Strength dominated impact crater radius"""
         e1 = (1 - 3*self.nu)/3
         e2 = -self.mu/2
-        return (self.H2 * self.density_ratio**e1 * self.strength_parameter**e2 / self.rho_over_m).decompose()
+        return (self.H2 * self.density_ratio**e1 * self.strength_parameter**e2 \
+                / self.rho_over_m).decompose()
 
     @property
     def R(self):
@@ -159,12 +167,15 @@ class ScalingLaw():
         """Mass ejected from within x"""
         if (self.k is None) or (self.n1 is None):
             return np.nan
-        return (3 * self.k / (4 * np.pi) * self.density_ratio * ((x/self.impactor.a)**3 - self.n1**3) * self.impactor.m).decompose()
+        return (3 * self.k / (4 * np.pi) * self.density_ratio \
+            * ((x/self.impactor.a)**3 - self.n1**3) \
+            * self.impactor.m).decompose()
 
     @property
     def M_total(self):
         """Total ejected mass"""
-        return 3*self.k*self.impactor.m/(4*np.pi)*self.density_ratio*((self.n2*self.R/self.impactor.a)**3-self.n1**3)
+        return 3 * self.k * self.impactor.m / (4*np.pi) * self.density_ratio \
+            *((self.n2*self.R/self.impactor.a)**3-self.n1**3)
 
 
 class SFDModel():
@@ -173,7 +184,8 @@ class SFDModel():
     Model assumes an exponental SFD: n(r) = N * (r/r0)**(-alpha).
     Parameters of the model:
         alpha : exponent, dimensionless
-        N : normalization constant, number density for dr at radius `r0`, in unit 1/u.m
+        N : normalization constant, number density for dr at radius `r0`,
+            in unit 1/u.m
         r0 : characteristic radius, in unit u.m
     """
 
@@ -186,9 +198,14 @@ class SFDModel():
         self.N = N
         self.r0 = r0
         self.rho = rho
-        self.cumulative = lambda r: self.N * self.r0 / -self.cumulative_alpha * (r/self.r0)**(-self.cumulative_alpha)
-        self.cumulative_mass = lambda r: self.N * self.r0 * self.m0 / -self.mass_cumulative_alpha * (r/self.r0)**(-self.mass_cumulative_alpha)
-        self.cumulative_area = lambda r: self.N * self.r0 * self.a0 / -self.area_cumulative_alpha * (r/self.r0)**(-self.area_cumulative_alpha)
+        self.cumulative = lambda r: self.N * self.r0 / -self.cumulative_alpha \
+            * (r/self.r0)**(-self.cumulative_alpha)
+        self.cumulative_mass = lambda r: self.N * self.r0 * self.m0 \
+            / -self.mass_cumulative_alpha \
+            * (r/self.r0)**(-self.mass_cumulative_alpha)
+        self.cumulative_area = lambda r: self.N * self.r0 * self.a0 \
+            / -self.area_cumulative_alpha \
+            * (r/self.r0)**(-self.area_cumulative_alpha)
 
     @u.quantity_input(r=u.m)
     def __call__(self, r):
@@ -262,10 +279,12 @@ class SFDModel():
 
     @u.quantity_input(r1=u.m, r2=u.m)
     def area_mass_ratio(self, r1, r2):
-        #return self.a0*self.r0/self.m0*self.mass_cumulative_alpha/self.area_cumulative_alpha * \
-        #        (r1**(-self.area_cumulative_alpha) - r2**(-self.area_cumulative_alpha)) / (r1**(-self.mass_cumulative_alpha) - r2**(-self.mass_cumulative_alpha))
-        return 3/4/self.rho*self.mass_cumulative_alpha/self.area_cumulative_alpha * \
-                (r1**(-self.area_cumulative_alpha) - r2**(-self.area_cumulative_alpha)) / (r1**(-self.mass_cumulative_alpha) - r2**(-self.mass_cumulative_alpha))
+        return 0.75 * self.mass_cumulative_alpha \
+                * (r1**(-self.area_cumulative_alpha) \
+                                    - r2**(-self.area_cumulative_alpha)) \
+                / (self.rho * self.area_cumulative_alpha \
+                            * (r1**(-self.mass_cumulative_alpha) \
+                                    - r2**(-self.mass_cumulative_alpha)))
 
 
 class Didymos():
