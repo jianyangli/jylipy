@@ -2473,7 +2473,7 @@ class PhotometricModelFitter(object):
                 self.fitted.append(True)
             return self.model
 
-    def plot(self, index=None):
+    def plot(self, index=None, figsize=((6, 8), (6,6))):
         if hasattr(self.model, '__iter__'):
             if index is None:
                 raise ValueError('Index is not specified.')
@@ -2490,14 +2490,14 @@ class PhotometricModelFitter(object):
         from matplotlib import pyplot as plt
         ratio = data/fit
         figs = []
-        figs.append(plt.figure(100))
+        figs.append(plt.figure(100, figsize=figsize[0]))
         plt.clf()
         f, ax = plt.subplots(3, 1, num=100)
         for i, v, xlbl in zip(list(range(3)), [self.data.inc.value, self.data.emi.value, self.data.pha.value], ['Incidence', 'Emission', 'Phase']):
             ax[i].plot(v, ratio, 'o')
             ax[i].hlines(1, v.min(), v.max())
             pplot(ax[i], xlabel=xlbl+' ('+str(self.data.inc.unit)+')', ylabel='Measured/Modeled')
-        figs.append(plt.figure(101))
+        figs.append(plt.figure(101, figsize=figsize[1]))
         plt.clf()
         plt.plot(data, fit, 'o')
         tmp1 = data
