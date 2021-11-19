@@ -98,19 +98,19 @@ class ScatteringGeometry(object):
             self._unit = kwargs.pop('unit')
             par = set(kwargs.keys())
             if set('inc emi pha'.split()) == par:
-                data = [np.asarray(kwargs['inc'], dtype='f4'),
-                        np.asarray(kwargs['emi'], dtype='f4'),
-                        np.asarray(kwargs['pha'], dtype='f4')]
+                data = [np.asanyarray(kwargs['inc'], dtype='f4'),
+                        np.asanyarray(kwargs['emi'], dtype='f4'),
+                        np.asanyarray(kwargs['pha'], dtype='f4')]
                 names = 'inc emi pha'.split()
             elif set('inc emi psi'.split()) == par:
-                data = [np.asarray(kwargs['inc'], dtype='f4'),
-                        np.asarray(kwargs['emi'], dtype='f4'),
-                        np.asarray(kwargs['psi'], dtype='f4')]
+                data = [np.asanyarray(kwargs['inc'], dtype='f4'),
+                        np.asanyarray(kwargs['emi'], dtype='f4'),
+                        np.asanyarray(kwargs['psi'], dtype='f4')]
                 names = 'inc emi psi'.split()
             elif set('pha lat lon'.split()) == par:
-                data = [np.asarray(kwargs['pha'], dtype='f4'),
-                        np.asarray(kwargs['lat'], dtype='f4'),
-                        np.asarray(kwargs['lon'], dtype='f4')]
+                data = [np.asanyarray(kwargs['pha'], dtype='f4'),
+                        np.asanyarray(kwargs['lat'], dtype='f4'),
+                        np.asanyarray(kwargs['lon'], dtype='f4')]
                 names = 'pha lat lon'.split()
             else:
                 raise GeometryError('Scattering geometry combination not recognized.')
@@ -789,25 +789,25 @@ class PhotometricData(object):
             # collect reflectance data
             keys = list(kwargs.keys())
             if 'bdr' in keys:
-                self._data = Table([np.asarray(kwargs['bdr'], dtype='f4')],
+                self._data = Table([np.asanyarray(kwargs['bdr'], dtype='f4')],
                         names=['BDR'])
             elif 'r' in keys:
-                self._data = Table([np.asarray(kwargs['r'], dtype='f4')],
+                self._data = Table([np.asanyarray(kwargs['r'], dtype='f4')],
                         names=['BDR'])
             elif 'iof' in keys:
-                self._data = Table([np.asarray(kwargs['iof'], dtype='f4')],
+                self._data = Table([np.asanyarray(kwargs['iof'], dtype='f4')],
                         names=['RADF'])
             elif 'i/f' in keys:
-                self._data = Table([np.asarray(kwargs['i/f'], dtype='f4')],
+                self._data = Table([np.asanyarray(kwargs['i/f'], dtype='f4')],
                         names=['RADF'])
             elif 'radf' in keys:
-                self._data = Table([np.asarray(kwargs['radf'], dtype='f4')],
+                self._data = Table([np.asanyarray(kwargs['radf'], dtype='f4')],
                         names=['RADF'])
             elif 'brdf' in keys:
-                self._data = Table([np.asarray(kwargs['brdf'], dtype='f4')],
+                self._data = Table([np.asanyarray(kwargs['brdf'], dtype='f4')],
                         names=['BRDF'])
             elif 'reff' in keys:
-                self._data = Table([np.asarray(kwargs['reff'], dtype='f4')],
+                self._data = Table([np.asanyarray(kwargs['reff'], dtype='f4')],
                         names=['REFF'])
             else:
                 raise ValueError('No reflectance data found.')
