@@ -56,19 +56,26 @@ class RegionalData:
     def n_roi(self):
         return len(self.roi_tags)
 
+    def _output_filename(self, filter, roi, ext='fits', binned=False):
+        base = self.outfile.format(filter, roi)
+        name, _ = splitext(base)
+        if binned:
+            name = name + '_binned'
+        return '.'.join([name, ext])
+
     def phodata_extract(self, overwrite=False):
         """Extract photometric data"""
 
         files = np.array(glob(self.datadir+'*.cub'))
         get_filter = lambda f: splitext(basename(f))[0][-3:-1]
         filters = np.array([get_filter(f) for f in files])
-        filter_list = np.unique(filters)
+        self.filter_list = np.unique(filters)
 
         load_generic_kernels()
         spice.furnsh(self.ceres_spk)
 
         # loop through filters
-        for flt in filter_list:
+        for flt in self.filter_list:
             print(' '*80, end='\r')
             print('filter : {}'.format(flt), end='')
             ff = files[filters == flt]  # files of filter 'flt'
@@ -134,27 +141,44 @@ class RegionalData:
                 lon_ = np.concatenate(lon[i])
                 phodata = PhotometricData(iof=iof_, inc=inc_, emi=emi_,
                         pha=pha_, geolat=lat_, geolon=lon_)
-                phodata.write(self.outfile.format(flt, i+1),
+                phodata.write(self._output_filename(flt, i+1),
                         overwrite=overwrite)
 
         spice.kclear()
 
     def plot_coverage(self, filter, savefig=False):
         """Plot ROI coverage of data"""
-        phofiles = [self.outfile.format(filter, i+1) for i in range(self.n_roi)]
+        phofiles = [self._output_filename(filter, i+1) for i in
+                range(self.n_roi)]
         pho = [PhotometricData(f) for f in phofiles]
         plt.figure(num=plt.gcf().number)
         for p in pho:
             plt.plot(p.geolon, p.geolat, '.', ms=1)
         if savefig:
-            plt.savefig(self.outfile.format(filter, '').replace('.fits',
-                    '.png'))
+            plt.savefig(self._output_filename(filter, '', 'png'))
 
     def plot_phodata(self, filter, roi, savefig=False):
         """Plot photometric data for specified filter and ROI"""
-        pho = PhotometricData(self.outfile.format(filter, roi))
+        pho = PhotometricData(self._output_filename(filter, roi))
         pho.plot()
         if savefig:
-            plt.savefig(self.outfile.format(filter, roi).replace('.fits',
-                    '.png'))
+            plt.savefig(self._output_filename(filter, roi, 'png'))
 
+    def binning(self, bins, filter=None, roi=None, overwrite=False):
+        if filter is None:
+            filter = self.filter_list
+        if isinstance(filter, str) or (not hasattr(filter, '__iter__')):
+            filter = [filter]
+        if roi is None:
+            roi = range(1, self.n_roi+1)
+        if not hasattr(roi, '__iter__'):
+            roi = [roi]
+        for flt in filter:
+            print('filter {}:'.format(flt))
+            for ii in roi:
+                print(' '*80, end='\r')
+                print('  roi: {}'.format(ii), end='\r')
+                pho = PhotometricData(self._output_filename(flt, ii))
+                phob = pho.bin(bins=bins)
+                phob.write(self._output_filename(flt, ii, binned=True),
+                        overwrite=overwrite)
