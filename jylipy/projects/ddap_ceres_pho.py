@@ -106,7 +106,7 @@ class RegionalData:
                 st, lt = spice.spkezr('sun', et, 'j2000', 'lt+s', 'ceres')
                 rh = np.sqrt(st[0]*st[0] + st[1]*st[1] + st[2]*st[2]) * \
                         u.km.to('au')
-                data[0] = data[0] * rh * rh / self.iofcal[flt]
+                data[0] = data[0] * rh * rh * np.pi / self.iofcal[flt]
                 # prepare mask
                 maskfile = self.maskdir + self.mask_sfx + basename(f)
                 if not isfile(maskfile):
