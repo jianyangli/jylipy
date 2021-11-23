@@ -527,15 +527,15 @@ class FCImage(Image):
 
     def _init_from_pdsdata(self, inputfile):
         pdsdata = PDS.PDSData(inputfile)
-        data = pdsdata.image
+        data = pdsdata.IMAGE
         header = pdsdata.header
-        header.update(data.header)
+        #header.update(data.header)
         super(FCImage, self).__init__(data, meta=header)
         if self.unit == 'adu':  # if Level 1a data, add uncertainty plane
             self.uncertainty = ccdproc.create_deviation(self, gain=FC2.gain, readnoise=FC2.readnoise).uncertainty
             self.meta['create_deviation'] = 'ccd_data=<FCImage>, readnoise={0}, gain={1}'.format(FC2.readnoise, FC2.gain)
-        else:  # If level 1b or 1c, add 'flux_cal' key to the header
-            self.header['flux_cal'] = 'MPS'
+        #else:  # If level 1b or 1c, add 'flux_cal' key to the header
+        #    self.header['flux_cal'] = 'MPS'
         if len(pdsdata.records) > 1:
             self.records = pdsdata.records[1:]
             for k in self.records:
