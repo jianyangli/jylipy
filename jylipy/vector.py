@@ -827,8 +827,8 @@ def rotm(phi, axis=2):
 
  Parameters
  ----------
- phi : floating point
-   Angle of rotation [deg]
+ phi : floating point, astropy.units.Quantity
+   Angle of rotation [rad]
  axis: integer 0, 1, or 2
    Axis of rotation.   0 for x-axis, 1 for y-axis, 2 for z-axis
 
@@ -845,6 +845,7 @@ def rotm(phi, axis=2):
      revision with astropy.units
     '''
 
+    phi = u.Quantity(phi, unit='rad').value
     cosphi = np.cos(phi)
     sinphi = np.sin(phi)
     m = np.matrix([[cosphi,sinphi,0],[-sinphi,cosphi,0],[0,0,1]])
