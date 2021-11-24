@@ -1621,14 +1621,7 @@ class EllipsoidProjection():
             p2 = p2.flatten()
             p3 = (np.moveaxis(vb.xyz, 0, -1)**2 * abc2).sum(axis=-1) - 1
             p3 = p3.flatten()
-            t = np.full_like(p1, np.nan)
-            for i in range(len(t)):
-                s = quadeq(p1[i], p2[i], p3[i])
-                if s is not None:
-                    if len(s) == 2:
-                        t[i] = s.max()
-                    else:
-                        t[i] = s[0]
+            t = quadeq(p1, p2, p3).max(axis=-1)
             w = np.isfinite(t)
             x = n.x * t[w] + vb.x.flatten()[w]
             y = n.y * t[w] + vb.y.flatten()[w]
