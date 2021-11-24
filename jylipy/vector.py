@@ -404,6 +404,50 @@ class Vector(np.ndarray):
             c1, c2, c3 = self.geo
         return Table((c1.flatten(), c2.flatten(), c3.flatten()), names=names)
 
+    def paraproj(self, los, pa=0, invert=False):
+        """Parallel projection to/from a new frame defined by line-of-sight.
+
+        When position angle (`pa`) is 0, the new frame has its z-axis
+        along the line-of-sight (`los`) direction and points to the
+        opposite direction (towards observer), y-axis is in plane defined
+        by the line-of-sight and the original z-axis, and x-axis completes
+        the right-hand system.  In this case, the original z-axis is
+        always projected to the up-direction (y-direction) in the new
+        x-y plane.
+
+        When position angle is none-zero, the new system rotates along
+        its z-axis clockwise by `pa`, such that the original z-axis is
+        projected to the new x-y plane to `pa` from up-direction towards
+        left (counter-clockwise).
+
+        Parameters
+        ----------
+        los : Vector instance, iterable that can initialize a Vector
+            Line-of-sight vector
+        pa : number, astropy.units.Quantity, optional
+            Position angle of the projected z-axis in the new x-y plane.
+            If a number, the default unit is degree.
+        invert : bool, optional
+            If `True`, then perform inverted projection from the frame
+            defined by line-of-sight to the original frame.
+
+        Return
+        ------
+        Vector : Projected or unprojected vector
+        """
+        los = Vector(los)
+        pa = u.Quantity(pa, unit='deg')
+        # Rotate along z-axis by sub-observer longitude
+        m1 = rotm(-los.lon - np.pi / 2, axis=2)
+        # Rotate along x-axis by sub-observer azimuth
+        m2 = rotm(-los.theta, axis=0)
+        # Rotate along z-axis by position angle
+        m3 = rotm(pa, axis=2)
+        if invert:
+            return VectRot(m1) * VectRot(m2) * VectRot(m3) * self
+        else:
+            return VectRot(m3.T) * VectRot(m2.T) * VectRot(m1.T) * self
+
     @staticmethod
     def _choose_type(ctype):
         if ctype in [0, 1, 2, 3]:
