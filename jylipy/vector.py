@@ -29,7 +29,8 @@ class Vector(np.ndarray):
     `axis` defines the three coordinate components of the array.  Default
     is the last axis.
 
-    If initialized with three arrays, then they must have the same shape.
+    If initialized with three arrays, then their shapes must satisfy
+    numpy broadcast rules.
 
     Keyword `type` defines the coordinate type of input components (if
     string, then not type sensitive):
@@ -79,15 +80,16 @@ class Vector(np.ndarray):
       Bug fix in .__str__() and .reshape()
     '''
 
-    _types = ({'code': ('cartesian', 'car'), 'colnames': 'x y z'.split()}, \
-              {'code': ('spherical', 'sph'), 'colnames': 'r theta phi'.split()}, \
-              {'code': ('cylindrical', 'cyl'), 'colnames': 'rho phi z'.split()}, \
+    _types = ({'code': ('cartesian', 'car'), 'colnames': 'x y z'.split()},
+              {'code': ('spherical', 'sph'), 'colnames': 'r theta phi'.split()},
+              {'code': ('cylindrical', 'cyl'), 'colnames': 'rho phi z'.split()},
               {'code': ('geographic', 'geo'), 'colnames': 'r lat lon'.split()})
 
     def __new__(cls, *var, **kwargs):
 
         if len(var) not in [1,3]:
-            raise TypeError('{0} takes either 1 argument or 3 arguments ({1} given)'.format(cls, len(var)))
+            raise TypeError('{} takes either 1 argument or 3 arguments ({}'
+                    ' given)'.format(cls, len(var)))
 
         axis = kwargs.pop('axis', -1)
         ctype = kwargs.pop('type', 0)
@@ -104,7 +106,8 @@ class Vector(np.ndarray):
             if base.ndim == 1:
                 base = np.asarray(base)
             elif base.shape[axis] != 3:
-                raise ValueError('the length of input array along axis {0} must be 3, length {1} received'.format(axis, base.shape[axis]))
+                raise ValueError('the length of input array along axis {0} must'
+                    ' be 3, length {1} received'.format(axis, base.shape[axis]))
             else:
                 base = np.rollaxis(base, axis)
             b1, b2, b3 = base
@@ -115,11 +118,17 @@ class Vector(np.ndarray):
             b1 = np.asarray(b1)
             b2 = np.asarray(b2)
             b3 = np.asarray(b3)
-            l1 = np.shape(b1)
-            l2 = np.shape(b2)
-            l3 = np.shape(b3)
-            if (l1 != l2) | (l1 != l3):
-                raise ValueError('three arrays must have the same shape')
+            shapes = [b1.shape, b2.shape, b3.shape]
+            nds = [b1.ndim, b2.ndim, b3.ndim]
+            dmax = np.argmax(nds)
+            unity = np.ones(shapes[np.argmax(nds)])
+            try:
+                b1 = b1 * unity
+                b2 = b2 * unity
+                b3 = b3 * unity
+            except ValueError:
+                raise ValueError('incompatible shapes of three coordinates {}, '
+                        '{}, {}'.format(shapes[0], shapes[1], shapes[2]))
 
         # convert to (x,y,z) if needed
         typecode = cls._choose_type(ctype)
@@ -139,7 +148,7 @@ class Vector(np.ndarray):
             b1, b2, b3 = cls.geo2xyz(b1, b2, b3)
 
         # generate object
-        data = np.asarray([b1,b2,b3])
+        data = np.asarray([b1, b2, b3])
         data = np.rollaxis(data, 0, data.ndim)
         obj = data.view(Vector)
         obj.coordinate = kwargs.pop('coordinate', None)
@@ -154,7 +163,7 @@ class Vector(np.ndarray):
         '''The multiplication operand applies scaling of vectors.  For
         dot product or cross product, use `.dot` or `.cross` instead.
         '''
-        arr1 = np.rollaxis(self.view(np.ndarray),-1)
+        arr1 = np.rollaxis(self.view(np.ndarray), -1)
         arr2 = np.asarray(other)
         return Vector(arr1*arr2, axis=0)
 
@@ -163,7 +172,7 @@ class Vector(np.ndarray):
         return self.__mul__(other)
 
     def __eq__(self, other):
-        comp = self.view(np.ndarray)==np.asarray(other)
+        comp = self.view(np.ndarray) == np.asarray(other)
         if isinstance(comp, np.ndarray):
             comp = comp.all(axis=-1)
         return comp
@@ -191,7 +200,7 @@ class Vector(np.ndarray):
     def __repr__(self):
         d = self.view(np.ndarray)
         d = np.rollaxis(d, -1)
-        return d.__repr__().replace('array','Vector')
+        return d.__repr__().replace('array', 'Vector')
 
     def __len__(self):
         if self.shape == ():
@@ -201,30 +210,34 @@ class Vector(np.ndarray):
 
     @property
     def ndim(self):
-        return self.view(np.ndarray).ndim-1
+        return self.view(np.ndarray).ndim - 1
 
     @property
     def shape(self):
         return self.view(np.ndarray).shape[:-1]
 
     @property
+    def size(self):
+        return self.view(np.ndarray).size // 3
+
+    @property
     def x(self):
         '''Cartesian x in 1-D array'''
-        return np.rollaxis(self.view(np.ndarray),-1,0)[0]
+        return np.moveaxis(self.view(np.ndarray), -1, 0)[0]
 
     @property
     def y(self):
         '''Cartesian y in 1-D array'''
-        return np.rollaxis(self.view(np.ndarray),-1,0)[1]
+        return np.moveaxis(self.view(np.ndarray), -1, 0)[1]
 
     @property
     def z(self):
         '''Cartesian z in 1-D array'''
-        return np.rollaxis(self.view(np.ndarray),-1,0)[2]
+        return np.moveaxis(self.view(np.ndarray), -1, 0)[2]
 
     @property
     def xyz(self):
-        return np.rollaxis(self.view(np.ndarray),-1,0)
+        return np.moveaxis(self.view(np.ndarray), -1, 0)
 
     @property
     def r(self):
@@ -241,7 +254,7 @@ class Vector(np.ndarray):
     def phi(self):
         '''Spherical phi (radiance) in 1-D array
         0 <= phi < 2 pi'''
-        return np.arctan2(self.y, self.x) % (2*np.pi)
+        return np.arctan2(self.y, self.x) % (2 * np.pi)
 
     @property
     def sph(self):
@@ -268,7 +281,7 @@ class Vector(np.ndarray):
     @property
     def rho(self):
         '''Cylindrical rho in 1-D array'''
-        return np.sqrt(self.x*self.x+self.y*self.y)
+        return np.sqrt(self.x * self.x + self.y * self.y)
 
     @property
     def cyl(self):
@@ -282,7 +295,8 @@ class Vector(np.ndarray):
             raise TypeError('`order` must be an integer type.')
         if order < 1:
             raise ValueError('`order` must be a positive integer.')
-        return (np.abs(self.x)**order+np.abs(self.y)**order+np.abs(self.z)**order)**(1./order)
+        return (np.abs(self.x)**order + np.abs(self.y)**order + \
+                np.abs(self.z)**order)**(1. / order)
 
     def dot(self, other):
         '''dot product with another vector
@@ -293,7 +307,7 @@ class Vector(np.ndarray):
         '''
         if not isinstance(other, Vector):
             other = Vector(other)
-        return (self.view(np.ndarray)*other.view(np.ndarray)).sum(axis=-1)
+        return (self.view(np.ndarray) * other.view(np.ndarray)).sum(axis=-1)
 
     def cross(self, other):
         '''cross product with other vector(s)
@@ -303,17 +317,17 @@ class Vector(np.ndarray):
         broadcast rules'''
         if not isinstance(other, Vector):
             other = Vector(other)
-        x = self.y*other.z-self.z*other.y
-        y = self.z*other.x-self.x*other.z
-        z = self.x*other.y-self.y*other.x
+        x = self.y * other.z - self.z * other.y
+        y = self.z * other.x - self.x * other.z
+        z = self.x * other.y - self.y * other.x
         return Vector(x, y, z)
 
     def reshape(self, *var):
-        if isinstance(var[0],tuple):
-            var = (3,)+var[0]
+        if isinstance(var[0], tuple):
+            var = (3,) + var[0]
         else:
-            var = (3,)+var
-        v = np.rollaxis(self.view(np.ndarray),-1)
+            var = (3,) + var
+        v = np.rollaxis(self.view(np.ndarray), -1)
         v = v.reshape(*var)
         return Vector(v, axis=0)
 
@@ -326,10 +340,10 @@ class Vector(np.ndarray):
         '''
         if not isinstance(v2, Vector):
             v2 = Vector(v2, axis=axis, type=type)
-        angle = np.arccos(self.dot(v2)/(self.norm()*v2.norm()))
+        angle = np.arccos(self.dot(v2) / (self.norm() * v2.norm()))
         if directional:
-            pi2 = np.pi*2
-            zcomp = self.x*v2.y - self.y*v2.x
+            pi2 = np.pi * 2
+            zcomp = self.x * v2.y - self.y * v2.x
             wz = zcomp < 0
             if angle[wz].size > 0:
                 if hasattr(angle, '__iter__'):
@@ -338,20 +352,20 @@ class Vector(np.ndarray):
                     angle = pi2 - angle
             wz = zcomp == 0
             if angle[wz].size > 0:
-                xcomp = self.y*v2.z - self.z*v2.y
+                xcomp = self.y * v2.z - self.z * v2.y
                 wx = xcomp < 0
-                if angle[wz&wx].size > 0:
+                if angle[wz & wx].size > 0:
                     if hasattr(angle, '__iter__'):
-                        angle[wz&wx] = pi2 - angle[wx&wz]
+                        angle[wz & wx] = pi2 - angle[wx & wz]
                     else:
                         angle = pi2 - angle
                 wx = xcomp == 0
                 if angle[wx].size > 0:
-                    ycomp = self.z*v2.x - self.x*v2.z
+                    ycomp = self.z * v2.x - self.x * v2.z
                     wy = ycomp < 0
-                    if angle[wz&wx&wy].size > 0:
+                    if angle[wz & wx & wy].size > 0:
                         if hasattr(angle, '__iter__'):
-                            angle[wz&wx&wy] = pi2 - angle[wz&wx&wy]
+                            angle[wz & wx & wy] = pi2 - angle[wz & wx & wy]
                         else:
                             angle = pi2 - angle
         if deg:
@@ -364,7 +378,7 @@ class Vector(np.ndarray):
         `phi` must be a scalar.  Broadcast is not supported'''
         if deg:
             phi = np.deg2rad(phi)
-        return VectRot(rotm(phi, axis=axis).T)*self
+        return VectRot(rotm(phi, axis=axis).T) * self
 
     def eular(self, phi, theta, psi, deg=True):
         '''Rotate vector(s) by three Eular angles
@@ -375,7 +389,7 @@ class Vector(np.ndarray):
             phi = np.deg2rad(phi)
             theta = np.deg2rad(theta)
             psi = np.deg2rad(psi)
-        return VectRot(eularm(phi, theta, psi).T)*self
+        return VectRot(eularm(phi, theta, psi).T) * self
 
     def astable(self, type=0):
         typecode = self._choose_type(type)
@@ -388,11 +402,11 @@ class Vector(np.ndarray):
             c1, c2, c3 = self.cyl
         elif typecode == 3:
             c1, c2, c3 = self.geo
-        return Table((c1.flatten(),c2.flatten(),c3.flatten()), names=names)
+        return Table((c1.flatten(), c2.flatten(), c3.flatten()), names=names)
 
     @staticmethod
     def _choose_type(ctype):
-        if ctype in [0,1,2,3]:
+        if ctype in [0, 1, 2, 3]:
             return ctype
         if isinstance(ctype, str):
             ctype = ctype.lower()
@@ -404,24 +418,24 @@ class Vector(np.ndarray):
 
     @staticmethod
     def sph2xyz(r, phi, theta):
-        z = r*np.cos(theta)
-        rho = r*np.sin(theta)
-        x = rho*np.cos(phi)
-        y = rho*np.sin(phi)
+        z = r * np.cos(theta)
+        rho = r * np.sin(theta)
+        x = rho * np.cos(phi)
+        y = rho * np.sin(phi)
         return x, y, z
 
     @staticmethod
     def cyl2xyz(rho, phi, z):
-        x = rho*np.cos(phi)
-        y = rho*np.sin(phi)
+        x = rho * np.cos(phi)
+        y = rho * np.sin(phi)
         return x, y, z
 
     @staticmethod
     def geo2xyz(r, lon, lat):
-        z = r*np.sin(lat)
-        rho = r*np.cos(lat)
-        x = rho*np.cos(lon)
-        y = rho*np.sin(lon)
+        z = r * np.sin(lat)
+        rho = r * np.cos(lat)
+        x = rho * np.cos(lon)
+        y = rho * np.sin(lon)
         return x, y, z
 
 
