@@ -35,22 +35,31 @@ def is_iterable(v):
 
 
 def quadeq(a, b, c):
-    '''Solving quadratic equation
-      a * x**2 + b * x + c = 0
-    Returns a `None` for no solution, a numpy array of length 1 for
-    one solution or length 2 for two solutions
+    """Solving quadratic equation `a * x**2 + b * x + c = 0`
 
-    v1.0.0 : JYL @PSI, 2/23/2016
-    '''
-    d = b**2-4*a*c
-    if d < 0:
-        return None
-    elif d == 0:
-        return np.array([-b/(2*a)])
-    else:
-        d = np.sqrt(d)
-        return (-b+d*np.array([-1, 1]))/(2*a)
+    Parameters
+    ----------
+    a, b, c : numbers, arrays
+        The parameters of quadratic equation.  Their shapes need to be
+        satisfy numpy broadcast rules.
 
+    Return
+    ------
+    numpy array of shape (..., 2).  The two roots of quadratic equation.
+    If no real root exists, then return np.nan
+    """
+    a = np.atleast_1d(a).astype(float)
+    b = np.atleast_1d(b).astype(float)
+    c = np.atleast_1d(c).astype(float)
+    d = b**2 - 4 * a * c
+    d[d < 0] = np.nan
+    wp = d >= 0
+    d[wp] = np.sqrt(d[wp])
+    d = np.stack([-d, d])
+    sol = np.moveaxis((-b + d)/(2 * a), 0, -1)
+    if sol.shape[0] == 1:
+        sol = np.squeeze(sol)
+    return sol
 
 @contextlib.contextmanager
 def printoptions(*args, **kwargs):
