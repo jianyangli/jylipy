@@ -1593,8 +1593,8 @@ class EllipsoidProjection():
 
         Algorithm
         ---------
-        For a sphere, calculate the z-coordinates for each (x,y) position,
-        then convert the (x,y,z) to the body-fixed frame based on `viewpt`
+        For a sphere, calculate the z-coordinates for each (x, y) position,
+        then convert the (x, y, z) to the body-fixed frame based on `viewpt`
         for their (lon, lat).
 
         For an ellipsoid, convert the image plane (x, y, 0) to body-fixed
@@ -1621,17 +1621,15 @@ class EllipsoidProjection():
             vb = Vector(xarr, yarr, np.zeros_like(xarr)).paraproj(
                     self.view_point, pa=self.position_angle, invert=True)
             n = self.view_point
-            abc2 = 1 / self.r**2
-            p1 = np.full(vb.x.size, (n.xyz**2 * abc2).sum())
-            p2 = 2 * (n.xyz * np.moveaxis(vb.xyz, 0, -1) * abc2).sum(axis=-1)
-            p2 = p2.flatten()
-            p3 = (np.moveaxis(vb.xyz, 0, -1)**2 * abc2).sum(axis=-1) - 1
-            p3 = p3.flatten()
+            p1 = np.full_like(vb.x, ((n.xyz / self.r)**2).sum())
+            p2 = 2 * (n.xyz * np.moveaxis(vb.xyz, 0, -1) / self.r**2).sum(
+                    axis=-1)
+            p3 = ((np.moveaxis(vb.xyz, 0, -1) / self.r)**2).sum(axis=-1) - 1
             t = quadeq(p1, p2, p3).max(axis=-1)
             w = np.isfinite(t)
-            x = n.x * t[w] + vb.x.flatten()[w]
-            y = n.y * t[w] + vb.y.flatten()[w]
-            z = n.z * t[w] + vb.z.flatten()[w]
+            x = self.view_point.x * t[w] + vb.x[w]
+            y = self.view_point.y * t[w] + vb.y[w]
+            z = self.view_point.z * t[w] + vb.z[w]
             vect = Vector(x, y, z)
             lon = np.full_like(t, np.nan)
             lon[w] = vect.lon
