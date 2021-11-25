@@ -167,11 +167,17 @@ class Vector(np.ndarray):
         '''
         arr1 = np.rollaxis(self.view(np.ndarray), -1)
         arr2 = np.asarray(other)
-        return Vector(arr1*arr2, axis=0)
+        return Vector(arr1 * arr2, axis=0)
 
-    def __rmul__(self, other):
-        '''To satisfy the commutative rule for scaling multiplication'''
-        return self.__mul__(other)
+    def __truediv__(self, other):
+        arr1 = np.rollaxis(self.view(np.ndarray), -1)
+        arr2 = np.asarray(other)
+        return Vector(arr1 / arr2, axis=0)
+
+    def __floordiv__(self, other):
+        arr1 = np.rollaxis(self.view(np.ndarray), -1)
+        arr2 = np.asarray(other)
+        return Vector(arr1 // arr2, axis=0)
 
     def __eq__(self, other):
         comp = self.view(np.ndarray) == np.asarray(other)
