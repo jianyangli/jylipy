@@ -1682,8 +1682,11 @@ class EllipsoidProjection():
         coslon = np.cos(lon[w])
         sinlon = np.sin(lon[w])
         coslat = np.cos(lat[w])
-        sinlat = np.sin(lat[w])
-        v = Vector(a * coslon * coslat, b * sinlon * coslat, c * sinlat)
+        xcomp = coslon * coslat
+        ycomp = sinlon * coslat
+        zcomp = np.sin(lat[w])
+        r_recip = np.sqrt((xcomp / a)**2 + (ycomp / b)**2 + (zcomp / c)**2)
+        v = Vector(xcomp, ycomp, zcomp) / r_recip
         v = v.paraproj(self.view_point, pa=self.position_angle)
         x = np.full_like(lon, np.nan)
         y = np.full_like(lon, np.nan)
