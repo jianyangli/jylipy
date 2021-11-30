@@ -1618,26 +1618,37 @@ class EllipsoidProjection():
             lon[w] = v.lon
             lat[w] = v.lat
         else:  # for an ellipsoid
-            vb = Vector(xarr, yarr, np.zeros_like(xarr)).paraproj(
+            vb = Vector(xarr, yarr, 0).paraproj(
                     self.view_point, pa=self.position_angle, invert=True)
             n = self.view_point
             p1 = np.full_like(vb.x, ((n.xyz / self.r)**2).sum())
             p2 = 2 * (n.xyz * np.moveaxis(vb.xyz, 0, -1) / self.r**2).sum(
                     axis=-1)
             p3 = ((np.moveaxis(vb.xyz, 0, -1) / self.r)**2).sum(axis=-1) - 1
-            t = quadeq(p1, p2, p3).max(axis=-1)
-            w = np.isfinite(t)
-            x = self.view_point.x * t[w] + vb.x[w]
-            y = self.view_point.y * t[w] + vb.y[w]
-            z = self.view_point.z * t[w] + vb.z[w]
+            t = quadeq(p1, p2, p3)
+            # output arrays
+            lon = np.full_like(xarr, np.nan)
+            lat = np.full_like(xarr, np.nan)
+            # when two roots have different signs, take the positive root
+            w = (t[..., 0] * t[..., 1] < 0)
+            x = n.x * t[..., 1][w] + vb.x[w]
+            y = n.y * t[..., 1][w] + vb.y[w]
+            z = n.z * t[..., 1][w] + vb.z[w]
             vect = Vector(x, y, z)
-            lon = np.full_like(t, np.nan)
             lon[w] = vect.lon
-            lon = lon.reshape(self.image_size)
-            lat = np.full_like(t, np.nan)
             lat[w] = vect.lat
-            lat = lat.reshape(self.image_size)
-
+            # when two roots have the same sign, need extra test
+            w = (t[..., 0] * t[..., 1] >= 0)
+            for i in range(2):
+                x = n.x * t[..., i][w] + vb.x[w]
+                y = n.y * t[..., i][w] + vb.y[w]
+                z = n.z * t[..., i][w] + vb.z[w]
+                vect = Vector(x, y, z)
+                x_test, y_test = self.lonlat2xy(vect.lon, vect.lat)
+                valid = np.isclose(xarr[w], x_test) & \
+                        np.isclose(yarr[w], y_test)
+                lon[w][valid] = vect.lon[valid]
+                lat[w][valid] = vect.lat[valid]
         lat = u.Quantity(lat, u.rad).to(self.unit, self.equivalencies).value
         lon = u.Quantity(lon % (2 * np.pi), u.rad).to(self.unit,
                 self.equivalencies).value
