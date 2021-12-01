@@ -1523,7 +1523,7 @@ class EllipsoidProjection():
     """Project ellipsoid surface (latitude, longitude) to image (x, y)"""
 
     def __init__(self, r, viewpt, pxlscl, pa=0., imsz=(512, 512),
-                center=None, unit=u.deg, equivalencies=None):
+                center=None, angle_unit=u.deg, equivalencies=None):
         """
         Parameters
         ----------
@@ -1544,8 +1544,8 @@ class EllipsoidProjection():
             Image size (y, x) in pixels
         center : 2-element iterable of float, optional
             The pixel coordinates of body center
-        unit : astropy.units.Unit, str, optional
-            Unit of angles.
+        angle_unit : astropy.units.Unit, str, optional
+            Default unit of angles.
         """
         if hasattr(r, '__iter__'):
             if len(r) == 1:
@@ -1563,18 +1563,18 @@ class EllipsoidProjection():
             self.body_center = (self.image_size - 1) / 2
         else:
             self.body_center = center
-        unit = u.Unit(unit)
-        if not unit.is_equivalent(u.deg, equivalencies=equivalencies):
+        angle_unit = u.Unit(angle_unit)
+        if not angle_unit.is_equivalent(u.deg, equivalencies=equivalencies):
             raise ValueError('unit must be equivalent to degrees.')
-        self.unit = unit
+        self.angle_unit = angle_unit
         self.equivalencies = equivalencies
-        self.position_angle = u.Quantity(pa, self.unit)
+        self.position_angle = u.Quantity(pa, self.angle_unit)
 
     @property
     def issphere(self):
         return not hasattr(self.r, '__iter__')
 
-    def xy2lonlat(self, x, y):
+    def xy2lonlat(self, x, y, angle_unit=None):
         """Convert (x,y) coordinate of a CCD to body-fixed (lon,lat) for a
         sphere or an ellipsoid
 
@@ -1590,6 +1590,9 @@ class EllipsoidProjection():
           Each array elements contains the longitude and latitude of
           corresponding pixel in the body-fixed frame.   The size of
           arrays is defined by `imsz`.
+        angle_unit : astropy.units.Unit, str, optional
+            Default unit of `lon`, `lat` if not specified.  If `None`, then
+            `self.angle_unit` is used.
 
         Algorithm
         ---------
@@ -1604,6 +1607,8 @@ class EllipsoidProjection():
         equation.  The (lon, lat) are calculated based on the coordinates
         of intersection.
         """
+        if angle_unit is None:
+            angle_unit = self.angle_unit
         yarr = (np.asanyarray(y) - self.body_center[0]) * self.pixel_scale
         xarr = (np.asanyarray(x) - self.body_center[1]) * self.pixel_scale
 
@@ -1649,18 +1654,21 @@ class EllipsoidProjection():
                         np.isclose(yarr[w], y_test)
                 lon[w][valid] = vect.lon[valid]
                 lat[w][valid] = vect.lat[valid]
-        lat = u.Quantity(lat, u.rad).to(self.unit, self.equivalencies).value
-        lon = u.Quantity(lon % (2 * np.pi), u.rad).to(self.unit,
+        lat = u.Quantity(lat, u.rad).to(angle_unit, self.equivalencies).value
+        lon = u.Quantity(lon % (2 * np.pi), u.rad).to(angle_unit,
                 self.equivalencies).value
         return lon, lat
 
-    def lonlat2xy(self, lon, lat, unit=u.deg):
+    def lonlat2xy(self, lon, lat, angle_unit=None):
         """Convert the body-fixed (lon, lat) coordinates to the corresponding
         (x,y) pixel position in a CCD
 
-        lon, lat : array-like
+        lon, lat : array-like, astropy.units.Quantity
           The longitude and latitude to be converted.  They must have the
           same shape.
+        angle_unit : astropy.units.Unit, str, optional
+            Default unit of `lon`, `lat` if not specified.  If `None`, then
+            `self.angle_unit` is used.
 
         Return
         ------
@@ -1674,6 +1682,8 @@ class EllipsoidProjection():
         defined by `r`, discard those with surface normal pi/2 away from
         `viewpt`, convert to image plane, return (x, y)
         """
+        if angle_unit is None:
+            angle_unit = self.angle_unit
         lon = np.asarray(lon).astype(float)
         lat = np.asarray(lat).astype(float)
         if lon.shape != lat.shape:
@@ -1685,8 +1695,8 @@ class EllipsoidProjection():
         else:
             a, b, c = self.r
         # calculate projection
-        lon = u.Quantity(lon, unit).to('rad').value
-        lat = u.Quantity(lat, unit).to('rad').value
+        lon = u.Quantity(lon, angle_unit).to('rad').value
+        lat = u.Quantity(lat, angle_unit).to('rad').value
         pa = self.position_angle.to('rad').value
         angle = Vector(1, lon, lat, type='geo').vsep(self.view_point)
         w = angle < (np.pi / 2)# only keep where normal is within pi/2 of viewpt
