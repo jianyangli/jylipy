@@ -901,7 +901,7 @@ class DS9(pyds9.DS9):
             root, ext = splitext(outfile)
             for i in frames:
                 self.set('frame {}'.format(i))
-                self.set('saveimage '+'.'.join([root+'{}'.format(i), ext]))
+                self.set('saveimage '+ root + '_{}'.format(i) + ext)
             self.set('frame {}'.format(current_frame))
         else:
             self.set('saveimage '+outfile)
