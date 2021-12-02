@@ -895,13 +895,14 @@ class DS9(pyds9.DS9):
 
         from os.path import basename
         if all:
-            nfm = len(self.n_actives)
-            tmp = outfile.split('.')
-            fmtstr = '.'.join(tmp[:-1]) + '_%0' \
-                        + repr(int(np.ceil(np.log10(nfm))))+'d'+'.'+tmp[-1]
-            for i in range(nfm):
-                self.set('saveimage '+fmtstr % i)
-                self.set('frame next')
+            frames = self.get('frame active').split()
+            current_frame = self.get('frame')
+            from os.path import splitext
+            root, ext = splitext(outfile)
+            for i in frames:
+                self.set('frame {}'.format(i))
+                self.set('saveimage '+'.'.join([root+'{}'.format(i), ext]))
+            self.set('frame {}'.format(current_frame))
         else:
             self.set('saveimage '+outfile)
 
