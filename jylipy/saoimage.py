@@ -715,7 +715,7 @@ class DS9(pyds9.DS9):
             # set DS9 parameters
             if st[-1] == 0:
                 if par is not None:
-                    self.sets(par)
+                    self.set(par)
             else:
                 self.set('frame delete')
 
@@ -841,10 +841,11 @@ class DS9(pyds9.DS9):
         if frame is not None:
             self.set('frame '+fno0)
 
-    def sets(self, par, buf=None, blen=-1):
-        '''XPA set that accepts a single command line or an array of lines'''
+    def set(self, par, buf=None, blen=-1):
+        """XPA set that accepts a single command line or an array of lines
+        """
         if isinstance(par, str):
-            return self.set(par, buf=buf, blen=blen)
+            return super().set(par, buf=buf, blen=blen)
         else:
             st = []
             if not hasattr(buf, '__iter__'):
@@ -852,17 +853,18 @@ class DS9(pyds9.DS9):
             if not hasattr(blen, '__iter__'):
                 blen = [blen]*len(par)
             for p, b, l in zip(par, buf, blen):
-                st.append(self.set(p, b, l))
+                st.append(super().set(p, b, l))
             return st
 
-    def gets(self, par=None):
-        '''XPA get that accepts a single command line or an array of lines'''
+    def get(self, par=None):
+        """XPA get that accepts a single command line or an array of lines
+        """
         if isinstance(par, str) or (par is None):
-            return self.get(par)
+            return super().get(par)
         else:
             out = []
             for p in par:
-                out.append(self.get(p))
+                out.append(super().get(p))
             return out
 
     def backup(self, bckfile):
@@ -920,7 +922,7 @@ class DS9(pyds9.DS9):
         cf = self.get('frame')
         for f in frm:
             self.set('frame '+f)
-            self.sets(cmd)
+            self.set(cmd)
         self.set('frame '+cf)
 
 
