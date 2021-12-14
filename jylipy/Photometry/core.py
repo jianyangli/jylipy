@@ -751,6 +751,7 @@ class PhotometricData(object):
                 self.sca = None
                 self.geo = None
                 self._type = None
+                self.band = None
                 return
 
             # Initialize from data passed by keywords
@@ -806,8 +807,7 @@ class PhotometricData(object):
                 self.geo = None
 
             # collect wavelength
-            if 'band' in kwargs:
-                self.band = kwargs.pop('band')
+            self.band = kwargs.pop('band', None)
 
         elif len(args) == 1:
             if isinstance(args[0], PhotometricData):
@@ -846,6 +846,7 @@ class PhotometricData(object):
                     self.binparms = meta['binparms']
                 else:
                     self.binparms = None
+                self.band = None
             elif isinstance(args[0], dict):
                 # Initialize from a dictionary
                 kwargs.update(args[0])
@@ -3848,7 +3849,7 @@ def extract_phodata(illfile, iofdata=0, maskdata=None, backplanes=None, binsize=
             imnames = [illbackplanes[i] for i in iofdata]
         else:
             im = ill0[iofdata]
-            imnames = illbackplanes[iofdata]
+            imnames = [illbackplanes[iofdata]]
 
     # Read mask
     if maskdata is not None:
@@ -3898,7 +3899,7 @@ def extract_phodata(illfile, iofdata=0, maskdata=None, backplanes=None, binsize=
         out = Table(list(data), names=names)
         for n in backplanes:
             out.rename_column(n, geo_backplanes[n])
-        out.rename_column('Data0','RADF')
+        out.rename_column('DN','RADF')
         return PhotometricData(out)
     else:
         if verbose:
