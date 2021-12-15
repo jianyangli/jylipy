@@ -1538,7 +1538,7 @@ class PhotometricData(object):
                 print('    {}: {}'.format(i, f))
             # load cube
             cube = CubeFile(f)
-            data = cube.apply_numpy_specials()
+            data = cube.apply_numpy_specials().astype('f4')
             # process geometry backplanes
             has_lat = False
             has_lon = False
