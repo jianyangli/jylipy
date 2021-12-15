@@ -1486,6 +1486,133 @@ class PhotometricData(object):
         if return_data:
             return data
 
+    @classmethod
+    def from_isis(cls, cubefiles, datafiles=None, iof_scale=None,
+                bin=1, verbose=True):
+        """
+        Initialize from an ISIS 'phocube' file.
+
+        Parameters
+        ----------
+        cubefiles : iterable of str
+            Names of phocube files.
+        datafiles : iterable of str, optional
+            File name of reflectance data.  By default, the reflectance
+            data will be extracted from ISIS cube.  If the cube doesn't
+            contain a data layer, then data needs to be provided in a
+            separate file specified here.  The file can be either an
+            ISIS cube or in the primary extension of a FITS file.  The
+            data could contain mutilple layers (bands).  In this case, the
+            first dimension is band, and the second and third dimensions
+            must have the same shape as the backplane data.
+            NOTE: Only single-band data is supported now.
+        iof_scale : number, optional
+            Scaling factor(s) to convert input data to I/F.
+        bin : int, optional
+            Spatial binning factor.
+        verbose : bool, optional
+            Print out verbose messages.
+        """
+        if verbose:
+            print('Generate photometric data from {} cubefiles'.format(
+                    len(cubefiles)))
+        # preprocess input parameters
+        if np.array(cubefiles).ndim == 0:
+            cubefiles = [cubefiles]
+        if datafiles is not None:
+            if np.array(datafiles).ndim == 0:
+                datafiles = [datafiles]
+        # prep storage
+        iof = []
+        inc = []
+        emi = []
+        pha = []
+        lat = []
+        lon = []
+        # loop through each cube file
+        for i, f in enumerate(cubefiles):
+            if verbose:
+                print('    {}: {}'.format(i, f))
+            # load cube
+            cube = CubeFile(f)
+            data = cube.apply_numpy_specials()
+            # process geometry backplanes
+            has_lat = False
+            has_lon = False
+            layers = cube.label['IsisCube']['BandBin']['Name']
+            pha_layer = data[layers.index('Phase Angle')]
+            if 'Local Emission Angle' in layers:
+                emi_layer = data[layers.index('Local Emission Angle')]
+            else:
+                emi_layer = data[layers.index('Emission Angle')]
+            if 'Local Incidence Angle' in layers:
+                inc_layer = data[layers.index('Local Incidence Angle')]
+            else:
+                inc_layer = data[layers.index('Incidence Angle')]
+            mask = np.isfinite(pha_layer) & \
+                   np.isfinite(emi_layer) & (emi_layer < 90) & \
+                   np.isfinite(inc_layer) & (inc_layer < 90)
+            if 'Latitude' in layers:
+                lat_layer = data[layers.index('Latitude')]
+                has_lat = True
+            if 'Longitude' in layers:
+                lon_layer = data[layers.index('Longitude')]
+                has_lon = True
+            if 'Sun Illumination Mask' in layers:
+                msk_layer = data[layers.index('Sun Illumination Mask')]
+                mask = mask & (msk_layer > 0)
+            # process data
+            if 'DN' in layers:
+                iof_layer = data[layers.index('DN')]
+            else:
+                if datafiles is None:
+                    raise ValueError('no reflectance data provided.')
+                root, ext = path.splitext(datafiles[i])
+                if ext.lower() in ['.fits', '.fit']:
+                    iof_layer = fits.open(datafiles[i])[0].data
+                elif ext.lower() in ['.cub']:
+                    iof_layer = \
+                        CubeFile(datafiles[i]).apply_numpy_specials()
+                else:
+                    raise ValueError('input data file extension {} not '
+                        'recognized.  only ISIS cube (.cub) and FITS format '
+                        'are supported.'.format(ext))
+            # spatial binning if needed
+            if bin != 1:
+                iof_layer = rebin(iof_layer, (bin, bin), mean=True)
+                pha_layer = rebin(pha_layer, (bin, bin), mean=True)
+                emi_layer = rebin(emi_layer, (bin, bin), mean=True)
+                inc_layer = rebin(inc_layer, (bin, bin), mean=True)
+                mask = rebin(mask.astype(int), (bin, bin), mean=True) \
+                        .astype(bool)
+            # collect data
+            iof.append(iof_layer[mask])
+            pha.append(pha_layer[mask])
+            emi.append(emi_layer[mask])
+            inc.append(inc_layer[mask])
+            if has_lat:
+                if bin != 1:
+                    lat_layer = rebin(lat_layer, (bin, bin), mean=True)
+                lat.append(lat_layer[mask])
+            if has_lon:
+                if bin != 1:
+                    lon_layer = rebin(lon_layer, (bin, bin), mean=True)
+                lon.append(lon_layer[mask])
+        # post-collection process
+        if verbose:
+            print('post processing')
+        iof = np.concatenate(iof)
+        pha = np.concatenate(pha)
+        emi = np.concatenate(emi)
+        inc = np.concatenate(inc)
+        lat = np.concatenate(lat) if lat else None
+        lon = np.concatenate(lon) if lon else None
+        # scaling if needed
+        if iof_scale is not None:
+            iof *= iof_scale
+        # return class object
+        return cls(iof=iof, inc=inc, emi=emi, pha=pha, geolon=lon, geolat=lat)
+
     def populate(self, illfile, iofdata=0, **kwargs):
         '''Collect photometric data
 
