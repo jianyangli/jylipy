@@ -657,7 +657,7 @@ class LatLon(object):
         return LatLon(self)
 
     def astable(self):
-        return self._data.copy()
+        return self._data
 
     def copy(self):
         return self.__copy__()
@@ -1635,12 +1635,13 @@ class PhotometricData(object):
         '''
         from os.path import basename
         from numpy import where, concatenate, array, asarray, repeat
+        from ..core import is_iterable
 
         illfile = np.asarray(illfile)
         if is_iterable(iofdata):
             iofdata = np.asarray(iofdata)
         else:
-            iofdata = np.repeat(0, len(illdata))
+            iofdata = np.repeat(0, len(illfile))
 
         for illf, ioff in zip(illfile, iofdata):
             print('  Extracting from ', basename(illf))
