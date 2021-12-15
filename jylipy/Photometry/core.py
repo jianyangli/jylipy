@@ -103,13 +103,19 @@ class ScatteringGeometry(object):
             self._unit = kwargs.pop('unit')
             par = set(kwargs.keys())
             if set('inc emi pha'.split()) == par:
-                data = [kwargs['inc'], kwargs['emi'], kwargs['pha']]
+                data = [np.asanyarray(kwargs['inc'], dtype='f4'),
+                        np.asanyarray(kwargs['emi'], dtype='f4'),
+                        np.asanyarray(kwargs['pha'], dtype='f4')]
                 names = 'inc emi pha'.split()
             elif set('inc emi psi'.split()) == par:
-                data = [kwargs['inc'], kwargs['emi'], kwargs['psi']]
+                data = [np.asanyarray(kwargs['inc'], dtype='f4'),
+                        np.asanyarray(kwargs['emi'], dtype='f4'),
+                        np.asanyarray(kwargs['psi'], dtype='f4')]
                 names = 'inc emi psi'.split()
             elif set('pha lat lon'.split()) == par:
-                data = [kwargs['pha'], kwargs['lat'], kwargs['lon']]
+                data = [np.asanyarray(kwargs['pha'], dtype='f4'),
+                        np.asanyarray(kwargs['lat'], dtype='f4'),
+                        np.asanyarray(kwargs['lon'], dtype='f4')]
                 names = 'pha lat lon'.split()
             else:
                 raise GeometryError('Scattering geometry combination not recognized.')
@@ -789,25 +795,33 @@ class PhotometricData(object):
             # collect reflectance data
             keys = list(kwargs.keys())
             if 'bdr' in keys:
-                self._data = Table([kwargs['bdr']], names=['BDR'])
+                self._data = Table([np.asanyarray(kwargs['bdr'], dtype='f4')],
+                        names=['BDR'])
             elif 'r' in keys:
-                self._data = Table([kwargs['r']], names=['BDR'])
+                self._data = Table([np.asanyarray(kwargs['r'], dtype='f4')],
+                        names=['BDR'])
             elif 'iof' in keys:
-                self._data = Table([kwargs['iof']], names=['RADF'])
+                self._data = Table([np.asanyarray(kwargs['iof'], dtype='f4')],
+                        names=['RADF'])
             elif 'i/f' in keys:
-                self._data = Table([kwargs['i/f']], names=['RADF'])
+                self._data = Table([np.asanyarray(kwargs['i/f'], dtype='f4')],
+                        names=['RADF'])
             elif 'radf' in keys:
-                self._data = Table([kwargs['radf']], names=['RADF'])
+                self._data = Table([np.asanyarray(kwargs['radf'], dtype='f4')],
+                        names=['RADF'])
             elif 'brdf' in keys:
-                self._data = Table([kwargs['brdf']], names=['BRDF'])
+                self._data = Table([np.asanyarray(kwargs['brdf'], dtype='f4')],
+                        names=['BRDF'])
             elif 'reff' in keys:
-                self._data = Table([kwargs['reff']], names=['REFF'])
+                self._data = Table([np.asanyarray(kwargs['reff'], dtype='f4')],
+                        names=['REFF'])
             else:
                 raise ValueError('No reflectance data found.')
 
             # collect lat-lon data
             if ('geolat' in keys) & ('geolon' in keys):
-                self.geo = LatLon(kwargs['geolon'],kwargs['geolat'])
+                self.geo = LatLon(np.asarray(kwargs['geolon'], dtype='f4'),
+                                  np.asarray(kwargs['geolat'], dtype='f4'))
             else:
                 self.geo = None
 
@@ -1096,86 +1110,14 @@ class PhotometricData(object):
             out.meta['binparms'] = self.binparms
         return out
 
-    def plot(self, x=None, y='RADF', band=None, correction=None, unit='deg',
-             type='auto', **kwargs):
-        '''Plot photometric data.
+    def plot(self, *args, **kwargs):
+        """Plot photometric data.
 
-        x : str, optional
-          Quantity for x-axis, can be 'inc', 'emi', 'pha', 'psi', 'lat', 'lon'.
-        y : str, optional
-          Quantity for y-axis, can be 'BDR', 'RADF', 'BRDF', 'REFF'.
-        unit : str or astropy.units, optional
-          The unit of x-axis.  Can be 'deg' or 'rad'.
-        type : str, optional
-          'auto': The type is automatically determined
-          'scatter' : Scatter point plot
-          'density' : Density plot
-        *kwargs* : Keywords accepted by jylipy.plotting.pplot
-
-        v1.0.0 : 11/1/2015, JYL @PSI
-        '''
-
-        # set plot type
-        if type == 'auto':
-            if len(self) > 100000:
-                type = 'density'
-            else:
-                type = 'scatter'
-
-        # prepare plotting quantities
-        xlbl = {'inc': 'Incidence Angle', 'emi': 'Emission Angle',
-                'pha': 'Phase Angle', 'psi': 'Plane Angle',
-                'lat': 'Photometric Latitude', 'lon': 'Photometric Longitude'}
-        yy = getattr(self, y)
-        if yy.ndim == 2:
-            if band is None:
-                band = 0
-            yy = yy[:, band]
-        ylabel = kwargs.pop('ylabel', y)
-        if correction != None:
-            if correction.lower() in ['ls', 'lommel-seeliger']:
-                mu0 = np.cos(self.inc)
-                mu = np.cos(self.emi)
-                corr = 2*mu0/(mu0+mu)
-                yy = yy/corr
-                ylabel = ylabel+'$/[2\mu_0/(\mu_0+\mu)]$'
-            elif correction.lower() in ['lambert']:
-                corr = np.cos(self.inc)
-                yy = yy/corr
-                ylabel = ylabel+'$/\mu_0$'
-            else:
-                raise ValueError('correction type must be in [''LS'', '
-                                 ' ''Lommel-Seeliger'', ''Lambert'', '
-                                 '{0} received'.format(correction))
-
-        # make plots
-        if type == 'density':
-            if x is None:
-                x = 'pha'
-            xx = getattr(self, x).to(unit).value
-            xlabel = kwargs.pop('xlabel', '{0} ({1})'.format(xlbl[x],
-                                str(unit)))
-            density(xx, yy, xlabel=xlabel, ylabel=ylabel, **kwargs)
-        elif type == 'scatter':
-            from matplotlib import pyplot as plt
-            if x is not None:
-                xx = getattr(self, x).to(unit).value
-                xlabel = kwargs.pop('xlabel', '{0} ({1})'.format(xlbl[x],
-                                    str(unit)))
-                plt.plot(xx, yy, 'o')
-                pplot(xlabel=xlabel, ylabel=ylabel, **kwargs)
-            else:
-                f, ax = plt.subplots(3,1,num=plt.gcf().number)
-                xs = ['pha','inc','emi']
-                for x,i in zip(xs,list(range(3))):
-                    xx = getattr(self, x).to(unit).value
-                    xlabel = '{0} ({1})'.format(xlbl[x], str(unit))
-                    ax[i].plot(xx, yy, 'o')
-                    pplot(ax[i], xlabel=xlabel, ylabel=ylabel, **kwargs)
-                plt.draw()
-        else:
-            raise ValueError("`type` of plot can only be 'auto', 'scatter', "
-                             "or 'density'")
+        See PhotometricDataPlotter.plot()
+        """
+        pdp = PhotometricDataPlotter(self)
+        pdp.plot(*args, **kwargs)
+        return pdp
 
     def write(self, outfile, **kwargs):
         '''Save photometric data to a FITS file'''
@@ -1658,6 +1600,145 @@ class PhotometricData(object):
         w = np.where(~v)[0]
         self.remove_rows(w)
         return list(w)
+
+
+class PhotometricDataPlotter():
+    """Plotting facility for `PhotometricData` class
+    """
+
+    def __init__(self, data):
+        """
+        data : PhotometricData
+        """
+        self.data = data
+        self.ax = None
+        self._cmap = None
+
+    @property
+    def cmap(self):
+        return self._cmap
+
+    @cmap.setter
+    def cmap(self, value):
+        self._cmap = value
+
+    def plot(self, x=None, y='RADF', band=None, correction=None, unit='deg',
+             type='auto', **kwargs):
+        '''Plot photometric data.
+
+        x : str, optional
+          Quantity for x-axis, can be 'inc', 'emi', 'pha', 'psi', 'lat', 'lon'.
+        y : str, optional
+          Quantity for y-axis, can be 'BDR', 'RADF', 'BRDF', 'REFF'.
+        unit : str or astropy.units, optional
+          The unit of x-axis.  Can be 'deg' or 'rad'.
+        type : str, optional
+          'auto': The type is automatically determined
+          'scatter' : Scatter point plot
+          'density' : Density plot
+        *kwargs* : Keywords accepted by jylipy.plotting.pplot
+
+        v1.0.0 : 11/1/2015, JYL @PSI
+        '''
+        from matplotlib import pyplot as plt
+        from matplotlib.cm import ScalarMappable
+        from matplotlib.colors import LogNorm
+
+        # set plot type
+        if type == 'auto':
+            if len(self.data) > 100000:
+                type = 'density'
+            else:
+                type = 'scatter'
+        elif type not in ['density', 'scatter']:
+            raise ValueError("`type` of plot can only be 'auto', 'scatter', "
+                    "or 'density'")
+
+        # prepare plotting quantities
+        xlbl = {'inc': 'Incidence Angle',
+                'emi': 'Emission Angle',
+                'pha': 'Phase Angle',
+                'psi': 'Plane Angle',
+                'lat': 'Photometric Latitude',
+                'lon': 'Photometric Longitude',
+                'geolat': 'Latitude',
+                'geolon': 'Longitude'}
+        yy = getattr(self.data, y)
+        if yy.ndim == 2:
+            if band is None:
+                band = 0
+            yy = yy[:, band]
+        ylabel = kwargs.pop('ylabel', y)
+        if correction != None:
+            if correction.lower() in ['ls', 'lommel-seeliger']:
+                mu0 = np.cos(self.data.inc)
+                mu = np.cos(self.data.emi)
+                corr = 2*mu0/(mu0+mu)
+                yy = yy/corr
+                ylabel = ylabel+'$/[2\mu_0/(\mu_0+\mu)]$'
+            elif correction.lower() in ['lambert']:
+                corr = np.cos(self.data.inc)
+                yy = yy/corr
+                ylabel = ylabel+'$/\mu_0$'
+            else:
+                raise ValueError('correction type must be in [''LS'', '
+                                 ' ''Lommel-Seeliger'', ''Lambert'', '
+                                 '{0} received'.format(correction))
+
+        # make plots
+        if x is None:  # plot all subplots
+            if self.data.geolat is None:
+                f, ax = plt.subplots(3, 1, num=plt.gcf().number)
+            else:
+                f, ax = plt.subplots(3, 2, num=plt.gcf().number)
+            # plot reflectance vs. i, e, a
+            xs = ['inc','emi', 'pha']
+            ax1d = ax.T.reshape(-1)
+            for x, i in zip(xs, range(-3, 0)):
+                xx = getattr(self.data, x).to(unit).value
+                xlabel = '{0} ({1})'.format(xlbl[x], str(unit))
+                if type == 'scatter':
+                    ax1d[i].plot(xx, yy, 'o')
+                elif type == 'density':
+                    h, _, _, img = ax1d[i].hist2d(xx, yy, bins=[100,50],
+                            norm=LogNorm(), cmap='jet')
+                pplot(ax1d[i], xlabel=xlabel, ylabel=ylabel)
+            # plot latitude vs. i, e, a
+            if self.data.geolat is not None:
+                yy = self.data.geolat.to('deg').value
+                for x, i in zip(xs, range(3)):
+                    xx = getattr(self.data, x).to(unit).value
+                    xlabel = '{0} ({1})'.format(xlbl[x], str(unit))
+                    if type == 'scatter':
+                        ax1d[i].plot(xx, yy, 'o')
+                    elif type == 'density':
+                        h, _, _, img = ax1d[i].hist2d(xx, yy, bins=[100, 50],
+                                norm=LogNorm(), cmap='jet')
+                    pplot(ax1d[i], xlabel=xlabel, ylabel='Latitude (deg)')
+        else:  # single plot
+            xx = getattr(self.data, x).to(unit).value
+            xlabel = '{0} ({1})'.format(xlbl[x], str(unit))
+            if type == 'scatter':
+                plt.plot(xx, yy, 'o')
+            elif type == 'density':
+                plt.hist2d(xx, yy, bins=[100, 50], norm=LogNorm(), cmap='jet')
+            ax = [plt.gca()]
+            pplot(ax[0], xlabel=xlabel, ylabel=ylabel, **kwargs)
+
+        if type == 'density':
+            norm = LogNorm(vmin=1, vmax=1000)
+            mpb = ScalarMappable(norm=norm, cmap='jet')
+            cbar = plt.colorbar(mpb, ax=ax, fraction=0.05, aspect=47,
+                    location='top', ticks=[1,1000])
+            cbar.ax.set_xticklabels(['1', 'max'])
+            cbar.ax.tick_params(labelsize='xx-large')
+
+        self.ax = ax
+
+    def grid(self, **kwargs):
+        """Add grid lines to all subplots"""
+        for a in self.ax.flatten():
+            a.grid(**kwargs)
 
 
 class PhotometricDataGroup(OrderedDict):
@@ -2593,7 +2674,7 @@ class PhotometricModelFitter(object):
                 self.fitted.append(True)
             return self.model
 
-    def plot(self, index=None):
+    def plot(self, index=None, figsize=((6, 8), (6,6))):
         if hasattr(self.model, '__iter__'):
             if index is None:
                 raise ValueError('Index is not specified.')
@@ -2610,14 +2691,14 @@ class PhotometricModelFitter(object):
         from matplotlib import pyplot as plt
         ratio = data/fit
         figs = []
-        figs.append(plt.figure(100))
+        figs.append(plt.figure(100, figsize=figsize[0]))
         plt.clf()
         f, ax = plt.subplots(3, 1, num=100)
         for i, v, xlbl in zip(list(range(3)), [self.data.inc.value, self.data.emi.value, self.data.pha.value], ['Incidence', 'Emission', 'Phase']):
             ax[i].plot(v, ratio, 'o')
             ax[i].hlines(1, v.min(), v.max())
             pplot(ax[i], xlabel=xlbl+' ('+str(self.data.inc.unit)+')', ylabel='Measured/Modeled')
-        figs.append(plt.figure(101))
+        figs.append(plt.figure(101, figsize=figsize[1]))
         plt.clf()
         plt.plot(data, fit, 'o')
         tmp1 = data
