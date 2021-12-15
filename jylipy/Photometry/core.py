@@ -4,11 +4,14 @@ Units of all angles are in degrees!!!
 '''
 
 from collections import OrderedDict
+from os import path
 import numpy as np, numbers
-from ..core import ulen, condition
+from ..core import ulen, condition, rebin
 from ..plotting import density, pplot
 from ..apext import units, Table, table, MPFitter, Column, fits
+from ..pysis_ext import CubeFile
 import astropy.units as u
+from astropy.io import fits
 from astropy.modeling import FittableModel, Fittable1DModel, Fittable2DModel, Parameter
 
 
