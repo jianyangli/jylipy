@@ -13,6 +13,8 @@ from ..pysis_ext import CubeFile
 import astropy.units as u
 from astropy.io import fits
 from astropy.modeling import FittableModel, Fittable1DModel, Fittable2DModel, Parameter
+import matplotlib.pyplot as plt
+from matplotlib.colors import LogNorm
 
 
 recipi = 1/np.pi  # reciprocal pi
@@ -2486,17 +2488,24 @@ class PhotometricDataGrid(object):
         info = self.info()['info']
         sz = self.lat.shape[0]-1, self.lon.shape[0]-1
 
-        keys = ['count', 'incmin', 'incmax', 'emimin', 'emimax',
-                'phamin', 'phamax']
-        titles = ['# of Data Points',
-                  r'Minimum Incidence Angle $i_{min}$ (deg)',
+        keys = ['incmin', 'incmax', 'emimin', 'emimax', 'phamin', 'phamax']
+        titles = [r'Minimum Incidence Angle $i_{min}$ (deg)',
                   r'Maximum Incidence Angle $i_{max}$ (deg)',
                   r'Minimum Emission Angle $e_{min}$ (deg)',
                   r'Maximum Emission Angle $e_{max}$ (deg)',
                   r'Minimum Phase Angle $\alpha_{min}$ (deg)',
                   r'Maximum Phase Angle $\alpha_{max}$ (deg)']
         f, ax = plt.subplots(4, 2, num=figno, sharex=True, sharey=True)
-        axs = ax.flatten()[[0, 2, 3, 4, 5, 6, 7]]
+        count = np.reshape(info['count'], sz)
+        count[count == 0] = np.nan
+        if (np.nanmax(count) / np.nanmin(count)) > 1e3:
+            norm = LogNorm()
+        else:
+            norm = None
+        im = ax[0, 0].imshow(count, norm=norm, cmap=cmap)
+        plt.colorbar(mappable=im, ax=ax[0, 0])
+        ax[0, 0].set_title('# of Data Points')
+        axs = ax.flatten()[[2, 3, 4, 5, 6, 7]]
         for i, a in enumerate(axs):
             im = a.imshow(np.reshape(info[keys[i]], sz), cmap=cmap)
             plt.colorbar(mappable=im, ax=a)
