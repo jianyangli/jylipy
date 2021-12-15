@@ -1180,7 +1180,7 @@ class PhotometricData(object):
         hdu = fits.PrimaryHDU()
         tblhdu = fits.BinTableHDU(self.astable(), name='phodata')
         hdulist = fits.HDUList([hdu, tblhdu])
-        if hasattr(self, 'band'):
+        if getattr(self, 'band', None) is not None:
             bandhdu = fits.ImageHDU(self.band, name='band')
             hdulist.append(bandhdu)
         hdulist.writeto(outfile, **kwargs)
