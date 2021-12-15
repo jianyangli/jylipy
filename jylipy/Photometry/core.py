@@ -2467,6 +2467,35 @@ class PhotometricDataGrid(object):
             out._update_property_1d(i, loaded=True)
         return out
 
+    def plot_info(self, cmap=None, figno=None):
+        """Characteristic plot of the data grid
+
+        Parameters
+        ----------
+        cmap : str, `matplotlib.colors.Colormap`, optional
+            Specify color map
+        figno : int, optional
+            Specify figure number to plot
+        """
+        info = self.info()['info']
+        sz = self.lat.shape[0]-1, self.lon.shape[0]-1
+
+        keys = ['count', 'incmin', 'incmax', 'emimin', 'emimax',
+                'phamin', 'phamax']
+        titles = ['# of Data Points',
+                  r'Minimum Incidence Angle $i_{min}$ (deg)',
+                  r'Maximum Incidence Angle $i_{max}$ (deg)',
+                  r'Minimum Emission Angle $e_{min}$ (deg)',
+                  r'Maximum Emission Angle $e_{max}$ (deg)',
+                  r'Minimum Phase Angle $\alpha_{min}$ (deg)',
+                  r'Maximum Phase Angle $\alpha_{max}$ (deg)']
+        f, ax = plt.subplots(4, 2, num=figno, sharex=True, sharey=True)
+        axs = ax.flatten()[[0, 2, 3, 4, 5, 6, 7]]
+        for i, a in enumerate(axs):
+            im = a.imshow(np.reshape(info[keys[i]], sz), cmap=cmap)
+            plt.colorbar(mappable=im, ax=a)
+            a.set_title(titles[i])
+        ax[0, 1].axis('off')
 
 class PhotometricModelFitter(object):
     '''Base class for fitting photometric data to model
