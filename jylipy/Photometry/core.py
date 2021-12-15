@@ -1572,10 +1572,11 @@ class PhotometricData(object):
                     raise ValueError('no reflectance data provided.')
                 root, ext = path.splitext(datafiles[i])
                 if ext.lower() in ['.fits', '.fit']:
-                    iof_layer = fits.open(datafiles[i])[0].data
+                    iof_layer = fits.open(datafiles[i])[0].data.astype('f4')
                 elif ext.lower() in ['.cub']:
                     iof_layer = \
-                        CubeFile(datafiles[i]).apply_numpy_specials()
+                        CubeFile(datafiles[i]).apply_numpy_specials() \
+                            .astype('f4')
                 else:
                     raise ValueError('input data file extension {} not '
                         'recognized.  only ISIS cube (.cub) and FITS format '
