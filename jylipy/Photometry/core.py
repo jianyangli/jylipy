@@ -2485,16 +2485,14 @@ class PhotometricDataGrid(object):
         figno : int, optional
             Specify figure number to plot
         """
-        info = self.info()['info']
+        info0 = self.info()
+        info = info0['info']
         sz = self.lat.shape[0]-1, self.lon.shape[0]-1
 
         keys = ['incmin', 'incmax', 'emimin', 'emimax', 'phamin', 'phamax']
-        titles = [r'Minimum Incidence Angle $i_{min}$ (deg)',
-                  r'Maximum Incidence Angle $i_{max}$ (deg)',
-                  r'Minimum Emission Angle $e_{min}$ (deg)',
-                  r'Maximum Emission Angle $e_{max}$ (deg)',
-                  r'Minimum Phase Angle $\alpha_{min}$ (deg)',
-                  r'Maximum Phase Angle $\alpha_{max}$ (deg)']
+        titles = [r'$i_{min}$ (deg)', r'$i_{max}$ (deg)', r'$e_{min}$ (deg)',
+                  r'$e_{max}$ (deg)', r'$\alpha_{min}$ (deg)',
+                  r'$\alpha_{max}$ (deg)']
         f, ax = plt.subplots(4, 2, num=figno, sharex=True, sharey=True)
         count = np.reshape(info['count'], sz)
         count[count == 0] = np.nan
@@ -2505,12 +2503,24 @@ class PhotometricDataGrid(object):
         im = ax[0, 0].imshow(count, norm=norm, cmap=cmap)
         plt.colorbar(mappable=im, ax=ax[0, 0])
         ax[0, 0].set_title('# of Data Points')
-        axs = ax.flatten()[[2, 3, 4, 5, 6, 7]]
+        axs = ax.flatten()[2:8]
         for i, a in enumerate(axs):
             im = a.imshow(np.reshape(info[keys[i]], sz), cmap=cmap)
             plt.colorbar(mappable=im, ax=a)
             a.set_title(titles[i])
         ax[0, 1].axis('off')
+        lonmin = info0['lon'].value.min()
+        lonmax = info0['lon'].value.max()
+        latmin = info0['lat'].value.min()
+        latmax = info0['lat'].value.max()
+        ax[0, 0].set_xticklabels(
+            (ax[0, 0].get_xticks() / sz[1]) * (lonmax - lonmin) + lonmin)
+        ax[0, 0].set_yticklabels(
+            (ax[0, 0].get_yticks() / sz[0]) * (latmax - latmin) + latmin)
+        for a in ax[:, 0]:
+            a.set_ylabel('Latitude (deg)')
+        for a in ax[-1]:
+            a.set_xlabel('Longitude (deg)')
 
 class PhotometricModelFitter(object):
     '''Base class for fitting photometric data to model
