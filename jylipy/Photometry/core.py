@@ -3,18 +3,19 @@ Units of all angles are in degrees!!!
 
 '''
 
+import os, sys, warnings, multiprocessing, numbers
+import numpy as np, matplotlib.pyplot as plt, astropy.units as u
 from collections import OrderedDict
-from os import path
-import numpy as np, numbers
-from ..core import ulen, condition, rebin
-from ..plotting import density, pplot
-from ..apext import units, Table, table, MPFitter, Column, fits
-from ..pysis_ext import CubeFile
-import astropy.units as u
 from astropy.io import fits
-from astropy.modeling import FittableModel, Fittable1DModel, Fittable2DModel, Parameter
-import matplotlib.pyplot as plt
+from astropy.table import Table, Column, Row, vstack, hstack
+from astropy.modeling import FittableModel, Fittable1DModel, \
+        Fittable2DModel, Parameter, mappings
 from matplotlib.colors import LogNorm
+from matplotlib.cm import ScalarMappable
+from pysis import CubeFile
+from ..core import ulen, rebin
+from ..plotting import pplot
+from ..apext import MPFitter
 
 
 recipi = 1/np.pi  # reciprocal pi
@@ -129,7 +130,7 @@ class ScatteringGeometry(object):
                 self._unit = args[0].unit
                 self._cos = args[0].cos
                 self._data = args[0]._data.copy()
-            elif isinstance(args[0], Table) or isinstance(args[0], table.Row):
+            elif isinstance(args[0], Table) or isinstance(args[0], Row):
                 # initialize from a table
                 angle_keys = 'inc emi pha psi lat lon'.split()
                 k = [c for c in args[0].colnames if c in angle_keys]
@@ -137,9 +138,9 @@ class ScatteringGeometry(object):
                     raise ValueError('Initializing table is invalid')
                 v = args[0][k]
                 if v[k[0]].unit is None:
-                    self._unit = units.deg
+                    self._unit = u.deg
                     for x in k:
-                        v[x].unit = units.deg
+                        v[x].unit = u.deg
                 else:
                     self._unit = v[k[0]].unit
                 self._data = Table(v)
@@ -164,19 +165,19 @@ class ScatteringGeometry(object):
         if not set(kwargs.keys()).issubset(set('cos unit inc emi pha psi lat lon'.split())):
             raise TypeError('unexpected keyword received.')
         cos = kwargs.pop('cos', False)
-        unit = units.Unit(kwargs.pop('unit', units.deg))
+        unit = u.Unit(kwargs.pop('unit', u.deg))
         if len(kwargs) != 3:
             raise TypeError('%s requires exactly three geometric parameters to initialize, got %d.' % (type(self), len(kwargs)))
         if set(kwargs.keys()) not in [set('inc emi pha'.split()), set('inc emi psi'.split()), set('pha lat lon'.split())]:
             raise TypeError('%s can only be initiated with (inc, emi, pha), or (inc, emi, psi), or (pha, lat, lon).' % type(self))
-        if not unit.is_equivalent(units.deg):
+        if not unit.is_equivalent(u.deg):
             raise ValueError('Unit "rad" or equivalent is expected, but "%s" received in `unit` keyword.' % str(unit))
         keys = list(kwargs.keys())
         length = ulen(kwargs[keys[0]])
         for k in keys:
             val = kwargs[k]
-            if isinstance(val, units.Quantity):
-                val = val.to(condition(cos, units.dimensionless_unscaled, unit))
+            if isinstance(val, u.Quantity):
+                val = val.to(u.dimensionless_unscaled if cos else unit)
                 if val.isscalar:
                     val = [val.value]*val.unit
                     l = 1
@@ -185,10 +186,10 @@ class ScatteringGeometry(object):
             else:
                 if hasattr(val, '__iter__'):
                     l = len(val)
-                    val = val*condition(cos, units.dimensionless_unscaled, unit)
+                    val = val*(u.dimensionless_unscaled if cos else unit)
                 else:
                     l = 1
-                    val = [val]*condition(cos, units.dimensionless_unscaled, unit)
+                    val = [val]*(u.dimensionless_unscaled if cos else unit)
             if l != length:
                 raise TypeError('All input geometry parameters must have the same length')
             kwargs[k] = val
@@ -205,8 +206,8 @@ class ScatteringGeometry(object):
         return self._unit
     @unit.setter
     def unit(self, value):
-        value = units.Unit(value)
-        if not value.is_equivalent(units.deg):
+        value = u.Unit(value)
+        if not value.is_equivalent(u.deg):
             raise ValueError('Unit "rad" or equivalent is expected, but "%s" is received.' % str(value))
         if not self.cos:
             for k in list(self._data.keys()):
@@ -395,7 +396,7 @@ class ScatteringGeometry(object):
         sininc = np.sqrt(1-cosinc*cosinc)
         sinemi = np.sqrt(1-cosemi*cosemi)
         cospsi = (cospha - cosinc*cosemi) / (sininc * sinemi)
-        return condition(cos, cospsi, np.arccos(cospsi))
+        return cospsi if cos else np.arccos(cospsi)
 
     @staticmethod
     def calclat(inc, emi, pha, cos=False, rejected={}, good={}):
@@ -412,7 +413,7 @@ class ScatteringGeometry(object):
         if not cos:
             coslon = np.cos(coslon)
         coslat = cosemi/coslon
-        return condition(cos, coslat, np.arccos(coslat))
+        return coslat if cos else np.arccos(coslat)
 
     @staticmethod
     def calclon(inc, emi, pha, cos=False, rejected={}, good={}):
@@ -427,7 +428,7 @@ class ScatteringGeometry(object):
         cosinc, cosemi, cospha = ScatteringGeometry._setcos(cos, inc, emi, pha)
         sinpha = np.sqrt(1.-cospha*cospha)
         lon = np.arctan2(cosinc/cosemi-cospha, sinpha)
-        return condition(cos, np.cos(lon), lon)
+        return np.cos(lon) if cos else lon
 
     @staticmethod
     def calcpha(inc, emi, psi, cos=False, rejected={}, good={}):
@@ -442,7 +443,7 @@ class ScatteringGeometry(object):
         sininc = np.sqrt(1-cosinc*cosinc)
         sinemi = np.sqrt(1-cosemi*cosemi)
         cospha = cosinc*cosemi + sininc*sinemi*cospsi
-        return condition(cos, cospha, np.arccos(cospha))
+        return cospha if cos else np.arccos(cospha)
 
     @staticmethod
     def calcinc(pha, lat, lon, cos=False, rejected={}, good={}):
@@ -457,7 +458,7 @@ class ScatteringGeometry(object):
         sinpha = np.sqrt(1-cospha*cospha)
         sinlon = np.sqrt(1-coslon*coslon)
         cosinc = coslat * (cospha*coslon + sinpha*sinlon)
-        return condition(cos, cosinc, np.arccos(cosinc))
+        return cosinc if cos else np.arccos(cosinc)
 
     @staticmethod
     def calcemi(pha, lat, lon, cos=False, rejected={}, good={}):
@@ -470,7 +471,7 @@ class ScatteringGeometry(object):
         '''
         coslat, coslon = ScatteringGeometry._setcos(cos, lat, lon)
         cosemi = coslat*coslon
-        return condition(cos, cosemi, np.arccos(cosemi))
+        return cosemi if cos else np.arccos(cosemi)
 
     def astable(self):
         '''Return data as an astropy.table.Table instance'''
@@ -546,11 +547,11 @@ class ScatteringGeometry(object):
     @staticmethod
     def _setcos(cos, *var):
         if cos:
-            return condition(len(var) == 1, var[0], var)
+            return var[0] if len(var) == 1 else var
         else:
             var = _2rad(*var)
             vout = [np.cos(v) for v in var]
-            return condition(len(var)==1, vout[0], tuple(vout))
+            return vout[0] if len(var)==1 else tuple(vout)
 
     def merge(self, sca):
         '''Merge two instances of ScatteringGeometry'''
@@ -568,7 +569,7 @@ class ScatteringGeometry(object):
             sca.unit = self.unit
         if cos0 != self.cos:
             sca.cos = self.cos
-        self._data = table.vstack((self._data, sca._data))
+        self._data = vstack((self._data, sca._data))
         if unit0 != self.unit:
             sca.unit = unit0
         if cos0 != self.cos:
@@ -588,7 +589,7 @@ class ScatteringGeometry(object):
             for c in v.angles:
                 if c not in self.angles:
                     self._add_angle(c)
-            self._data = table.vstack((self._data, v._data))
+            self._data = vstack((self._data, v._data))
 
     def remove_rows(self, *args, **kwargs):
         self._data.remove_rows(*args, **kwargs)
@@ -631,13 +632,13 @@ class LatLon(object):
             self._data = Table(args, names=['lon','lat'])
         if self._data is not None:
             if self._data['lon'].unit is None:
-                u = kwargs.pop('unit', None)
-                if u is None:
-                    self._data['lon'].unit = units.deg
-                    self._data['lat'].unit = units.deg
+                uu = kwargs.pop('unit', None)
+                if uu is None:
+                    self._data['lon'].unit = u.deg
+                    self._data['lat'].unit = u.deg
                 else:
-                    self._data['lon'].unit = u
-                    self._data['lat'].unit = u
+                    self._data['lon'].unit = uu
+                    self._data['lat'].unit = uu
 
     @property
     def lon(self):
@@ -671,7 +672,7 @@ class LatLon(object):
     def append(self, v):
         if v is not None:
             v = LatLon(v)
-            self._data = table.vstack((self._data, v._data))
+            self._data = vstack((self._data, v._data))
 
     def remove_row(self, *args, **kwargs):
         self._data.remove_row(*args, **kwargs)
@@ -682,7 +683,7 @@ class LatLon(object):
     def merge(self, geo):
         if geo is not None:
             geo = LatLon(geo)
-            self._data = table.vstack((self._data, geo._data))
+            self._data = vstack((self._data, geo._data))
 
 
 class PhotometricData(object):
@@ -789,7 +790,7 @@ class PhotometricData(object):
                 scakey['lon'] = scakey['pholon']
                 scakey.pop('pholon')
             scakey['cos'] = kwargs.pop('cos', False)
-            scakey['unit'] = kwargs.pop('unit', units.deg)
+            scakey['unit'] = kwargs.pop('unit', u.deg)
             self.sca = ScatteringGeometry(**scakey)
 
             # collect reflectance data
@@ -1038,9 +1039,9 @@ class PhotometricData(object):
         r = self._data[k]
         if self.geo is not None:
             g = self.geo[k]
-            out = PhotometricData(table.hstack([s,r,g]))
+            out = PhotometricData(hstack([s,r,g]))
         else:
-            out = PhotometricData(table.hstack([s,r]))
+            out = PhotometricData(hstack([s,r]))
         if hasattr(self, 'band'):
             out.band = self.band
         return out
@@ -1057,7 +1058,7 @@ class PhotometricData(object):
     #   self.sca[k] = v.sca
 
     def __array__(self):
-        return table.hstack((self.sca.astable(), self._data)).__array__()
+        return hstack((self.sca.astable(), self._data)).__array__()
 
     def __len__(self):
         if self._data is None:
@@ -1090,7 +1091,7 @@ class PhotometricData(object):
             scatbl.rename_column('lon','pholon')
         if 'lat' in tblkeys:
             scatbl.rename_column('lat','pholat')
-        out = table.hstack((scatbl, self._data))
+        out = hstack((scatbl, self._data))
         if self.geo is not None:
             geotbl = self.geo.astable()
             tblkeys = geotbl.keys()
@@ -1098,7 +1099,7 @@ class PhotometricData(object):
                 geotbl.rename_column('lon','geolon')
             if 'lat' in tblkeys:
                 geotbl.rename_column('lat','geolat')
-            out = table.hstack((out, geotbl))
+            out = hstack((out, geotbl))
         out.meta['dtype'] = self.type
         if self.lonlim is not None:
             out.meta['maxlon'] = self.lonlim[1]
@@ -1181,14 +1182,13 @@ class PhotometricData(object):
                 if c not in self.refkey:
                     self._add_refkey(c)
             self.sca.append(v.sca)
-            self._data = table.vstack((self._data, v._data))
+            self._data = vstack((self._data, v._data))
             if self.geo is not None:
                 self.geo.append(v.geo)
             self._set_properties()
 
     def merge(self, pho, type='auto'):
         '''Merge two PhotometricData instances'''
-        import warnings
         assert isinstance(pho, PhotometricData)
         if len(pho) == 0:
             return
@@ -1235,7 +1235,7 @@ class PhotometricData(object):
                 self._add_refkey(k)
             if k not in pho.refkey:
                 pho._add_refkey(k)
-        self._data = table.vstack((self._data, pho._data))
+        self._data = vstack((self._data, pho._data))
         self._set_properties()
 
     def _binned_merge(self, pho):
@@ -1514,7 +1514,7 @@ class PhotometricData(object):
             else:
                 if datafiles is None:
                     raise ValueError('no reflectance data provided.')
-                root, ext = path.splitext(datafiles[i])
+                root, ext = os.path.splitext(datafiles[i])
                 if ext.lower() in ['.fits', '.fit']:
                     iof_layer = fits.open(datafiles[i])[0].data.astype('f4')
                 elif ext.lower() in ['.cub']:
@@ -1575,18 +1575,13 @@ class PhotometricData(object):
 
         v1.0.0 : 1/11/2016, JYL @PSI
         '''
-        from os.path import basename
-        from numpy import where, concatenate, array, asarray, repeat
-        from ..core import is_iterable
-
         illfile = np.asarray(illfile)
-        if is_iterable(iofdata):
-            iofdata = np.asarray(iofdata)
-        else:
+        iofdata = np.asarray(iofdata)
+        if iofdata.ndim == 0:
             iofdata = np.repeat(0, len(illfile))
 
         for illf, ioff in zip(illfile, iofdata):
-            print('  Extracting from ', basename(illf))
+            print('  Extracting from ', os.path.basename(illf))
             self.extract(illf, ioff, **kwargs)
 
     def bin(self, **kwargs):
@@ -1640,10 +1635,6 @@ class PhotometricDataPlotter():
 
         v1.0.0 : 11/1/2015, JYL @PSI
         '''
-        from matplotlib import pyplot as plt
-        from matplotlib.cm import ScalarMappable
-        from matplotlib.colors import LogNorm
-
         # set plot type
         if type == 'auto':
             if len(self.data) > 100000:
@@ -1840,15 +1831,14 @@ class PhotometricDataGrid(object):
 
     def reset_grid(self, lon, lat):
         '''Reset the longitude-latitude grid, therefore the whole class'''
-        from collections import OrderedDict
         self._lat = lat
         self._lon = lon
         if self._lat is not None:
             if not hasattr(self._lat, 'unit'):
-                self._lat = self._lat*units.deg
+                self._lat = self._lat*u.deg
         if self._lon is not None:
             if not hasattr(self._lon, 'unit'):
-                self._lon = self._lon*units.deg
+                self._lon = self._lon*u.deg
 
         self._info = OrderedDict()
         self._info1d = OrderedDict()
@@ -1869,7 +1859,7 @@ class PhotometricDataGrid(object):
             fnames = np.array(['phgrd_'+fmt % i+'.fits' for i in range(self.size)])
             self._info['file'] = fnames.reshape((nlat,nlon))
             for i in [1,2,3,4,6,7,8,9,10,11]:
-                self._info[info_fields[i]] = np.zeros((nlat,nlon))*units.deg
+                self._info[info_fields[i]] = np.zeros((nlat,nlon))*u.deg
             self._info['count'] = np.zeros((nlat,nlon))
             self._info['masked'] = np.ones((nlat,nlon), dtype=bool)
             self._info['loaded'] = np.zeros((nlat,nlon), dtype=bool)
@@ -1998,7 +1988,6 @@ class PhotometricDataGrid(object):
 
     def _load_data(self, *args):
         '''Load data for position [i,j] or position [i] for flattened case'''
-        import os
         if self.file is None:
             raise ValueError('data file not specified')
         infofile, path = self._path_name(self.file)
@@ -2042,7 +2031,6 @@ class PhotometricDataGrid(object):
         ``self._flushed`` flag will be updated to True after saving data.
         Otherwise this flag is not updated.
         """
-        import os
         if outfile is None:
             if self.file is None:
                 raise ValueError('data file not specified')
@@ -2110,8 +2098,6 @@ class PhotometricDataGrid(object):
 
         v1.0.0 : 1/12/2016, JYL @PSI
         '''
-        import os
-
         if outfile is None:
             if self.file is None:
                 raise ValueError('output file not specified')
@@ -2170,7 +2156,6 @@ class PhotometricDataGrid(object):
 
         v1.0.0 : 1/12/2016, JYL @PSI
         '''
-        import os
         if infile is None:
             if self.file is None:
                 raise ValueError('input file not specified')
@@ -2383,8 +2368,7 @@ class PhotometricDataGrid(object):
                 d = PhotometricData()
                 for illf, ioff in zip(illfile, ioffile):
                     if verbose:
-                        from os.path import basename
-                        print('Extracting from ', basename(illf))
+                        print('Extracting from ', os.path.basename(illf))
                     d.extract(illf, ioff, verbose=verbose, **kwargs)
                     sz = _memory_size(len(d))
                     if _memory_size(len(d)) > self.max_mem:
@@ -2407,11 +2391,10 @@ class PhotometricDataGrid(object):
             info = dict(self._info1d)
         else:
             infile, indir = self._path_name(infile)
-            from astropy.io import fits
             inf = fits.open(infile)
             ver = inf[0].header['version']
-            lon = inf['lon'].data * units.Unit(inf['lon'].header['bunit'])
-            lat = inf['lat'].data * units.Unit(inf['lat'].header['bunit'])
+            lon = inf['lon'].data * u.Unit(inf['lon'].header['bunit'])
+            lat = inf['lat'].data * u.Unit(inf['lat'].header['bunit'])
             infodata = np.asanyarray(inf['info'].data)
             nodata = infodata['count'] == 0
             geokeys = ['incmin', 'incmax', 'emimin', 'emimax',
@@ -2420,7 +2403,7 @@ class PhotometricDataGrid(object):
                 infodata[k][nodata] = np.nan
             info = Table(infodata).asdict()
             for k in 'latmin latmax lonmin lonmax'.split() + geokeys:
-                info[k] = info[k] * units.deg
+                info[k] = info[k] * u.deg
             inf.close()
 
         return {'version': ver, 'lon': lon, 'lat': lat, 'info': info}
@@ -2429,7 +2412,6 @@ class PhotometricDataGrid(object):
         '''Merge with another PhotometricDataGroup instance'''
         if (self.lon != pho.lon).any() or (self.lat != pho.lat).any():
             raise ValueError('can''t merge with different longitude-latitude grid')
-        import sys
         nlat = len(self.lat)-1
         tag = -0.1
         for i in range(len(self.lon)-1):
@@ -2459,7 +2441,6 @@ class PhotometricDataGrid(object):
         v1.0.0 : 1/19/2016, JYL @PSI
         '''
         tag = -0.1
-        import sys
         nlat,nlon = self.shape
         for i in range(self.size):
             prog = float(i)/self.size*100
@@ -2515,7 +2496,6 @@ class PhotometricDataGrid(object):
 
         v1.0.0 : 1/19/2016 JYL @PSI
         '''
-        import sys
         sz = _memory_size((self._info['count']*(~self._info['masked']).astype('i')).sum())
         if sz>maxsize:
             raise MemoryError('data size exceeding maximum memory size allowed')
@@ -2541,7 +2521,6 @@ class PhotometricDataGrid(object):
         Returns a `PhotometricDataGrid` object associated with output file
         ``outfile``.
         """
-        import os
         out = PhotometricDataGrid(lon=self.lon.copy(), lat=self.lat.copy())
         if os.path.isfile(outfile):
             raise IOError('Output file already exists.')
@@ -2688,7 +2667,6 @@ class PhotometricModelFitter(object):
         if fitted == False:
             print('No model has been fitted.')
             return
-        from matplotlib import pyplot as plt
         ratio = data/fit
         figs = []
         figs.append(plt.figure(100, figsize=figsize[0]))
@@ -2702,10 +2680,10 @@ class PhotometricModelFitter(object):
         plt.clf()
         plt.plot(data, fit, 'o')
         tmp1 = data
-        if isinstance(data, units.Quantity):
+        if isinstance(data, u.Quantity):
             tmp1 = data.value
         tmp2 = fit
-        if isinstance(fit, units.Quantity):
+        if isinstance(fit, u.Quantity):
             tmp2 = fit.value
         tmp = np.concatenate((tmp1, tmp2))
         lim = [tmp.min(),tmp.max()]
@@ -2825,8 +2803,6 @@ class PhotometricGridFitter(object):
         if multi is not None:
             if verbose:
                 print(f'Multiprocessing with {multi} workers')
-            import multiprocessing
-            from time import sleep
             iis, jjs = np.meshgrid(ii, jj, indexing='ij')
             iis = iis.flatten()
             jjs = jjs.flatten()
@@ -3297,7 +3273,7 @@ class Exponential(PhaseFunction):
     def evaluate(alpha, beta, gamma, delta):
         #alpha = self._check_unit(alpha)
         alpha = np.squeeze(alpha)
-        if isinstance(alpha, units.Quantity):
+        if isinstance(alpha, u.Quantity):
             alpha = alpha.to('deg').value
         alpha2 = alpha*alpha
         return np.exp(beta*alpha+gamma*alpha2+delta*alpha*alpha2)
@@ -3306,7 +3282,7 @@ class Exponential(PhaseFunction):
     def fit_deriv(alpha, beta, gamma, delta):
         #alpha = self._check_unit(alpha)
         alpha = np.squeeze(alpha)
-        if isinstance(alpha, units.Quantity):
+        if isinstance(alpha, u.Quantity):
             alpha = alpha.to('deg').value
         exp = Exp.evaluate(alpha, beta, gamma, delta)
         alpha2 = alpha*alpha
@@ -3781,19 +3757,19 @@ def ref2mag(ref, radius, msun=-26.74):
     '''Convert average bidirectional reflectance to reduced magnitude'''
 
     Q = False
-    if isinstance(ref, units.Quantity):
+    if isinstance(ref, u.Quantity):
         ref = ref.value
         Q = True
-    if isinstance(radius, units.Quantity):
+    if isinstance(radius, u.Quantity):
         radius = radius.to('km').value
         Q = True
-    if isinstance(msun, units.Quantity):
+    if isinstance(msun, u.Quantity):
         msun = msun.to('mag').value
         Q = True
 
-    mag = msun-2.5*np.log10(ref*np.pi*radius*radius*units.km.to('au')**2)
+    mag = msun-2.5*np.log10(ref*np.pi*radius*radius*u.km.to('au')**2)
     if Q:
-        return mag*units.mag
+        return mag*u.mag
     else:
         return mag
 
@@ -3802,19 +3778,19 @@ def mag2ref(mag, radius, msun=-26.74):
     '''Convert reduced magnitude to average bidirectional reflectance'''
 
     Q = False
-    if isinstance(mag, units.Quantity):
+    if isinstance(mag, u.Quantity):
         mag = mag.value
         Q = True
-    if isinstance(radius, units.Quantity):
+    if isinstance(radius, u.Quantity):
         radius = radius.to('km').value
         Q = True
-    if isinstance(msun, units.Quantity):
+    if isinstance(msun, u.Quantity):
         msun = msun.to('mag').value
         Q = True
 
-    ref = 10**((msun-mag)*0.4)/(np.pi*radius*radius*units.km.to('au')**2)
+    ref = 10**((msun-mag)*0.4)/(np.pi*radius*radius*u.km.to('au')**2)
     if Q:
-        return ref/units.sr
+        return ref/u.sr
     else:
         return ref
 
@@ -3892,7 +3868,6 @@ class Binner(object):
     def __init__(self, dims=['inc','emi','pha'], bins=(5,5,5), boundary=None):
         #if not isinstance(sca, ScatteringGeometry):
         #   raise TypeError('ScatteringGeometry class instance is expected.')
-        import warnings
         self.dims = dims
         if boundary is not None:
             if len(boundary) != 3:
@@ -3927,7 +3902,7 @@ class Binner(object):
         if verbose:
             print('Bin {0} photometric data points to grid:'.format(len(data[0])))
             for p, d, bn, bd in zip(self.dims, data[:3], self.bins, self.boundary):
-                print('  {0} from {1} to {2} with {3}: {4}'.format(p, d.min(), d.max(), method, condition(method=='bin', bn, bd)))
+                print('  {0} from {1} to {2} with {3}: {4}'.format(p, d.min(), d.max(), method, bn if method=='bin' else bd))
 
         binned = [[], [], [], []]
         error = [[], [], [], []]
@@ -3980,7 +3955,6 @@ class ROLOModelFitter(PhotometricModelFitter):
 
     def plot(self):
         figs = super(ROLOModelFitter, self).plot()
-        from matplotlib import pyplot as plt
         figs.append(plt.figure(102))
         plt.clf()
         mu0 = np.cos(self.data.inc)
@@ -4029,11 +4003,10 @@ def fitROLO(pho, m0=None, fit_info=False, **kwargs):
         return m
 
 
-import astropy
-class Mul(astropy.modeling.mappings.Mapping):
+class Mul(mappings.Mapping):
     def __init__(self, *args, **kwarg):
         super(Mul,self).__init__(*args,**kwarg)
-        self._outputs = 'y',
+        self._outputs = ('y',)
     def __call__(self,*args,**kwarg):
         ys = super(Mul,self).__call__(*args,**kwarg)
         print(ys)
@@ -4072,12 +4045,6 @@ def extract_phodata(illfile, iofdata=0, maskdata=None, backplanes=None, binsize=
  v1.0.0 : 1/12/2016, JYL @PSI
    Adopted from `extact_phodata` from Dawn.py package
     '''
-
-    from jylipy.pysis_ext import CubeFile
-    from jylipy.core import rebin, readfits
-    from os.path import basename, isfile, splitext
-    from numpy import zeros, squeeze, where, empty, repeat, newaxis, array, rollaxis, concatenate, isfinite
-
     # List of all possible geometric backplanes generated by isis.phocube
     geo_backplanes = {'Phase Angle':'pha', 'Local Emission Angle':'emi', 'Local Incidence Angle':'inc', 'Latitude':'lat', 'Longitude':'lon', 'Incidence Angle':'inc0', 'Emission Angle':'emi0', 'Pixel Resolution':'res', 'Line Resolution':'lres', 'Sample Resolution':'sres', 'Detector Resolution':'dres', 'North Azimuth':'noraz', 'Sun Azimuth':'sunaz', 'Spacecraft Azimuth':'scaz', 'OffNadir Angle':'offang', 'Sub Spacecraft Ground Azimuth':'subscaz', 'Sub Solar Ground Azimuth':'subsaz', 'Morphology':'mor', 'Albedo':'alb', 'Mask': 'mask'}
 
@@ -4097,10 +4064,10 @@ def extract_phodata(illfile, iofdata=0, maskdata=None, backplanes=None, binsize=
 
     # Read in image data
     if isinstance(iofdata, (str, bytes)):
-        if not isfile(iofdata):
+        if not os.path.isfile(iofdata):
             raise IOError('I/F data not found.')
         if iofdata.lower().endswith(('.fits','.fit')):
-            im = readfits(iofdata, verbose=verbose)
+            im = fits.open(iofdata, verbose=verbose)[0].data
         elif iofdata.lower().endswith('.img'):
             im = PDS.readpds(iofdata)
         else:
@@ -4112,7 +4079,7 @@ def extract_phodata(illfile, iofdata=0, maskdata=None, backplanes=None, binsize=
             imnames = ['Data{0}'.format(i) for i in range(dim[0])]
     else:
         if hasattr(iofdata, '__iter__'):
-            im = array([ill0[i] for i in iofdata])
+            im = np.array([ill0[i] for i in iofdata])
             imnames = [illbackplanes[i] for i in iofdata]
         else:
             im = ill0[iofdata]
@@ -4135,15 +4102,15 @@ def extract_phodata(illfile, iofdata=0, maskdata=None, backplanes=None, binsize=
         if 'Mask' in illbackplanes:
             mask = ill0[illbackplanes.index('Mask')].astype(bool)
         else:
-            mask = zeros(ill.shape[1:],dtype=bool)
+            mask = np.zeros(ill.shape[1:],dtype=bool)
     for k in ill:
-        mask |= ~isfinite(k)
+        mask |= ~np.isfinite(k)
     ndim = im.shape
     if ndim == 2:
-        mask |= ~isfinite(im)
+        mask |= ~np.isfinite(im)
     else:
         for i in im:
-            mask |= ~isfinite(i)
+            mask |= ~np.isfinite(i)
     if hasattr(im, 'mask'):
         mask |= im.mask.astype(bool)
 
@@ -4158,7 +4125,7 @@ def extract_phodata(illfile, iofdata=0, maskdata=None, backplanes=None, binsize=
         mask = rebin(mask, [binsize, binsize])
 
     # organize data
-    ww = where(~mask)
+    ww = np.where(~mask)
     if len(ww[0])>0:
         data = np.concatenate((im[np.newaxis,...].astype('f4'), ill.astype('f4')))
         data = data[:,~mask]
