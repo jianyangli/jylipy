@@ -840,7 +840,7 @@ class PhotometricData(object):
                     self.geo = data.geo.copy()
                 self._type = data.type
                 self.binparms = args[0].binparms
-                self.band = args[0].band
+                self.band = getattr(args[0], 'band', None)
             elif isinstance(args[0], Table):
                 # Initialize from an astropy Table
                 cos = kwargs.pop('cos', False)
