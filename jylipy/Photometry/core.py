@@ -7,13 +7,13 @@ import os, sys, warnings, multiprocessing, numbers
 import numpy as np, matplotlib.pyplot as plt, astropy.units as u
 from collections import OrderedDict
 from astropy.io import fits
-from astropy.table import Table, Column, Row, vstack, hstack
+from astropy.table import Column, Row, vstack, hstack
 from astropy.modeling import FittableModel, Fittable1DModel, \
         Fittable2DModel, Parameter, mappings
 from matplotlib.colors import LogNorm
 from matplotlib.cm import ScalarMappable
 from pysis import CubeFile
-from ..core import ulen, rebin
+from ..core import ulen, rebin, Table
 from ..plotting import pplot
 from ..apext import MPFitter
 
