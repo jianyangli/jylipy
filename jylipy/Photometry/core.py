@@ -18,7 +18,7 @@ from ..plotting import pplot
 from ..apext import MPFitter
 
 
-recipi = 1/np.pi  # reciprocal pi
+recipi = 1 / np.pi  # reciprocal pi
 
 
 def _2rad(*args):
@@ -93,7 +93,8 @@ class ScatteringGeometry(object):
     def __init__(self, *args, **kwargs):
         if len(args) == 0:
             if len(kwargs) == 0:
-                # Initialize an empty class.  In this case only `append` and `read` method can be called
+                # Initialize an empty class.  In this case only `append`
+                # and `read` method can be called
                 self._cos = None
                 self._unit = None
                 self._data = None
@@ -119,7 +120,8 @@ class ScatteringGeometry(object):
                         np.asanyarray(kwargs['lon'], dtype='f4')]
                 names = 'pha lat lon'.split()
             else:
-                raise GeometryError('Scattering geometry combination not recognized.')
+                raise GeometryError('Scattering geometry combination '
+                    'not recognized.')
             for i in range(len(data)):
                 if not hasattr(data[i],'__iter__'):
                     data[i] = [data[i]]
@@ -134,7 +136,9 @@ class ScatteringGeometry(object):
                 # initialize from a table
                 angle_keys = 'inc emi pha psi lat lon'.split()
                 k = [c for c in args[0].colnames if c in angle_keys]
-                if (not {'inc','emi','pha'}.issubset(set(k))) and (not {'inc','emi','psi'}.issubset(set(k))) and (not {'pha','lat','lon'}.issubset(set(k))):
+                if (not {'inc', 'emi', 'pha'}.issubset(set(k))) and \
+                   (not {'inc', 'emi', 'psi'}.issubset(set(k))) and \
+                   (not {'pha', 'lat', 'lon'}.issubset(set(k))):
                     raise ValueError('Initializing table is invalid')
                 v = args[0][k]
                 if v[k[0]].unit is None:
@@ -154,7 +158,8 @@ class ScatteringGeometry(object):
                 self.read(args[0], **kwargs)
                 self._cos = kwargs.pop('cos', False)
         else:
-            raise ValueError('At most 1 argument expected, {0} received'.format(len(args)))
+            raise ValueError('At most 1 argument expected, {0} '
+                    'received'.format(len(args)))
 
     def _check_keywords(self, kwargs):
         # 1. check whether the input parameters are correct set
@@ -162,16 +167,21 @@ class ScatteringGeometry(object):
         # 3. change all scaler input to vector
         # 4. change all numbers to quantity
         # save changes in the input dictionary
-        if not set(kwargs.keys()).issubset(set('cos unit inc emi pha psi lat lon'.split())):
+        if not set(kwargs.keys()).issubset(set('cos unit inc emi pha '
+                'psi lat lon'.split())):
             raise TypeError('unexpected keyword received.')
         cos = kwargs.pop('cos', False)
         unit = u.Unit(kwargs.pop('unit', u.deg))
         if len(kwargs) != 3:
-            raise TypeError('%s requires exactly three geometric parameters to initialize, got %d.' % (type(self), len(kwargs)))
-        if set(kwargs.keys()) not in [set('inc emi pha'.split()), set('inc emi psi'.split()), set('pha lat lon'.split())]:
-            raise TypeError('%s can only be initiated with (inc, emi, pha), or (inc, emi, psi), or (pha, lat, lon).' % type(self))
+            raise TypeError('%s requires exactly three geometric '
+                'parameters to initialize, got %d.' % (type(self), len(kwargs)))
+        if set(kwargs.keys()) not in [set('inc emi pha'.split()), \
+                set('inc emi psi'.split()), set('pha lat lon'.split())]:
+            raise TypeError('%s can only be initiated with (inc, emi, pha), '
+                'or (inc, emi, psi), or (pha, lat, lon).' % type(self))
         if not unit.is_equivalent(u.deg):
-            raise ValueError('Unit "rad" or equivalent is expected, but "%s" received in `unit` keyword.' % str(unit))
+            raise ValueError('Unit "rad" or equivalent is expected, but '
+                '"%s" received in `unit` keyword.' % str(unit))
         keys = list(kwargs.keys())
         length = ulen(kwargs[keys[0]])
         for k in keys:
@@ -186,12 +196,13 @@ class ScatteringGeometry(object):
             else:
                 if hasattr(val, '__iter__'):
                     l = len(val)
-                    val = val*(u.dimensionless_unscaled if cos else unit)
+                    val = val * (u.dimensionless_unscaled if cos else unit)
                 else:
                     l = 1
-                    val = [val]*(u.dimensionless_unscaled if cos else unit)
+                    val = [val] * (u.dimensionless_unscaled if cos else unit)
             if l != length:
-                raise TypeError('All input geometry parameters must have the same length')
+                raise TypeError('All input geometry parameters must have '
+                    'the same length')
             kwargs[k] = val
         kwargs['cos'] = cos
         kwargs['unit'] = unit
@@ -204,11 +215,13 @@ class ScatteringGeometry(object):
     def unit(self):
         '''Unit of data, either deg or rad in astropy.units'''
         return self._unit
+
     @unit.setter
     def unit(self, value):
         value = u.Unit(value)
         if not value.is_equivalent(u.deg):
-            raise ValueError('Unit "rad" or equivalent is expected, but "%s" is received.' % str(value))
+            raise ValueError('Unit "rad" or equivalent is expected, but '
+                '"%s" is received.' % str(value))
         if not self.cos:
             for k in list(self._data.keys()):
                 self._data[k] = self._data.getcolumn(k).to(value)
@@ -220,6 +233,7 @@ class ScatteringGeometry(object):
         corresponding angles.  Otherwise as angles with unit specified
         in .unit'''
         return self._cos
+
     @cos.setter
     def cos(self, value):
         if value != self.cos:
@@ -228,7 +242,8 @@ class ScatteringGeometry(object):
                     self._data[k] = np.cos(self._data.getcolumn(k))
             else:
                 for k in list(self._data.keys()):
-                    self._data[k] = np.arccos(self._data.getcolumn(k)).to(self.unit)
+                    self._data[k] = np.arccos(self._data.getcolumn(k)) \
+                        .to(self.unit)
             self._cos = value
 
     @property
@@ -242,29 +257,56 @@ class ScatteringGeometry(object):
 
     def _add_angle(self, key):
         if key == 'inc':
-            if ('pha' not in self.angles) or ('lat' not in self.angles) or ('lon' not in self.angles):
-                raise GeometryError('Insufficient information available to calculate incidence angles')
-            v = self.calcinc(self.pha, self.lat, self.lon, cos=self.cos).to(self.unit)
+            if ('pha' not in self.angles) or \
+               ('lat' not in self.angles) or \
+               ('lon' not in self.angles):
+                raise GeometryError('Insufficient information available '
+                    'to calculate incidence angles')
+            v = self.calcinc(self.pha, self.lat, self.lon,
+                    cos=self.cos).to(self.unit)
         elif key == 'emi':
-            if ('pha' not in self.angles) or ('lat' not in self.angles) or ('lon' not in self.angles):
-                raise GeometryError('Insufficient information available to calculate emission angles')
-            v = self.calcemi(self.pha, self.lat, self.lon, cos=self.cos).to(self.unit)
+            if ('pha' not in self.angles) or \
+               ('lat' not in self.angles) or \
+               ('lon' not in self.angles):
+                raise GeometryError('Insufficient information available '
+                    'to calculate emission angles')
+            v = self.calcemi(self.pha, self.lat, self.lon,
+                    cos=self.cos).to(self.unit)
         elif key == 'pha':
-            if ('inc' not in self.angles) or ('emi' not in self.angles) or ('psi' not in self.angles):
-                raise GeometryError('Insufficient information available to calculate phase angles')
-            v = self.calcpha(self.inc, self.emi, self.psi, cos=self.cos).to(self.unit)
+            if ('inc' not in self.angles) or \
+               ('emi' not in self.angles) or \
+               ('psi' not in self.angles):
+                raise GeometryError('Insufficient information available '
+                    'to calculate phase angles')
+            v = self.calcpha(self.inc, self.emi, self.psi,
+                    cos=self.cos).to(self.unit)
         elif key == 'psi':
-            if (('inc' not in self.angles) or ('emi' not in self.angles) or ('pha' not in self.angles)) and (('pha' not in self.angles) or ('lat' not in self.angles) or ('lon' not in self.angles)):
-                raise GeometryError('Insufficient information available to calculate plane angles')
-            v = self.calcpsi(self.inc, self.emi, self.pha, cos=self.cos).to(self.unit)
+            if (('inc' not in self.angles) or \
+                ('emi' not in self.angles) or \
+                ('pha' not in self.angles)) and \
+               (('pha' not in self.angles) or \
+                ('lat' not in self.angles) or \
+                ('lon' not in self.angles)):
+                raise GeometryError('Insufficient information available '
+                    'to calculate plane angles')
+            v = self.calcpsi(self.inc, self.emi, self.pha,
+                    cos=self.cos).to(self.unit)
         elif key == 'lat':
-            if ('inc' not in self.angles) or ('emi' not in self.angles) or (('psi' not in self.angles) and ('pha' not in self.angles)):
-                raise GeometryError('Insufficient information available to calculate latitudes')
-            v = self.calclat(self.inc, self.emi, self.pha, cos=self.cos).to(self.unit)
+            if ('inc' not in self.angles) or \
+               ('emi' not in self.angles) or \
+               (('psi' not in self.angles) and ('pha' not in self.angles)):
+                raise GeometryError('Insufficient information available '
+                    'to calculate latitudes')
+            v = self.calclat(self.inc, self.emi, self.pha,
+                    cos=self.cos).to(self.unit)
         elif key == 'lon':
-            if ('inc' not in self.angles) or ('emi' not in self.angles) or (('psi' not in self.angles) and ('pha' not in self.angles)):
-                raise GeometryError('Insufficient information available to calculate longitudes')
-            v = self.calclon(self.inc, self.emi, self.pha, cos=self.cos).to(self.unit)
+            if ('inc' not in self.angles) or \
+               ('emi' not in self.angles) or \
+               (('psi' not in self.angles) and ('pha' not in self.angles)):
+                raise GeometryError('Insufficient information available '
+                    'to calculate longitudes')
+            v = self.calclon(self.inc, self.emi, self.pha,
+                    cos=self.cos).to(self.unit)
         else:
             pass
         if not hasattr(v.value,'__iter__'):
@@ -279,7 +321,6 @@ class ScatteringGeometry(object):
         if 'emi' not in self.angles:
             self._add_angle('emi')
         v = self._data.getcolumn('emi')
-        #return condition(len(self) == 1, np.squeeze(v)*self.unit, v)
         return v
 
     @property
@@ -288,7 +329,6 @@ class ScatteringGeometry(object):
         if 'pha' not in self.angles:
             self._add_angle('pha')
         v = self._data.getcolumn('pha')
-        #return condition(len(self) == 1, np.squeeze(v)*self.unit, v)
         return v
 
     @property
@@ -297,7 +337,6 @@ class ScatteringGeometry(object):
         if 'psi' not in self.angles:
             self._add_angle('psi')
         v = self._data.getcolumn('psi')
-        #return condition(len(self) == 1, np.squeeze(v)*self.unit, v)
         return v
 
     @property
@@ -306,7 +345,6 @@ class ScatteringGeometry(object):
         if 'lat' not in self.angles:
             self._add_angle('lat')
         v = self._data.getcolumn('lat')
-        #return condition(len(self) == 1, np.squeeze(v)*self.unit, v)
         return v
 
     @property
@@ -315,7 +353,6 @@ class ScatteringGeometry(object):
         if 'lon' not in self.angles:
             self._add_angle('lon')
         v = self._data.getcolumn('lon')
-        #return condition(len(self) == 1, np.squeeze(v)*self.unit, v)
         return v
 
     @property
@@ -336,6 +373,7 @@ class ScatteringGeometry(object):
     def formatter(self):
         '''See astropy.table.Table.formatter'''
         return self._data.formatter
+
     @formatter.setter
     def formatter(self, value):
         self._data.formatter = value
@@ -344,8 +382,11 @@ class ScatteringGeometry(object):
         return ScatteringGeometry(Table(self._data[k]), cos=self.cos)
 
     def __setitem__(self, k, v):
-        if (not isinstance(v, ScatteringGeometry)) and (not isinstance(v, dict)) and (not isinstance(v, Table)):
-            raise TypeError('can only assign dictionary type with another ScatteringGeometry, Table, or dictionary')
+        if (not isinstance(v, ScatteringGeometry)) and \
+           (not isinstance(v, dict)) and \
+           (not isinstance(v, Table)):
+            raise TypeError('can only assign dictionary type with '
+                'another ScatteringGeometry, Table, or dictionary')
         v = ScatteringGeometry(v)
         v.unit = self.unit
         v.cos = self.cos
@@ -375,7 +416,8 @@ class ScatteringGeometry(object):
 
     def __eq__(self, other):
         if not isinstance(other, ScatteringGeometry):
-            raise TypeError('comparison of %s with %s not defined.' % (type(self), type(other)))
+            raise TypeError('comparison of {} with {} not defined.'.format(
+                    type(self), type(other)))
         if ((self.inc-other.inc).value > 1e-10).any() or \
             ((self.emi-other.emi).value > 1e-10).any() or \
             ((self.pha-other.pha).value > 1e-10).any():
@@ -393,9 +435,9 @@ class ScatteringGeometry(object):
         See Shkuratov et al. (2011), Eq. 1.
         '''
         cosinc, cosemi, cospha = ScatteringGeometry._setcos(cos, inc, emi, pha)
-        sininc = np.sqrt(1-cosinc*cosinc)
-        sinemi = np.sqrt(1-cosemi*cosemi)
-        cospsi = (cospha - cosinc*cosemi) / (sininc * sinemi)
+        sininc = np.sqrt(1 - cosinc * cosinc)
+        sinemi = np.sqrt(1 - cosemi * cosemi)
+        cospsi = (cospha - cosinc * cosemi) / (sininc * sinemi)
         return cospsi if cos else np.arccos(cospsi)
 
     @staticmethod
@@ -426,8 +468,8 @@ class ScatteringGeometry(object):
         20,281-20,295
         '''
         cosinc, cosemi, cospha = ScatteringGeometry._setcos(cos, inc, emi, pha)
-        sinpha = np.sqrt(1.-cospha*cospha)
-        lon = np.arctan2(cosinc/cosemi-cospha, sinpha)
+        sinpha = np.sqrt(1. - cospha * cospha)
+        lon = np.arctan2(cosinc / cosemi - cospha, sinpha)
         return np.cos(lon) if cos else lon
 
     @staticmethod
@@ -440,9 +482,9 @@ class ScatteringGeometry(object):
         See Shkuratov et al. (2011), Eq. 2.
         '''
         cosinc, cosemi, cospsi = ScatteringGeometry._setcos(cos, inc, emi, psi)
-        sininc = np.sqrt(1-cosinc*cosinc)
-        sinemi = np.sqrt(1-cosemi*cosemi)
-        cospha = cosinc*cosemi + sininc*sinemi*cospsi
+        sininc = np.sqrt(1 - cosinc * cosinc)
+        sinemi = np.sqrt(1 - cosemi * cosemi)
+        cospha = cosinc * cosemi + sininc * sinemi * cospsi
         return cospha if cos else np.arccos(cospha)
 
     @staticmethod
@@ -455,9 +497,9 @@ class ScatteringGeometry(object):
         See Shkuratov et al. (2011), Eq. 1.
         '''
         cospha, coslat, coslon = ScatteringGeometry._setcos(cos, pha, lat, lon)
-        sinpha = np.sqrt(1-cospha*cospha)
-        sinlon = np.sqrt(1-coslon*coslon)
-        cosinc = coslat * (cospha*coslon + sinpha*sinlon)
+        sinpha = np.sqrt(1 - cospha * cospha)
+        sinlon = np.sqrt(1 - coslon * coslon)
+        cosinc = coslat * (cospha * coslon + sinpha * sinlon)
         return cosinc if cos else np.arccos(cosinc)
 
     @staticmethod
@@ -470,7 +512,7 @@ class ScatteringGeometry(object):
         See Shkuratov et al. (2011), Eq. 1.
         '''
         coslat, coslon = ScatteringGeometry._setcos(cos, lat, lon)
-        cosemi = coslat*coslon
+        cosemi = coslat * coslon
         return cosemi if cos else np.arccos(cosemi)
 
     def astable(self):
@@ -486,10 +528,10 @@ class ScatteringGeometry(object):
 
         See astropy.table.Table.argsort'''
         if keys is not None:
-            if isinstance(keys, (str,bytes)):
+            if isinstance(keys, (str, bytes)):
                 keys = [keys]
             if not set(keys).issubset(set(self._data.keys())):
-                raise ValueError("keys must be in "+str(self.names()))
+                raise ValueError("keys must be in " + str(self.names()))
         return self._data.argsort(keys=keys, kind=kind, **kwargs)
 
     def copy(self, *args, **kwarg):
@@ -521,7 +563,7 @@ class ScatteringGeometry(object):
         'psi', 'lat', 'lon']
 
         See table.Table.sort'''
-        if isinstance(keys, (str,bytes)):
+        if isinstance(keys, (str, bytes)):
             keys = [keys]
         if not set(keys).issubset(set(self._data.keys())):
             raise ValueError("keys must be in "+str(self.names()))
@@ -551,11 +593,12 @@ class ScatteringGeometry(object):
         else:
             var = _2rad(*var)
             vout = [np.cos(v) for v in var]
-            return vout[0] if len(var)==1 else tuple(vout)
+            return vout[0] if len(var) == 1 else tuple(vout)
 
     def merge(self, sca):
         '''Merge two instances of ScatteringGeometry'''
-        keymap = {'inc': 'Incidence', 'emi': 'emi', 'pha': 'pha', 'psi': 'psi', 'lat': 'lat', 'lon': 'lon'}
+        keymap = {'inc': 'Incidence', 'emi': 'emi', 'pha': 'pha',
+                  'psi': 'psi', 'lat': 'lat', 'lon': 'lon'}
         keys = set(self.angles)
         [keys.add(k) for k in sca.angles]
         for k in keys:
@@ -602,8 +645,8 @@ class ScatteringGeometry(object):
         return np.isfinite(self.inc) & np.isfinite(self.emi) & \
             np.isfinite(self.pha) & np.isfinite(self.lon) & \
             np.isfinite(self.lat) & np.isfinite(self.psi) & \
-            (self.inc+self.emi >= self.pha) & \
-            (abs(self.inc-self.emi) <= self.pha)
+            (self.inc + self.emi >= self.pha) & \
+            (abs(self.inc - self.emi) <= self.pha)
 
     def validate(self):
         good = self.is_valid()
@@ -758,7 +801,8 @@ class PhotometricData(object):
     def __init__(self, *args, **kwargs):
         if (len(args) == 0) or ((len(args) == 1) and (args[0] is None)):
             if len(kwargs) == 0:
-                # Initialize an empty class.  In this case, only `append` and `read` methods can be called
+                # Initialize an empty class.  In this case, only `append`
+                # and `read` methods can be called
                 self._data = None
                 self.sca = None
                 self.geo = None
@@ -770,7 +814,8 @@ class PhotometricData(object):
             self._type = kwargs.pop('type', 'measured')
             if self._type == 'binned':
                 if 'binparms' not in list(kwargs.keys()):
-                    raise ValueError('`binparms` keyword is not found while `type` is set to `binned`.')
+                    raise ValueError('`binparms` keyword is not found '
+                        'while `type` is set to `binned`.')
                 self.binparms = kwargs.pop('binparms')
             else:
                 self.binparms = None
@@ -875,7 +920,8 @@ class PhotometricData(object):
                 # Initialize from a file
                 self.read(args[0], **kwargs)
         else:
-            raise ValueError('At most 1 argument expected, {0} received'.format(len(args)))
+            raise ValueError('At most 1 argument expected, {0} '
+                'received'.format(len(args)))
         self._set_properties()
 
     def _set_properties(self):
@@ -998,39 +1044,40 @@ class PhotometricData(object):
     def _add_refkey(self, key):
         if key == 'BDR':
             if 'RADF' in self.refkey:
-                self._data.add_column(Column(self.RADF/np.pi, name=key))
+                self._data.add_column(Column(self.RADF / np.pi, name=key))
             elif 'BRDF' in self.refkey:
-                self._data.add_column(Column((self.BRDF.T*self.mu0).T,
+                self._data.add_column(Column((self.BRDF.T * self.mu0).T,
                                              name=key))
             else:
-                self._data.add_column(Column((self.REFF.T*self.mu0).T/np.pi,
+                self._data.add_column(Column((self.REFF.T * self.mu0).T / np.pi,
                                              name=key))
         elif key == 'RADF':
             if 'BDR' in self.refkey:
                 self._data.add_column(Column(self.BDR*np.pi, name=key))
             elif 'BRDF' in self.refkey:
-                self._data.add_column(Column((self.BRDF.T*self.mu0).T*np.pi,
+                self._data.add_column(Column((self.BRDF.T * self.mu0).T * np.pi,
                                              name=key))
             else:
-                self._data.add_column(Column((self.REFF.T*self.mu0).T,
+                self._data.add_column(Column((self.REFF.T * self.mu0).T,
                                              name=key))
         elif key == 'BRDF':
             if 'BDR' in self.refkey:
-                self._data.add_column(Column((self.BDR.T/self.mu0).T,
+                self._data.add_column(Column((self.BDR.T / self.mu0).T,
                                              name=key))
             elif 'RADF' in self.refkey:
-                self._data.add_column(Column((self.RADF.T/(np.pi*self.mu0)).T,
-                                             name=key))
+                self._data.add_column(Column((self.RADF.T / (np.pi *
+                            self.mu0)).T, name=key))
             else:
-                self._data.add_column(Column(self.REFF/np.pi, name=key))
+                self._data.add_column(Column(self.REFF / np.pi, name=key))
         elif key == 'REFF':
             if 'BDR' in self.refkey:
-                self._data.add_column(Column((self.BDR*np.pi/self.mu0).T,
+                self._data.add_column(Column((self.BDR * np.pi / self.mu0).T,
                                              name=key))
             elif 'RADF' in self.refkey:
-                self._data.add_column(Column((self.RADF/self.mu0).T, name=key))
+                self._data.add_column(Column((self.RADF / self.mu0).T,
+                                             name=key))
             else:
-                self._data.add_column(Column(self.BRDF*np.pi, name=key))
+                self._data.add_column(Column(self.BRDF * np.pi, name=key))
         else:
             pass
 
@@ -1039,9 +1086,9 @@ class PhotometricData(object):
         r = self._data[k]
         if self.geo is not None:
             g = self.geo[k]
-            out = PhotometricData(hstack([s,r,g]))
+            out = PhotometricData(hstack([s, r, g]))
         else:
-            out = PhotometricData(hstack([s,r]))
+            out = PhotometricData(hstack([s, r]))
         if hasattr(self, 'band'):
             out.band = self.band
         return out
@@ -1162,7 +1209,7 @@ class PhotometricData(object):
         self._data = rt.copy()
         self._type = hdr.pop('DTYPE', 'measured')
         self.binparms = hdr.pop('binparms',None)
-        if len(gk)>0:
+        if len(gk) > 0:
             self.geo = LatLon(gt)
         else:
             self.geo = None
@@ -1199,7 +1246,9 @@ class PhotometricData(object):
             #self._simple_merge(pho)
             elif (self.type == 'measured') and (pho.type == 'binned'):
             # raise a warning, no merge
-                warnings.warn('Merge a "binned" type into a "measured" type, simple mode will be used, a "measured" type will be set to output')
+                warnings.warn('Merge a "binned" type into a "measured" '
+                    'type, simple mode will be used, a "measured" type '
+                    'will be set to output')
                 type = 'simple'
             elif (self.type == 'binned') and (pho.type == 'measured'):
                 boundary = self.binparms['boundary']
@@ -1241,7 +1290,8 @@ class PhotometricData(object):
     def _binned_merge(self, pho):
         # check binning boundaries
         if set(self.binparms['dims']) != set(pho.binparms['dims']):
-            warnings.warn('Cannot merge two `binned` type PhotometricData with different binning dimensions')
+            warnings.warn('Cannot merge two `binned` type '
+                '`PhotometricData` with different binning dimensions')
             return
         bds = []
         indx = []
@@ -1258,57 +1308,55 @@ class PhotometricData(object):
             max1 = bd1.max()
             max2 = bd2.max()
             bds.append(None)
-            if (min1<min2) & (max1>=max2):
+            if (min1 < min2) & (max1 >= max2):
                 # case 1
-                #print 'case 1'
-                v1 = bd1[np.where((bd1>=min2) & (bd1<=max2))]
+                v1 = bd1[np.where((bd1 >= min2) & (bd1 <= max2))]
                 v2 = bd2
                 if len(v1) != 0:
                     if (len(v1) == len(v2)):
-                        if abs(v1-v2).max() < 1e-7:
+                        if abs(v1 - v2).max() < 1e-7:
                             bds[-1] = bd1
-            elif (min1>=min2) & (max1<max2):
+            elif (min1 >= min2) & (max1 < max2):
                 # case 2
-                #print 'case 2'
-                v1 = bd2[np.where((bd2>=min1) & (bd2<=max1))]
+                v1 = bd2[np.where((bd2 >= min1) & (bd2 <= max1))]
                 v2 = bd1
                 if len(v1) != 0:
                     if (len(v1) == len(v2)):
-                        if abs(v1-v2).max() < 1e-7:
+                        if abs(v1 - v2).max() < 1e-7:
                             bds[-1] = bd2
-            elif (min1<min2) & (max1<max2):
+            elif (min1 < min2) & (max1 < max2):
                 # cases 3, 5
                 if min2<max1:
                     # case 3
-                    #print 'case 3'
-                    v1 = bd1[np.where(bd1>=min2)]
-                    v2 = bd2[np.where(bd2<=max1)]
+                    v1 = bd1[np.where(bd1 >= min2)]
+                    v2 = bd2[np.where(bd2 <= max1)]
                     if len(v1) == len(v2):
                         if len(v1) == 0:
-                            bds[-1] = np.concatenate((bd1, bd2[np.where(bd2>max1)]))
+                            bds[-1] = np.concatenate((bd1,
+                                    bd2[np.where(bd2 > max1)]))
                         else:
                             if abs(v1-v2).max() < 1e-7:
-                                bds[-1] = np.concatenate((bd1, bd2[np.where(bd2>max1)]))
+                                bds[-1] = np.concatenate((bd1,
+                                        bd2[np.where(bd2 > max1)]))
                 else:
                     # case 5
-                    #print 'case 5'
                     bds[-1] = np.concatenate((bd1, bd2))
             else:  # (min1>=min2) & (max1>=max2):
                 # cases 4, 6
-                if min1<max2:
+                if min1 < max2:
                     # case 4
-                    #print 'case 4'
-                    v1 = bd1[np.where(bd1<=max2)]
-                    v2 = bd2[np.where(bd2>=min1)]
+                    v1 = bd1[np.where(bd1 <= max2)]
+                    v2 = bd2[np.where(bd2 >= min1)]
                     if len(v1) == len(v2):
                         if len(v1) == 0:
-                            bds[-1] = np.concatenate((bd2, bd1[np.where(bd1>max2)]))
+                            bds[-1] = np.concatenate((bd2,
+                                    bd1[np.where(bd1 > max2)]))
                         else:
-                            if abs(v1-v2).max() < 1e-7:
-                                bds[-1] = np.concatenate((bd2, bd1[np.where(bd1>max2)]))
+                            if abs(v1 - v2).max() < 1e-7:
+                                bds[-1] = np.concatenate((bd2,
+                                        bd1[np.where(bd1 > max2)]))
                 else:
                     # case 6
-                    #print 'case 6'
                     bds[-1] = np.concatenate((bd2, bd1))
             if bds[-1] is None:
                 raise ValueError('unmatched binning boundaries')
@@ -1320,37 +1368,47 @@ class PhotometricData(object):
         if cos0 != self.sca.cos:
             pho.sca.cos = self.sca.cos
 
-        self_ang = [getattr(self.sca, self.binparms['dims'][i]).value for i in range(3)]
-        pho_ang = [getattr(pho.sca, pho.binparms['dims'][indx[i]]).value for i in range(3)]
-        for i1,i2 in zip(bds[0][:-1],bds[0][1:]):
+        self_ang = [getattr(self.sca,
+                self.binparms['dims'][i]).value for i in range(3)]
+        pho_ang = [getattr(pho.sca, pho.binparms['dims'][indx[i]]).value \
+                for i in range(3)]
+        for i1, i2 in zip(bds[0][:-1], bds[0][1:]):
             self_indx0 = (self_ang[0] >= i1) & (self_ang[0] < i2)
             pho_indx0 = (pho_ang[0] >= i1) & (pho_ang[0] < i2)
-            for j1,j2 in zip(bds[1][:-1],bds[1][1:]):
-                self_indx1 = self_indx0 & (self_ang[1] >= j1) & (self_ang[1] < j2)
+            for j1, j2 in zip(bds[1][:-1], bds[1][1:]):
+                self_indx1 = self_indx0 & (self_ang[1] >= j1) & \
+                             (self_ang[1] < j2)
                 pho_indx1 = pho_indx0 & (pho_ang[1] >= j1) & (pho_ang[1] < j2)
-                for k1, k2 in zip(bds[2][:-1],bds[2][1:]):
-                    self_indx2 = self_indx1 & (self_ang[2] >= k1) & (self_ang[2] < k2)
-                    pho_indx2 = pho_indx1 & (pho_ang[2] >= k1) & (pho_ang[2] < k2)
+                for k1, k2 in zip(bds[2][:-1], bds[2][1:]):
+                    self_indx2 = self_indx1 & (self_ang[2] >= k1) & \
+                                 (self_ang[2] < k2)
+                    pho_indx2 = pho_indx1 & (pho_ang[2] >= k1) & \
+                                (pho_ang[2] < k2)
                     if self_indx2.any():
                         if pho_indx2.any():
                             w1 = self.binparms['count'][self_indx2]
                             w2 = pho.binparms['count'][pho_indx2]
-                            ww = w1+w2
+                            ww = w1 + w2
                             ang = {}
-                            for p,i in zip(self.binparms['dims'],list(range(3))):
-                                ang[p] = (self_ang[i][self_indx2]*w1+pho_ang[i][pho_indx2]*w2)/ww
+                            for p,i in zip(self.binparms['dims'],
+                                        list(range(3))):
+                                ang[p] = (self_ang[i][self_indx2] * w1 \
+                                         + pho_ang[i][pho_indx2] * w2) / ww
                             col = {}
                             for k in pho.refkey:
                                 if k not in self.refkey:
                                     self._add_refkey(k)
-                                col[k.lower()] = (getattr(self, k)[self_indx2]*w1+getattr(pho, k)[pho_indx2]*w2)/ww
+                                col[k.lower()] = (getattr(self, k)[self_indx2]\
+                                    * w1 + getattr(pho, k)[pho_indx2] * w2) / ww
                             ang.update(col)
                             self[self_indx2] = ang
                             self.binparms['count'][self_indx2] = ww
                     else:
                         if pho_indx2.any():
                             self.append(pho[pho_indx2])
-                            self.binparms['count'] = np.append(self.binparms['count'],pho.binparms['count'][pho_indx2])
+                            self.binparms['count'] = np.append(
+                                    self.binparms['count'],
+                                    pho.binparms['count'][pho_indx2])
 
         self.binparms['boundary'] = bds
 
@@ -1392,13 +1450,13 @@ class PhotometricData(object):
                 else:
                     l2 = lim[1]
                 d = data.to('deg').value
-                rm |= (d<l1) | (d>l2)
+                rm |= (d < l1) | (d > l2)
         if rlim is not None:
             if self.BDR.ndim == 1:
-                rm |= (self.BDR>rlim[1]) | (self.BDR<rlim[0])
+                rm |= (self.BDR > rlim[1]) | (self.BDR < rlim[0])
             else:
                 for b in range(self.BDR.shape[1]):
-                    rm |= (self.BDR[:,b]>rlim[1]) | (self.BDR[:,b]<rlim[0])
+                    rm |= (self.BDR[:,b] > rlim[1]) | (self.BDR[:,b] < rlim[0])
         rmidx = np.where(rm)[0]
         self.remove_rows(rmidx)
 
@@ -1776,15 +1834,20 @@ class PhotometricDataGroup(OrderedDict):
                     self.keyname = list(kwargs.keys())[0]
                     keys = kwargs.pop(self.keyname)
                 if ndata != len(keys):
-                    raise ValueError('length of data must be the same as length of keys, {0} {1} received'.format(ndata, len(keys)))
+                    raise ValueError('length of data must be the same '
+                        'as length of keys, {0} {1} received'.format(
+                            ndata, len(keys)))
                 for k, d in zip(keys,data):
                     self[k] = PhotometricData(d)
             elif isinstance(args[0], str):
                 self.read(args[0])
             else:
-                raise ValueError('a list of PhotometricData instance or a string is expected, {0} received'.format(type(args[0])))
+                raise ValueError('a list of PhotometricData instance '
+                    'or a string is expected, {0} received'.format(
+                        type(args[0])))
         else:
-            raise ValueError('1 or 2 arguments are expected, {0} received'.format(len(args)))
+            raise ValueError('1 or 2 arguments are expected, {0} '
+                'received'.format(len(args)))
 
     def read(self, filename):
         '''load data from a file'''
@@ -1835,37 +1898,40 @@ class PhotometricDataGrid(object):
         self._lon = lon
         if self._lat is not None:
             if not hasattr(self._lat, 'unit'):
-                self._lat = self._lat*u.deg
+                self._lat = self._lat * u.deg
         if self._lon is not None:
             if not hasattr(self._lon, 'unit'):
-                self._lon = self._lon*u.deg
+                self._lon = self._lon * u.deg
 
         self._info = OrderedDict()
         self._info1d = OrderedDict()
-        info_fields = np.array('file lonmin lonmax latmin latmax count incmin incmax emimin emimax phamin phamax masked loaded'.split())
+        info_fields = np.array('file lonmin lonmax latmin latmax '
+            'count incmin incmax emimin emimax phamin phamax masked '
+            'loaded'.split())
         for k in info_fields:
             self._info[k] = None
             self._info1d[k] = None
 
         if (self._lon is not None) & (self._lat is not None):
-            nlon = len(lon)-1
-            nlat = len(lat)-1
+            nlon = len(lon) - 1
+            nlat = len(lat) - 1
             self._data = np.empty((nlat, nlon), dtype=PhotometricData)
             self._data1d = self._data.reshape(-1)
             for i in range(self.size):
                 self._data1d[i] = PhotometricData()
-            n = '%i' % (np.floor(np.log10(self.size))+1)
-            fmt = '%'+n+'.'+n+'i'
-            fnames = np.array(['phgrd_'+fmt % i+'.fits' for i in range(self.size)])
-            self._info['file'] = fnames.reshape((nlat,nlon))
-            for i in [1,2,3,4,6,7,8,9,10,11]:
-                self._info[info_fields[i]] = np.zeros((nlat,nlon))*u.deg
-            self._info['count'] = np.zeros((nlat,nlon))
-            self._info['masked'] = np.ones((nlat,nlon), dtype=bool)
-            self._info['loaded'] = np.zeros((nlat,nlon), dtype=bool)
+            n = '%i' % (np.floor(np.log10(self.size)) + 1)
+            fmt = '%' + n + '.' + n + 'i'
+            fnames = np.array(['phgrd_' + fmt % i + '.fits' for i in \
+                    range(self.size)])
+            self._info['file'] = fnames.reshape((nlat, nlon))
+            for i in range(1, 12):
+                self._info[info_fields[i]] = np.zeros((nlat, nlon)) * u.deg
+            self._info['count'] = np.zeros((nlat, nlon))
+            self._info['masked'] = np.ones((nlat, nlon), dtype=bool)
+            self._info['loaded'] = np.zeros((nlat, nlon), dtype=bool)
             for k in list(self._info.keys()):
                 self._info1d[k] = self._info[k].reshape(-1)
-            self._flushed = np.zeros((nlat,nlon), dtype=bool)
+            self._flushed = np.zeros((nlat, nlon), dtype=bool)
             self._flushed1d = self._flushed.reshape(-1)
         else:
             self._data = None
@@ -1876,8 +1942,9 @@ class PhotometricDataGrid(object):
     def _clean_memory(self, forced=False, verbose=False):
         '''Check the size of object, free memory by deleting'''
         if not forced:
-            sz = _memory_size((self._info1d['count']*self._info1d['loaded'].astype('i')).sum())
-            if sz<self.max_mem:
+            sz = _memory_size((self._info1d['count'] \
+                        * self._info1d['loaded'].astype('i')).sum())
+            if sz < self.max_mem:
                 return False
         # free memory by deleting all PhotometricData instances
         if verbose:
@@ -1926,18 +1993,18 @@ class PhotometricDataGrid(object):
     def _process_key(self, key):
         """Process index key and return lists of indices"""
         if hasattr(key,'__iter__'):
-            if len(key)!=2:
+            if len(key) != 2:
                 raise KeyError('invalid index')
             i, j = key
             if isinstance(i, slice):
-                ii = i.indices(len(self.lat)-1)
-                i = list(range(ii[0],ii[1],ii[2]))
+                ii = i.indices(len(self.lat) - 1)
+                i = list(range(ii[0], ii[1], ii[2]))
             if isinstance(j, slice):
-                jj = j.indices(len(self.lon)-1)
-                j = list(range(jj[0],jj[1],jj[2]))
+                jj = j.indices(len(self.lon) - 1)
+                j = list(range(jj[0], jj[1], jj[2]))
         else:
             i = key
-            j = list(range(len(self.lon)-1))
+            j = list(range(len(self.lon) - 1))
         y, x = np.meshgrid(i, j)
         return y, x
 
@@ -1945,14 +2012,15 @@ class PhotometricDataGrid(object):
         """Return value ``self[key]``"""
         y, x = self._process_key(key)
         # check whether the data to be loaded are too large
-        if _memory_size(self._info['count'][y,x].sum())>self.max_mem:
+        if _memory_size(self._info['count'][y, x].sum()) > self.max_mem:
             raise MemoryError('insufficient memory to load all data requested')
         # check whether memory clean is needed for this load
         loaded = self._info['loaded'].copy()
-        loaded[y,x] = True
-        if _memory_size((self._info['count']*loaded.astype('i')).sum())>self.max_mem:
+        loaded[y, x] = True
+        if _memory_size((self._info['count'] * loaded.astype('i')).sum()) \
+                > self.max_mem:
             self._clean_memory(forced=True)
-        for i, j in zip(y.flatten(),x.flatten()):
+        for i, j in zip(y.flatten(), x.flatten()):
             if not self._info['loaded'][i, j]:
                 self._load_data(i, j)
         out = self._data[key]
@@ -1964,49 +2032,53 @@ class PhotometricDataGrid(object):
         valid_v = False
         if isinstance(value, (PhotometricData, int)):
             valid_v = True
-            value_shape = (1,1)
+            value_shape = (1, 1)
         elif isinstance(value, (list, tuple, np.ndarray)):
-            if np.array([isinstance(v, (PhotometricData, int)) for v in np.asanyarray(value).flatten()]).all():
+            if np.array([isinstance(v, (PhotometricData, int)) \
+                    for v in np.asanyarray(value).flatten()]).all():
                 valid_v = True
                 value_shape = np.shape(value)
         if not valid_v:
-            raise ValueError('Only ``PhotometricData`` or array of it can be assigned.')
+            raise ValueError('Only ``PhotometricData`` or array of it '
+                    'can be assigned.')
         y, x = self._process_key(key)
         if x.shape != value_shape:
-            raise ValueError('Values to be assigned must have the same shape.')
+            raise ValueError('Values to be assigned must have the same '
+                    'shape.')
         # assign values
         self._data[key] = value
         self._info['loaded'][key] = True
         self._info['masked'][key] = (value == 0)
         self._flushed[key] = self._info['masked'][key] | False
         for i,j in zip(y.flatten(), x.flatten()):
-            self._update_property(i,j)
+            self._update_property(i, j)
         # free memory if needed
         loaded = self._info['loaded']
-        if _memory_size((self._info['count']*loaded.astype('i')).sum())>self.max_mem:
+        if _memory_size((self._info['count'] * loaded.astype('i')).sum(
+                    )) > self.max_mem:
             self._clean_memory(forced=True)
 
     def _load_data(self, *args):
-        '''Load data for position [i,j] or position [i] for flattened case'''
+        '''Load data for position [i, j] or position [i] for flattened case'''
         if self.file is None:
             raise ValueError('data file not specified')
         infofile, path = self._path_name(self.file)
         cleaned = self._clean_memory()
         if len(args) == 2:
             i, j = args
-            if not self._info['masked'][i,j]:
-                f = path+'/'+self._info['file'][i,j]
+            if not self._info['masked'][i, j]:
+                f = os.path.join(path, self._info['file'][i, j])
                 if os.path.isfile(f):
-                    self._data[i,j] = PhotometricData(f)
+                    self._data[i, j] = PhotometricData(f)
                 else:
                     raise IOError('Data record not found for position ({}, {}'
-                        ') from file {}'.format(i,j,f))
-            self._info['loaded'][i,j] = True
-            self._flushed[i,j] = True
+                        ') from file {}'.format(i, j, f))
+            self._info['loaded'][i, j] = True
+            self._flushed[i, j] = True
         elif len(args) == 1:
             i = args[0]
             if not self._info1d['masked'][i]:
-                f = path+'/'+self._info1d['file'][i]
+                f = os.path.join(path, self._info1d['file'][i])
                 if os.path.isfile(f):
                     self._data1d[i] = PhotometricData(f)
                 else:
@@ -2015,7 +2087,8 @@ class PhotometricDataGrid(object):
             self._info1d['loaded'][i] = True
             self._flushed1d[i] = True
         else:
-            raise ValueError('2 or 3 arguments expected, {0} received'.format(len(args)+1))
+            raise ValueError('2 or 3 arguments expected, {0} '
+                'received'.format(len(args) + 1))
         return cleaned
 
     def _save_data(self, *args, outfile=None, update_flush_flag=True, **kwargs):
@@ -2045,30 +2118,31 @@ class PhotometricDataGrid(object):
                 if path is None:
                     f = outfile
                 else:
-                    f = path+'/'+self._info['file'][i,j]
-                if not self._info['loaded'][i,j]:
-                    self._load_data(i,j)
-                self._data[i,j].write(f, overwrite=True)
+                    f = os.path.join(path, self._info['file'][i, j])
+                if not self._info['loaded'][i, j]:
+                    self._load_data(i, j)
+                self._data[i, j].write(f, overwrite=True)
                 if update_flush_flag:
-                    self._flushed[i,j] = True
+                    self._flushed[i, j] = True
         elif len(args) == 1:
             i = args[0]
             if not self._info1d['masked'][i]:
                 if path is None:
                     f = outfile
                 else:
-                    f = path+'/'+self._info1d['file'][i]
+                    f = os.path.join(path, self._info1d['file'][i])
                 if not self._info1d['loaded'][i]:
                     self._load_data(i)
                 self._data1d[i].write(f, overwrite=True)
                 if update_flush_flag:
                     self._flushed1d[i] = True
         else:
-            raise ValueError('2 or 3 arguments expected, {0} received'.format(len(args)+1))
+            raise ValueError('2 or 3 arguments expected, {0} '
+                    'received'.format(len(args) + 1))
 
     def _path_name(self, outfile):
         if outfile.endswith('.fits'):
-            outdir = '.'.join(outfile.split('.')[:-1])+'_dir'
+            outdir = '.'.join(outfile.split('.')[:-1]) + '_dir'
         else:
             outdir = outfile+'_dir'
             outfile += '.fits'
@@ -2115,7 +2189,7 @@ class PhotometricDataGrid(object):
             if overwrite:
                 os.remove(outfile)
                 if os.path.isdir(outdir):
-                    os.system('rm -rf '+outdir)
+                    os.system('rm -rf ' + outdir)
             elif not flush:
                 raise IOError('output file {0} already exists'.format(outfile))
 
@@ -2137,7 +2211,7 @@ class PhotometricDataGrid(object):
         if not os.path.isdir(outdir):
             os.mkdir(outdir)
         for i in range(self.size):
-            f = outdir+'/'+self._info1d['file'][i]
+            f = os.path.join(outdir, self._info1d['file'][i])
             if self._info1d['masked'][i]:
                 if os.path.isfile(f):
                     os.remove(f)
@@ -2176,28 +2250,30 @@ class PhotometricDataGrid(object):
         self._lat = info['lat']
         self._info1d = info['info']
         self._info1d['loaded'][:] = False
-        nlat = len(self.lat)-1
-        nlon = len(self.lon)-1
+        nlat = len(self.lat) - 1
+        nlon = len(self.lon) - 1
         for k in list(self._info1d.keys()):
-            self._info[k] = self._info1d[k].reshape((nlat,nlon))
-        self._data = np.zeros((nlat,nlon), dtype=PhotometricData)
+            self._info[k] = self._info1d[k].reshape((nlat, nlon))
+        self._data = np.zeros((nlat, nlon), dtype=PhotometricData)
         self._data1d = self._data.reshape(-1)
-        self._flushed = np.ones((nlat,nlon), dtype=bool)
+        self._flushed = np.ones((nlat, nlon), dtype=bool)
         self._flushed1d = self._flushed.reshape(-1)
 
         # load photometric data
         if load:
-            nf = nlat*nlon
+            nf = nlat * nlon
             tag = -0.1
             for i in range(nf):
                 if verbose:
-                    prog = float(i)/nf*100
-                    if prog>tag:
-                        print('%3.1f%% completed: %i files read' % (prog, i))
-                        tag = prog+1
+                    prog = float(i) / nf * 100
+                    if prog > tag:
+                        print('%3.1f%% completed: %i files read' % \
+                                (prog, i))
+                        tag = prog + 1
                 cleaned = self._load_data(i)
                 if cleaned:
-                    raise MemoryError('no sufficient memory available to load data')
+                    raise MemoryError('no sufficient memory available '
+                        'to load data')
 
     def port(self, indata, verbose=True):
         '''Port in data from PhotometricData instance'''
@@ -2206,75 +2282,78 @@ class PhotometricDataGrid(object):
         if verbose:
             print('porting data from PhotometricData instance')
         nlat, nlon = self.shape
-        nf = nlat*nlon
+        nf = nlat * nlon
         lon = indata.geolon
-        for lon1, lon2, i in zip(self.lon[:-1],self.lon[1:],list(range(nlon))):
-            ww = np.where((lon>lon1)&(lon<=lon2))
+        for lon1, lon2, i in zip(self.lon[:-1],self.lon[1:], list(range(nlon))):
+            ww = np.where((lon > lon1) & (lon <= lon2))
             if len(ww[0]) == 0:
                 continue
             d1 = indata[ww]
             lat = d1.geolat
             tag = -0.1
-            for lat1, lat2, j in zip(self.lat[:-1],self.lat[1:],list(range(nlat))):
+            for lat1, lat2, j in zip(self.lat[:-1],
+                        self.lat[1:],list(range(nlat))):
                 if verbose:
-                    prog = (float(i)*nlat+j)/nf*100
-                    if prog>tag:
-                        print('%5.1f%% completed:  lon = (%5.1f, %5.1f), lat = (%5.1f, %5.1f)' % (prog,lon1.value,lon2.value,lat1.value,lat2.value))
-                        tag = prog+0.999
-                ww = np.where((lat>lat1)&(lat<=lat2))
+                    prog = (float(i) * nlat + j) / nf * 100
+                    if prog > tag:
+                        print('%5.1f%% completed:  lon = (%5.1f, %5.1f), '
+                            'lat = (%5.1f, %5.1f)' % (prog, lon1.value,
+                                lon2.value, lat1.value, lat2.value))
+                        tag = prog + 0.999
+                ww = np.where((lat > lat1) & (lat <= lat2))
                 if len(ww[0]) == 0:
                     continue
                 d2 = d1[ww]
-                if not self._info['loaded'][j,i]:
-                    self._load_data(j,i)
-                self._data[j,i].append(d2)
-                self._update_property(j,i,masked=False,loaded=True)
-                self._flushed[j,i] = False
+                if not self._info['loaded'][j, i]:
+                    self._load_data(j, i)
+                self._data[j, i].append(d2)
+                self._update_property(j, i, masked=False, loaded=True)
+                self._flushed[j, i] = False
                 self._clean_memory(verbose=verbose)
 
     def _update_property(self,j,i,masked=None,loaded=None):
         if masked is not None:
-            self._info['masked'][j,i] = masked
+            self._info['masked'][j, i] = masked
         if loaded is not None:
-            self._info['loaded'][j,i] = loaded
-        if self._info['masked'][j,i]:
+            self._info['loaded'][j, i] = loaded
+        if self._info['masked'][j, i]:
             data = 0
         else:
-            data = self[j,i]
+            data = self[j, i]
         if isinstance(data, int) or len(data) <= 0:
-            self._info['count'][j,i] = 0.
-            self._info['latmin'][j,i] = 0.
-            self._info['latmax'][j,i] = 0.
-            self._info['lonmin'][j,i] = 0.
-            self._info['lonmax'][j,i] = 0.
-            self._info['incmin'][j,i] = 0.
-            self._info['incmax'][j,i] = 0.
-            self._info['emimin'][j,i] = 0.
-            self._info['emimax'][j,i] = 0.
-            self._info['phamin'][j,i] = 0.
-            self._info['phamax'][j,i] = 0.
+            self._info['count'][j, i] = 0.
+            self._info['latmin'][j, i] = 0.
+            self._info['latmax'][j, i] = 0.
+            self._info['lonmin'][j, i] = 0.
+            self._info['lonmax'][j, i] = 0.
+            self._info['incmin'][j, i] = 0.
+            self._info['incmax'][j, i] = 0.
+            self._info['emimin'][j, i] = 0.
+            self._info['emimax'][j, i] = 0.
+            self._info['phamin'][j, i] = 0.
+            self._info['phamax'][j, i] = 0.
             if masked is None:
-                self._info['masked'][j,i] = True
+                self._info['masked'][j, i] = True
         else:
-            self._info['count'][j,i] = len(data)
+            self._info['count'][j, i] = len(data)
             if data.latlim is None:
-                self._info['latmin'][j,i] = 0 * u.deg
-                self._info['latmax'][j,i] = 0 * u.deg
+                self._info['latmin'][j, i] = 0 * u.deg
+                self._info['latmax'][j, i] = 0 * u.deg
             else:
-                self._info['latmin'][j,i] = data.latlim[0]
-                self._info['latmax'][j,i] = data.latlim[1]
+                self._info['latmin'][j, i] = data.latlim[0]
+                self._info['latmax'][j, i] = data.latlim[1]
             if data.lonlim is None:
-                self._info['lonmin'][j,i] = 0 * u.deg
-                self._info['lonmax'][j,i] = 0 * u.deg
+                self._info['lonmin'][j, i] = 0 * u.deg
+                self._info['lonmax'][j, i] = 0 * u.deg
             else:
-                self._info['lonmin'][j,i] = data.lonlim[0]
-                self._info['lonmax'][j,i] = data.lonlim[1]
-            self._info['incmin'][j,i] = data.inclim[0]
-            self._info['incmax'][j,i] = data.inclim[1]
-            self._info['emimin'][j,i] = data.emilim[0]
-            self._info['emimax'][j,i] = data.emilim[1]
-            self._info['phamin'][j,i] = data.phalim[0]
-            self._info['phamax'][j,i] = data.phalim[1]
+                self._info['lonmin'][j, i] = data.lonlim[0]
+                self._info['lonmax'][j, i] = data.lonlim[1]
+            self._info['incmin'][j, i] = data.inclim[0]
+            self._info['incmax'][j, i] = data.inclim[1]
+            self._info['emimin'][j, i] = data.emilim[0]
+            self._info['emimax'][j, i] = data.emilim[1]
+            self._info['phamin'][j, i] = data.phalim[0]
+            self._info['phamax'][j, i] = data.phalim[1]
 
     def _update_property_1d(self,i,masked=None,loaded=None):
         if masked is not None:
@@ -2346,7 +2425,8 @@ class PhotometricDataGrid(object):
             raise ValueError('grid parameters (lon, lat) not specified')
 
         if len(args) != 1:
-            raise ValueError('exactly 2 arguments are required, received {0}'.format(len(args)+1))
+            raise ValueError('exactly 2 arguments are required, '
+                'received {0}'.format(len(args) + 1))
 
         verbose = kwargs.pop('verbose', True)
         indata = args[0]
@@ -2354,12 +2434,13 @@ class PhotometricDataGrid(object):
             self.port(indata, verbose=verbose)
             return
 
-        elif (not isinstance(indata, (str,bytes))) and hasattr(indata, '__iter__'):
+        elif (not isinstance(indata, (str,bytes))) and \
+                hasattr(indata, '__iter__'):
             if isinstance(indata[0], str):
                 if verbose:
                     print('importing data from backplanes and image files')
                 illfile = np.asarray(indata)
-                ioffile = kwargs.pop('ioffile',None)
+                ioffile = kwargs.pop('ioffile', None)
                 if ioffile is None:
                     ioffile = np.repeat(None, len(illfile))
                 else:
@@ -2411,27 +2492,28 @@ class PhotometricDataGrid(object):
     def merge(self, pho, verbose=True):
         '''Merge with another PhotometricDataGroup instance'''
         if (self.lon != pho.lon).any() or (self.lat != pho.lat).any():
-            raise ValueError('can''t merge with different longitude-latitude grid')
-        nlat = len(self.lat)-1
+            raise ValueError('can''t merge with different '
+                    'longitude-latitude grid')
+        nlat = len(self.lat) - 1
         tag = -0.1
-        for i in range(len(self.lon)-1):
-            for j in range(len(self.lat)-1):
-                prog = (float(i)*nlat+j)/self.size*100
+        for i in range(len(self.lon) - 1):
+            for j in range(len(self.lat) - 1):
+                prog = (float(i) * nlat + j) / self.size * 100
                 if verbose:
-                    if prog>tag:
+                    if prog > tag:
                         sys.stdout.write('%5.1f%% completed\r' % prog)
                         sys.stdout.flush()
-                        tag = prog+0.999
-                if self._info['masked'][j,i]:
-                    if not pho._info['masked'][j,i]:
-                        self._data[j,i] = pho[j,i].copy()
+                        tag = prog + 0.999
+                if self._info['masked'][j, i]:
+                    if not pho._info['masked'][j, i]:
+                        self._data[j, i] = pho[j, i].copy()
                 else:
-                    if not pho._info['masked'][j,i]:
-                        if not self._info['loaded'][j,i]:
-                            self._load_data(j,i)
-                        self._data[j,i].merge(pho[j,i])
-                self._update_property(j,i,masked=False,loaded=True)
-                self._flushed[j,i] = False
+                    if not pho._info['masked'][j, i]:
+                        if not self._info['loaded'][j, i]:
+                            self._load_data(j, i)
+                        self._data[j, i].merge(pho[j, i])
+                self._update_property(j, i, masked=False, loaded=True)
+                self._flushed[j, i] = False
                 self._clean_memory(verbose=verbose)
         self.write()
 
@@ -2443,36 +2525,36 @@ class PhotometricDataGrid(object):
         tag = -0.1
         nlat,nlon = self.shape
         for i in range(self.size):
-            prog = float(i)/self.size*100
+            prog = float(i) / self.size * 100
             if verbose:
                 #print prog, tag
                 if prog > tag:
                     sys.stdout.write('%5.1f%% completed\r' % prog)
                     sys.stdout.flush()
-                    tag = np.ceil(prog+0.1)
+                    tag = np.ceil(prog + 0.1)
             if self._info1d['masked'][i]:
                 continue
             if not self._info1d['loaded'][i]:
                 self._load_data(i)
             d = self._data1d[i]
             rm = np.zeros(len(d), dtype=bool)
-            for data,lim in zip([d.inc,d.emi,d.pha],[ilim, elim, alim]):
+            for data, lim in zip([d.inc, d.emi, d.pha], [ilim, elim, alim]):
                 if lim is not None:
-                    if hasattr(lim[0],'unit'):
+                    if hasattr(lim[0], 'unit'):
                         l1 = lim[0].to('deg').value
                     else:
                         l1 = lim[0]
-                    if hasattr(lim[1],'unit'):
+                    if hasattr(lim[1], 'unit'):
                         l2 = lim[1].to('deg').value
                     else:
                         l2 = lim[1]
                     dd = data.to('deg').value
-                    rm |= (dd<l1) | (dd>l2)
+                    rm |= (dd < l1) | (dd > l2)
             if rlim is not None:
-                rm |= (d.BDR>rlim[1]) | (d.BDR<rlim[0])
+                rm |= (d.BDR > rlim[1]) | (d.BDR < rlim[0])
             rmidx = np.where(rm)[0]
             d.remove_rows(rmidx)
-            self._update_property(i//nlon,i%nlon)
+            self._update_property(i // nlon,i % nlon)
             self._flushed1d[i] = False
 
     def fit(self, model, fitter=None, **kwargs):
@@ -2496,18 +2578,19 @@ class PhotometricDataGrid(object):
 
         v1.0.0 : 1/19/2016 JYL @PSI
         '''
-        sz = _memory_size((self._info['count']*(~self._info['masked']).astype('i')).sum())
-        if sz>maxsize:
+        sz = _memory_size((self._info['count'] * \
+                (~self._info['masked']).astype('i')).sum())
+        if sz > maxsize:
             raise MemoryError('data size exceeding maximum memory size allowed')
         out = PhotometricData()
         tag = -0.1
         for i in range(self.size):
             if verbose:
-                prog = float(i)/self.size*100
+                prog = float(i) / self.size * 100
                 if prog>tag:
                     sys.stdout.write('%5.1f%% completed\r' % prog)
                     sys.stdout.flush()
-                    tag = np.ceil(prog+0.95)
+                    tag = np.ceil(prog + 0.95)
             if not self._info1d['masked'][i]:
                 self._load_data(i)
                 out.append(self._data1d[i])
@@ -2548,7 +2631,7 @@ class PhotometricDataGrid(object):
         """
         info0 = self.info()
         info = info0['info']
-        sz = self.lat.shape[0]-1, self.lon.shape[0]-1
+        sz = self.lat.shape[0] - 1, self.lon.shape[0] - 1
 
         keys = ['incmin', 'incmax', 'emimin', 'emimax', 'phamin', 'phamax']
         titles = [r'$i_{min}$ (deg)', r'$i_{max}$ (deg)', r'$e_{min}$ (deg)',
@@ -2595,7 +2678,8 @@ class PhotometricModelFitter(object):
     def __init__(self):
         self.fitted = False
 
-    def __call__(self, model, pho, ilim=None, elim=None, alim=None, rlim=None, **kwargs):
+    def __call__(self, model, pho, ilim=None, elim=None, alim=None,
+                rlim=None, **kwargs):
         '''
         Parameters:
         -----------
@@ -2630,11 +2714,12 @@ class PhotometricModelFitter(object):
             inputs.append(getattr(self.data.sca,k).to('deg').value)
         bdr = self.data.BDR
         if bdr.ndim == 1:
-            self.model = f(model, inputs[0], inputs[1], inputs[2], bdr, **kwargs)
+            self.model = f(model, inputs[0], inputs[1], inputs[2],
+                            bdr, **kwargs)
             self.fit_info = f.fit_info
             self.fit = self.model(*inputs)
-            self.RMS = np.sqrt(((self.fit-self.data.BDR)**2).mean())
-            self.RRMS = self.RMS/self.data.BDR.mean()
+            self.RMS = np.sqrt(((self.fit - self.data.BDR)**2).mean())
+            self.RRMS = self.RMS / self.data.BDR.mean()
             self.fitted = True
             return self.model
         else:
@@ -2645,11 +2730,12 @@ class PhotometricModelFitter(object):
             self.RRMS = []
             self.fitted = []
             for r in bdr.T:
-                self.model.append(f(model, inputs[0], inputs[1], inputs[2], r, **kwargs))
+                self.model.append(f(model, inputs[0], inputs[1],
+                                inputs[2], r, **kwargs))
                 self.fit_info.append(f.fit_info)
                 self.fit.append(self.model[-1](*inputs))
-                self.RMS.append(np.sqrt(((self.fit[-1]-r)**2).mean()))
-                self.RRMS.append(self.RMS[-1]/r.mean())
+                self.RMS.append(np.sqrt(((self.fit[-1] - r)**2).mean()))
+                self.RRMS.append(self.RMS[-1] / r.mean())
                 self.fitted.append(True)
             return self.model
 
@@ -2658,7 +2744,7 @@ class PhotometricModelFitter(object):
             if index is None:
                 raise ValueError('Index is not specified.')
             fitted = self.fitted[index]
-            data = self.data.BDR[:,index]
+            data = self.data.BDR[:, index]
             fit = self.fit[index]
         else:
             fitted = self.fitted
@@ -2667,15 +2753,19 @@ class PhotometricModelFitter(object):
         if fitted == False:
             print('No model has been fitted.')
             return
-        ratio = data/fit
+        ratio = data / fit
         figs = []
         figs.append(plt.figure(100, figsize=figsize[0]))
         plt.clf()
         f, ax = plt.subplots(3, 1, num=100)
-        for i, v, xlbl in zip(list(range(3)), [self.data.inc.value, self.data.emi.value, self.data.pha.value], ['Incidence', 'Emission', 'Phase']):
+        for i, v, xlbl in zip(list(range(3)),
+                [self.data.inc.value, self.data.emi.value,
+                        self.data.pha.value],
+                ['Incidence', 'Emission', 'Phase']):
             ax[i].plot(v, ratio, 'o')
             ax[i].hlines(1, v.min(), v.max())
-            pplot(ax[i], xlabel=xlbl+' ('+str(self.data.inc.unit)+')', ylabel='Measured/Modeled')
+            pplot(ax[i], xlabel=xlbl + ' (' + str(self.data.inc.unit) \
+                    + ')', ylabel='Measured/Modeled')
         figs.append(plt.figure(101, figsize=figsize[1]))
         plt.clf()
         plt.plot(data, fit, 'o')
@@ -2741,30 +2831,31 @@ class PhotometricGridFitter(object):
             raise ValueError('Fitter not defined.')
         nlat, nlon = data.shape
         self.model = ModelGrid(type(model), nlon, nlat)
-        self.fit_info = np.zeros((nlat,nlon),dtype=object)
-        self.fit = np.zeros((nlat,nlon),dtype=np.ndarray)
-        self.RMS = np.zeros((nlat,nlon),dtype=object)
-        self.RRMS = np.zeros((nlat,nlon),dtype=object)
-        self.mask = np.ones((nlat,nlon),dtype=bool)
-        index_boundary = (np.asarray(latlim)+90)/180*nlat
+        self.fit_info = np.zeros((nlat, nlon), dtype=object)
+        self.fit = np.zeros((nlat, nlon), dtype=np.ndarray)
+        self.RMS = np.zeros((nlat, nlon), dtype=object)
+        self.RRMS = np.zeros((nlat, nlon), dtype=object)
+        self.mask = np.ones((nlat, nlon), dtype=bool)
+        index_boundary = (np.asarray(latlim) + 90) / 180 * nlat
         i1 = int(np.floor(index_boundary[0]))
         i2 = int(np.ceil(index_boundary[1]))
         ii = range(i1, i2, 1)
         nii = len(ii)
-        index_boundary = np.asarray(lonlim)/360*nlon
+        index_boundary = np.asarray(lonlim) / 360 * nlon
         j1 = int(np.floor(index_boundary[0]))
         j2 = int(np.ceil(index_boundary[1]))
         jj = range(j1, j2, 1)
         njj = len(jj)
 
         def fit_ij(i, j):
-            if (not data._info['masked'][i,j]) and isinstance(data[i,j], PhotometricData):
-                d = data[i,j].copy()
+            if (not data._info['masked'][i, j]) and isinstance(data[i, j],
+                    PhotometricData):
+                d = data[i, j].copy()
                 d.validate()
                 d.trim(ilim=ilim, elim=elim, alim=alim, rlim=rlim)
                 if len(d) > 10:
-                    fitter = d.fit(model, fitter=self.fitter(), verbose=False,
-                        **kwargs)
+                    fitter = d.fit(model, fitter=self.fitter(),
+                        verbose=False, **kwargs)
                     return fitter, i, j
             return None, i, j
 
@@ -2777,16 +2868,16 @@ class PhotometricGridFitter(object):
                         n_models=params.shape[0])
                 else:
                     model_set = fitter.model
-                self.model[i,j] = model_set
-                self.fit_info[i,j] = fitter.fit_info
-                self.fit[i,j] = fitter.fit
-                self.RMS[i,j] = fitter.RMS
-                self.RRMS[i,j] = fitter.RRMS
-                self.mask[i,j] = False
+                self.model[i, j] = model_set
+                self.fit_info[i, j] = fitter.fit_info
+                self.fit[i, j] = fitter.fit
+                self.RMS[i, j] = fitter.RMS
+                self.RRMS[i, j] = fitter.RRMS
+                self.mask[i, j] = False
             if verbose:
-                print('Grid ({0}, {1}) of ({2}-{3}, {4}-{5})'.format(i,j,i1,i2,
-                    j1,j2), end=': ')
-                if not self.mask[i,j]:
+                print('Grid ({0}, {1}) of ({2}-{3}, {4}-{5})'.format(i,
+                    j, i1, i2, j1, j2), end=': ')
+                if not self.mask[i, j]:
                     if len(model_set) == 1:
                         print(model_set.__repr__())
                     else:
@@ -2807,13 +2898,13 @@ class PhotometricGridFitter(object):
             iis = iis.flatten()
             jjs = jjs.flatten()
             niis = len(iis)
-            boundaries = [int(x) for x in np.round(np.linspace(0, niis+1,
-                multi+1))]
+            boundaries = [int(x) for x in np.round(np.linspace(0,
+                niis + 1, multi + 1))]
             procs = []
             out_q = multiprocessing.Queue()
             for b1,b2 in zip(boundaries[:-1], boundaries[1:]):
                 p = multiprocessing.Process(target=worker,
-                    args=(iis[b1:b2], jjs[b1:b2], out_q))
+                    args=(iis[b1: b2], jjs[b1: b2], out_q))
                 procs.append(p)
                 p.start()
             for i in range(multi):
@@ -2884,10 +2975,13 @@ class ModelGrid(object):
             m = self.model_class()
             self._param_names = m.param_names
             if (self.nlat is not None) and (self.nlon is not None):
-                self._model_grid = np.repeat(m, self.nlat*self.nlon).reshape(self.nlat,self.nlon)
-                self._mask = np.ones((self.nlat,self.nlon),dtype=bool)
+                self._model_grid = np.repeat(m, self.nlat * self.nlon) \
+                        .reshape(self.nlat, self.nlon)
+                self._mask = np.ones((self.nlat, self.nlon), dtype=bool)
                 for k in m.param_names:
-                    self.__dict__[k] = np.repeat(getattr(m, k), self.nlat*self.nlon).reshape(self.nlat,self.nlon).tolist()
+                    self.__dict__[k] = np.repeat(getattr(m, k),
+                            self.nlat * self.nlon).reshape(self.nlat,
+                                self.nlon).tolist()
 
     @property
     def param_names(self):
@@ -2953,10 +3047,12 @@ class ModelGrid(object):
         if isinstance(v, self.model_class):
             self._model_grid[k] = v
         else:
-            if (len(self._model_grid[0,0]) == 1) and (not hasattr(v, '__iter__')):
-                    self._model_grid[k] = self.model_class(v)
+            if (len(self._model_grid[0,0]) == 1) and \
+                    (not hasattr(v, '__iter__')):
+                self._model_grid[k] = self.model_class(v)
             else:
-                self._model_grid[k] = self.model_class(v[0:len(self.model_grid[0,0])])
+                self._model_grid[k] = self.model_class(
+                        v[0:len(self.model_grid[0, 0])])
         self.mask[k] = False
         self.update_params(*k)
 
@@ -2978,9 +3074,9 @@ class ModelGrid(object):
         """
         if lat is None:
             lat = list(range(self.nlat))
-        elif isinstance(lat,slice):
+        elif isinstance(lat, slice):
             n1, n2, n3 = lat.indices(self.nlat)
-            lat = list(range(n1,n2,n3))
+            lat = list(range(n1, n2, n3))
         else:
             if ulen(lat) == 1:
                 lat = [lat]
@@ -2988,7 +3084,7 @@ class ModelGrid(object):
             lon = list(range(self.nlon))
         elif isinstance(lon, slice):
             n1, n2, n3 = lon.indices(self.nlon)
-            lon = list(range(n1,n2,n3))
+            lon = list(range(n1, n2, n3))
         else:
             if ulen(lon) == 1:
                 lon = [lon]
@@ -3002,12 +3098,14 @@ class ModelGrid(object):
                 for j in lon:
                     if not self.mask[i,j]:
                         for k in key:
-                            self.__dict__[k][i][j] = getattr(self.model_grid[i,j],k).value
+                            self.__dict__[k][i][j] = \
+                                getattr(self.model_grid[i, j], k).value
         else:
             for i, j in zip(lat, lon):
                 if not self.mask[i,j]:
                     for k in key:
-                        self.__dict__[k][i][j] = getattr(self.model_grid[i,j],k).value
+                        self.__dict__[k][i][j] = \
+                            getattr(self.model_grid[i, j], k).value
 
     def write(self, filename, overwrite=False):
         """Write model grid to a FITS file
@@ -3105,19 +3203,20 @@ class ModelGrid(object):
                 self.__dict__[k] = hdus[k].data.copy()
         elif hdus[self._param_names[0]].data.ndim == 3:
             for k in self.param_names:
-                self.__dict__[k] = [[hdus[k].data[i,j] for j in
+                self.__dict__[k] = [[hdus[k].data[i, j] for j in
                     range(self.nlon)] for i in range(self.nlat)]
             ii, jj = np.where(self.mask)
-            for i,j in zip(ii,jj):
+            for i,j in zip(ii, jj):
                 for k in self.param_names:
                     self.__dict__[k][i][j] = self.__dict__[k][i][j][0]
-        self._model_grid = np.zeros((self.nlat, self.nlon), dtype=self.model_class)
+        self._model_grid = np.zeros((self.nlat, self.nlon),
+                                    dtype=self.model_class)
         for i in range(self.nlat):
             for j in range(self.nlon):
-                if not self.mask[i,j]:
+                if not self.mask[i, j]:
                     parms = {}
                     for k in self.param_names:
-                        parms[k] = getattr(self,k)[i][j]
+                        parms[k] = getattr(self, k)[i][j]
                     if hasattr(parms[self.param_names[0]], '__iter__'):
                         parms['n_models'] = len(parms[self.param_names[0]])
                     else:
@@ -3162,13 +3261,13 @@ class HG1(PhaseFunction):
 
     @staticmethod
     def evaluate(pha, g):
-        return (1-g*g)/(1+2*g*np.cos(pha)+g*g)**1.5
+        return (1 - g * g) / (1 + 2 * g * np.cos(pha) + g * g)**1.5
 
     @staticmethod
     def fit_deriv(pha, g):
         cosa = np.cos(pha)
-        g2 = g*g
-        return (g*(g2-5)-(g2+3)*cosa)/(1+2*cosa*g+g2)**2.5
+        g2 = g * g
+        return (g * (g2 - 5) - (g2 + 3) * cosa) / (1 + 2 * cosa * g + g2)**2.5
 
 
 class HG2(PhaseFunction):
@@ -3196,29 +3295,29 @@ class HG2(PhaseFunction):
     @staticmethod
     def evaluate(pha, b, c):
         cosa = np.cos(pha)
-        b2 = b*b
-        num = (1-b2)
-        d1 = (1+b2)
-        d2 = 2*b*cosa
-        hgb = num/(d1-d2)**1.5
-        hgf = num/(d1+d2)**1.5
-        return 0.5*((1+c)*hgb + (1-c)*hgf)
+        b2 = b * b
+        num = 1 - b2
+        d1 = 1 + b2
+        d2 = 2 * b * cosa
+        hgb = num / (d1 - d2)**1.5
+        hgf = num / (d1 + d2)**1.5
+        return 0.5 * ((1 + c) * hgb + (1 - c) * hgf)
 
     @staticmethod
     def fit_deriv(pha, b, c):
         cosa = np.cos(pha)
-        b2 = b*b
-        num = (1-b2)
-        n1 = (b2-5)*b
-        n2 = (b2+3)*cosa
-        d1 = 1+b2
-        d2 = 2*cosa*b
-        hgb = num/(d1-d2)**1.5
-        hgf = num/(d1+d2)**1.5
-        dhgb = (n1+n2)/(d1-d2)**2.5
-        dhgf = (n1-n2)/(d1+d2)**2.5
-        d_b = 0.5*((1+c)*dhgb + (1-c)*dhgf)
-        d_c = 0.5*hgb-0.5*hgf
+        b2 = b * b
+        num = 1 - b2
+        n1 = (b2 - 5) * b
+        n2 = (b2 + 3) * cosa
+        d1 = 1 + b2
+        d2 = 2 * cosa * b
+        hgb = num / (d1 - d2)**1.5
+        hgf = num / (d1 + d2)**1.5
+        dhgb = (n1 + n2) / (d1 - d2)**2.5
+        dhgf = (n1 - n2) / (d1 + d2)**2.5
+        d_b = 0.5 * ((1 + c) * dhgb + (1 - c) * dhgf)
+        d_c = 0.5 * hgb - 0.5 * hgf
         return [d_b, d_c]
 
 
@@ -3242,18 +3341,21 @@ class HG3(PhaseFunction):
 
     @staticmethod
     def evaluate(pha, b1, b2, c):
-        return 0.5*(1+c)*HG1.evaluate(pha,-b1) + 0.5*(1-c)*HG1.evaluate(pha,b2)
+        return 0.5 * (1 + c) * HG1.evaluate(pha, -b1) + \
+               0.5 * (1 - c) * HG1.evaluate(pha, b2)
 
     @staticmethod
     def fit_deriv(pha, b1, b2, c):
         cosa = np.cos(pha)
-        b1sq = b1*b1
-        b2sq = b2*b2
-        hgb = (1-b1sq)/(1-2*cosa*b1+b1sq)**1.5
-        hgf = (1-b2sq)/(1+2*cosa*b2+b2sq)**1.5
-        d_b1 = ((b1sq-5)*b1+(b1sq+3)*cosa)/(1-2*cosa*b1+b1sq)**2.5
-        d_b2 = ((b2sq-5)*b2-(b2sq+3)*cosa)/(1+2*cosa*b2+b2sq)**2.5
-        d_c = 0.5*hgb - 0.5*hgf
+        b1sq = b1 * b1
+        b2sq = b2 * b2
+        hgb = (1 - b1sq) / (1 - 2 * cosa * b1 + b1sq)**1.5
+        hgf = (1 - b2sq) / (1 + 2 * cosa * b2 + b2sq)**1.5
+        d_b1 = ((b1sq - 5) * b1 + (b1sq + 3) * cosa) / \
+                (1 - 2 * cosa * b1 + b1sq)**2.5
+        d_b2 = ((b2sq - 5) * b2 - (b2sq + 3) * cosa) / \
+                (1 + 2 * cosa * b2 + b2sq)**2.5
+        d_c = 0.5 * hgb - 0.5 * hgf
         return [d_b1, d_b2, d_c]
 
 
@@ -3276,7 +3378,7 @@ class Exponential(PhaseFunction):
         if isinstance(alpha, u.Quantity):
             alpha = alpha.to('deg').value
         alpha2 = alpha*alpha
-        return np.exp(beta*alpha+gamma*alpha2+delta*alpha*alpha2)
+        return np.exp(beta * alpha + gamma * alpha2 + delta * alpha * alpha2)
 
     @staticmethod
     def fit_deriv(alpha, beta, gamma, delta):
@@ -3285,8 +3387,8 @@ class Exponential(PhaseFunction):
         if isinstance(alpha, u.Quantity):
             alpha = alpha.to('deg').value
         exp = Exp.evaluate(alpha, beta, gamma, delta)
-        alpha2 = alpha*alpha
-        return [exp*alpha, exp*alpha2, exp*alpha*alpha2]
+        alpha2 = alpha * alpha
+        return [exp * alpha, exp * alpha2, exp * alpha * alpha2]
 
 
 class LinMagnitude(PhaseFunction):
@@ -3303,12 +3405,13 @@ class LinMagnitude(PhaseFunction):
     @staticmethod
     def evaluate(alpha, beta):
         alpha = PhaseFunction.check_phase_angle(alpha)
-        return 10**(-.4*beta*alpha)
+        return 10**(-.4 * beta * alpha)
 
     @staticmethod
     def fit_deriv(alpha, beta):
         alpha = PhaseFunction.check_phase_angle(alpha)
-        d_beta = -0.4*alpha*LinMagnitude.evaluate(alpha,beta)*np.log(10)
+        d_beta = -0.4 * alpha * LinMagnitude.evaluate(alpha, beta) *\
+                    np.log(10)
         return d_beta
 
 
@@ -3320,7 +3423,7 @@ class PolyMagnitude(PhaseFunction):
  v1.0.0 : JYL @PSI, October 17, 2014
  '''
 
-    beta = Parameter(default=0.02,min=0.)
+    beta = Parameter(default=0.02, min=0.)
     gamma = Parameter(default=0.)
     delta = Parameter(default=0.)
 
@@ -3328,14 +3431,15 @@ class PolyMagnitude(PhaseFunction):
     def evaluate(alpha, beta, gamma, delta):
         alpha = PhaseFunction.check_phase_angle(alpha)
         alpha2 = alpha*alpha
-        return 10**(-.4*(beta*alpha+gamma*alpha2+delta*alpha*alpha2))
+        return 10**(-.4 * (beta * alpha + gamma * alpha2 + \
+                    delta * alpha * alpha2))
 
     @staticmethod
     def fit_deriv(alpha, beta, gamma, delta):
         alpha = PhaseFunction.check_phase_angle(alpha)
-        c = -0.4*np.log(10)*Poly3Mag.evaluate(alpha, beta, gamma, delta)
-        alpha2 = alpha*alpha
-        return [c*alpha, c*alpha2, c*alpha*alpha2]
+        c = -0.4 * np.log(10) * Poly3Mag.evaluate(alpha, beta, gamma, delta)
+        alpha2 = alpha * alpha
+        return [c * alpha, c * alpha2, c * alpha * alpha2]
 
 
 class ROLOPhase(PhaseFunction):
@@ -3359,19 +3463,21 @@ class ROLOPhase(PhaseFunction):
     @staticmethod
     def evaluate(pha, c0, c1, a0, a1, a2, a3, a4):
         pha = PhaseFunction.check_phase_angle(pha)
-        pha2 = pha*pha
-        return c0*np.exp(-c1*pha)+a0+a1*pha+a2*pha2+a3*pha*pha2+a4*pha2*pha2
+        pha2 = pha * pha
+        return c0 * np.exp(-c1 * pha) + a0 + a1 * pha + a2 * pha2 + \
+                    a3 * pha * pha2 + a4 * pha2 * pha2
 
     @staticmethod
     def fit_deriv(pha, c0, c1, a0, a1, a2, a3, a4):
         pha = PhaseFunction.check_phase_angle(pha)
-        pha2 = pha*pha
-        dc0 = np.exp(-c1*pha)
+        pha2 = pha * pha
+        dc0 = np.exp(-c1 * pha)
         if hasattr(pha, '__iter__'):
             dda = np.ones(len(pha))
         else:
             dda = 1.
-        return [dc0, -c0*c1*dc0, dda, pha, pha2, pha*pha2, pha2*pha2]
+        return [dc0, -c0 * c1 * dc0, dda, pha, pha2, pha * pha2,
+                    pha2 * pha2]
 
 
 class Akimov(PhaseFunction):
@@ -3393,17 +3499,21 @@ class Akimov(PhaseFunction):
     @staticmethod
     def evaluate(alpha, A, mu1, mu2, m):
         alpha = PhaseFunction.check_phase_angle(alpha)
-        return A*(np.exp(-mu1*alpha) + m*np.exp(-mu2*alpha))/(1+m)
+        return A * (np.exp(-mu1 * alpha) + m * np.exp(-mu2 * alpha)) \
+                / (1 + m)
 
     @staticmethod
     def fit_deriv(alpha, A, mu1, mu2, m):
         alpha = PhaseFunction.check_phase_angle(alpha)
-        a, b = np.exp(-mu1*alpha), np.exp(-mu2*alpha)
-        return [(np.exp(-mu1*alpha) + m*np.exp(-mu2*alpha))/(1+m), -alpha*a/(1+m), -alpha*m*b/(1+m), (b-a)/(1+m)**2]
+        a, b = np.exp(-mu1 * alpha), np.exp(-mu2 * alpha)
+        return [(np.exp(-mu1 * alpha) + m * np.exp(-mu2 * alpha)) / (1 + m),
+                -alpha * a / (1 + m), -alpha * m * b / (1 + m),
+                (b - a) / (1 + m)**2]
 
 
 class LinExponential(PhaseFunction):
-    '''Linear-Exponential phase function model (Piironen 1994, Kaasalainen et al. 2001, 2003).
+    '''Linear-Exponential phase function model (Piironen 1994,
+    Kaasalainen et al. 2001, 2003).
 
     f(alpha) = a * exp(-alpha/d) + b + k * alpha
 
@@ -3420,7 +3530,7 @@ class LinExponential(PhaseFunction):
     @staticmethod
     def evaluate(alpha, a, d, b, k):
         alpha = PhaseFunction.check_phase_angle(alpha)
-        return a*np.exp(-alpha/d)+b+k*alpha
+        return a * np.exp(-alpha / d) + b + k * alpha
 
     #@staticmethod
     #def fit_deriv(alpha, a, d, b, k):
@@ -3450,12 +3560,12 @@ class Lambert(DiskFunction):
     @staticmethod
     def evaluate(i, e, A):
         i = _2rad(i)
-        return A*np.cos(i)*recipi
+        return A * np.cos(i) * recipi
 
     @staticmethod
     def fit_deriv(i, e, A):
         i = _2rad(i)
-        return np.cos(i)*recipi
+        return np.cos(i) * recipi
 
 
 class LS(DiskFunction):
@@ -3474,14 +3584,14 @@ class LS(DiskFunction):
         i, e = _2rad(i, e)
         mu0 = np.cos(i)
         mu = np.cos(e)
-        return A*mu0/(mu0+mu)*recipi
+        return A * mu0 / (mu0 + mu) * recipi
 
     @staticmethod
     def fit_deriv(i, e, A):
         i, e = _2rad(i, e)
         mu0 = np.cos(i)
         mu = np.cos(e)
-        return mu0/(mu0+mu)*recipi
+        return mu0 / (mu0 + mu) * recipi
 
 
 class LunarLambert(DiskFunction):
@@ -3498,16 +3608,16 @@ class LunarLambert(DiskFunction):
         i, e = _2rad(i, e)
         mu0 = np.cos(i)
         mu = np.cos(e)
-        return A*(L*2*mu0/(mu0+mu)+(1-L)*mu0)
+        return A * (L * 2 * mu0 / (mu0 + mu) + (1 - L) * mu0)
 
     @staticmethod
     def fit_deriv(i, e, A, L):
         i, e = _2rad(i, e)
         mu0 = np.cos(i)
         mu = np.cos(e)
-        lunar = 2*mu0/(mu0+mu)
-        dda = L*lunar+(1-L)*mu0
-        ddl = A*(lunar-mu0)
+        lunar = 2 * mu0 / (mu0 + mu)
+        dda = L * lunar + (1 - L) * mu0
+        ddl = A * (lunar - mu0)
         return [dda, ddl]
 
 
@@ -3522,7 +3632,7 @@ class Minnaert(DiskFunction):
         i, e = _2rad(i, e)
         mu0 = np.cos(i)
         mu = np.cos(e)
-        return A*mu0**k*mu**(k-1)
+        return A * mu0**k * mu**(k - 1)
 
 
 class AkimovDisk(FittableModel):
@@ -3546,11 +3656,13 @@ class AkimovDisk(FittableModel):
     @staticmethod
     def D(pha, lat, lon, eta):
         pha, lat, lon = _2rad(pha, lat, lon)
-        return np.cos(pha/2)*np.cos(np.pi/(np.pi-pha)*(lon-pha/2))*np.cos(lat)**(eta*pha/(np.pi-pha))/np.cos(lon)*recipi
+        return np.cos(pha / 2) * np.cos(np.pi / (np.pi - pha) \
+                * (lon - pha / 2)) * np.cos(lat)**(eta * pha \
+                / (np.pi - pha)) / np.cos(lon) * recipi
 
     @staticmethod
     def evaluate(pha, lat, lon, A, eta):
-        return A*AkimovDisk.D(pha, lat, lon, eta)
+        return A * AkimovDisk.D(pha, lat, lon, eta)
 
 
 class PhotometricModel(FittableModel):
@@ -3571,11 +3683,11 @@ class PhotometricModel(FittableModel):
 
     def BRDF(self, inc, emi, pha):
         '''Bidirectional reflectance distribution function'''
-        return self(inc, emi, pha)/np.cos(_2rad(inc))
+        return self(inc, emi, pha) / np.cos(_2rad(inc))
 
     def REFF(self, inc, emi, pha):
         '''Reflectance factor (reflectance coefficient)'''
-        return self(inc, emi, pha)*np.pi/np.cos(_2rad(inc))
+        return self(inc, emi, pha) * np.pi / np.cos(_2rad(inc))
 
     def normref(self, emi):
         '''Normal reflectance'''
@@ -3610,9 +3722,10 @@ class MinnaertPoly3(PhotometricModel):
 
     @staticmethod
     def evaluate(inc, emi, pha, A, beta, gamma, delta, k, b):
-        AA = A*10**(-0.4*(beta*pha+gamma*pha*pha+delta*pha*pha*pha))
-        kk = k+b*pha
-        return Minnaert(AA, kk)(inc,emi)
+        AA = A * 10**(-0.4 * (beta * pha + gamma * pha * pha +
+                              delta * pha * pha * pha))
+        kk = k + b * pha
+        return Minnaert(AA, kk)(inc, emi)
 
 
 class ROLOModel(PhotometricModel):
@@ -3638,7 +3751,7 @@ class ROLOModel(PhotometricModel):
         mu0 = np.cos(inc)
         mu = np.cos(emi)
         f = ROLOPhase(C0, C1, A0, A1, A2, A3, A4)
-        return mu0/(mu0+mu)*f(pha)
+        return mu0 / (mu0 + mu) * f(pha)
 
     def geoalb(self):
         return self.normalb(0.)
@@ -3657,7 +3770,7 @@ class LS_Akimov(PhotometricModel):
     def evaluate(inc, emi, pha, A, mu1, mu2, m):
         d = LS(A)
         f = Akimov(mu1, mu2, m)
-        return d(inc,emi)*f(pha)
+        return d(inc, emi) * f(pha)
 
 
 class LS_LinMag(PhotometricModel):
@@ -3671,7 +3784,7 @@ class LS_LinMag(PhotometricModel):
     def evaluate(inc,emi,pha,A0,beta):
         d = LS(A0)
         f = LinMagnitude(beta)
-        return d(inc,emi)*f(pha)
+        return d(inc, emi) * f(pha)
 
 
 class Akimov_LinMag(PhotometricModel):
@@ -3683,10 +3796,10 @@ class Akimov_LinMag(PhotometricModel):
     beta = Parameter(default=0.04, min=0.)
 
     @staticmethod
-    def evaluate(pha,lat,lon,A0,beta):
+    def evaluate(pha, lat, lon, A0, beta):
         d = AkimovDisk(A0)
         f = LinMagnitude(beta)
-        return d(pha,lat,lon)*f(pha)
+        return d(pha, lat, lon) * f(pha)
 
 
 class LambertPolyMag(PhotometricModel):
@@ -3699,7 +3812,8 @@ class LambertPolyMag(PhotometricModel):
 
     @staticmethod
     def evaluate(inc, emi, pha, A, beta, delta, gamma):
-        return Lambert(A)(inc, emi)*PolyMagnitude(beta, gamma, delta)(pha)
+        return Lambert(A)(inc, emi) \
+               * PolyMagnitude(beta, gamma, delta)(pha)
 
 
 class CompositePhotometricModel(PhotometricModel):
@@ -3728,7 +3842,7 @@ class CompositePhotometricModel(PhotometricModel):
         ndp = len(diskfunc.param_names)
         d = self.diskfunc.evaluate(inc, emi, pha, *par[:ndp])
         f = self.phasefunc.evaluate(inc, emi, pha, *par[ndp:])
-        return d*f
+        return d * f
 
 
 def PhotEqGeom(pha=None, inc=None, emi=None, step=1.):
@@ -3736,21 +3850,22 @@ def PhotEqGeom(pha=None, inc=None, emi=None, step=1.):
     phase angle, or incidence angle, or emission angle'''
     if pha is not None:
         if pha>=0:
-            emi = np.linspace(pha-90., 90., np.ceil((180-pha)/step)+1)
+            emi = np.linspace(pha-90., 90., np.ceil((180 - pha) / step) + 1)
         else:
-            emi = np.linspace(-90., 90+pha, np.ceil((180+pha)/step)+1)
-        inc = emi-pha
-        return inc, emi, np.ones_like(inc)*pha
+            emi = np.linspace(-90., 90 + pha, np.ceil((180 + pha) / step) + 1)
+        inc = emi - pha
+        return inc, emi, np.ones_like(inc) * pha
     elif inc is not None:
-        emi = np.linspace(-90, 90, np.ceil(180/step)+1)
-        pha = inc-emi
-        return np.ones_like(emi)*inc, emi, pha
+        emi = np.linspace(-90, 90, np.ceil(180 / step) + 1)
+        pha = inc - emi
+        return np.ones_like(emi) * inc, emi, pha
     elif emi is not None:
-        inc = np.linspace(-90., 90, np.ceil(180/step)+1)
-        pha = inc-emi
-        return inc, np.ones_like(inc)*emi, pha
+        inc = np.linspace(-90., 90, np.ceil(180 / step) + 1)
+        pha = inc - emi
+        return inc, np.full_like(inc, emi), pha
     else:
-        raise ValueError('one of the three parameters `pha`, `inc`, or `emi` must be specified')
+        raise ValueError('one of the three parameters `pha`, `inc`, or'
+                ' `emi` must be specified')
 
 
 def ref2mag(ref, radius, msun=-26.74):
@@ -3767,9 +3882,10 @@ def ref2mag(ref, radius, msun=-26.74):
         msun = msun.to('mag').value
         Q = True
 
-    mag = msun-2.5*np.log10(ref*np.pi*radius*radius*u.km.to('au')**2)
+    mag = msun - 2.5 * np.log10(ref * np.pi * radius * radius \
+                                * u.km.to('au')**2)
     if Q:
-        return mag*u.mag
+        return mag * u.mag
     else:
         return mag
 
@@ -3788,9 +3904,9 @@ def mag2ref(mag, radius, msun=-26.74):
         msun = msun.to('mag').value
         Q = True
 
-    ref = 10**((msun-mag)*0.4)/(np.pi*radius*radius*u.km.to('au')**2)
+    ref = 10**((msun - mag) * 0.4)/(np.pi * radius * radius * u.km.to('au')**2)
     if Q:
-        return ref/u.sr
+        return ref / u.sr
     else:
         return ref
 
@@ -3813,9 +3929,12 @@ def biniof(inc, emi, pha, iof, di, de, da, binned=None, verbose=False):
 
     if verbose:
         print('Bin photometric data to grid:')
-        print('  i: from {0} to {1} with bin size {2}'.format(inc.min(), inc.max(), di))
-        print('  e: from {0} to {1} with bin size {2}'.format(emi.min(), emi.max(), de))
-        print('  a: from {0} to {1} with bin size {2}'.format(pha.min(), pha.max(), da))
+        print('  i: from {0} to {1} with bin size {2}'.format(
+                inc.min(), inc.max(), di))
+        print('  e: from {0} to {1} with bin size {2}'.format(
+                emi.min(), emi.max(), de))
+        print('  a: from {0} to {1} with bin size {2}'.format(
+                pha.min(), pha.max(), da))
 
     incbin = []
     emibin = []
@@ -3828,13 +3947,13 @@ def biniof(inc, emi, pha, iof, di, de, da, binned=None, verbose=False):
     count = []
 
     for a in np.arange(pha.min(), pha.max(), da):
-        a_idx = (pha >= a) & (pha < a+da)
+        a_idx = (pha >= a) & (pha < a + da)
         if a_idx.any():
             for i in np.arange(inc.min(), inc.max(), di):
-                i_idx = a_idx & (inc >= i) & (inc < i+di)
+                i_idx = a_idx & (inc >= i) & (inc < i + di)
                 if i_idx.any():
                     for e in np.arange(emi.min(), emi.max(), de):
-                        e_idx = i_idx & (emi >= e) & (emi < e+de)
+                        e_idx = i_idx & (emi >= e) & (emi < e + de)
                         if e_idx.any():
                             inc_in = inc[e_idx]
                             emi_in = emi[e_idx]
@@ -3856,7 +3975,9 @@ def biniof(inc, emi, pha, iof, di, de, da, binned=None, verbose=False):
                                 phaerr.append(0.)
                                 ioferr.append(0.)
 
-    return np.asarray(incbin), np.asarray(emibin), np.asarray(phabin), np.asarray(iofbin), np.asarray(incerr), np.asarray(emierr), np.asarray(phaerr), np.asarray(ioferr), np.asarray(count)
+    return np.asarray(incbin), np.asarray(emibin), np.asarray(phabin), \
+           np.asarray(iofbin), np.asarray(incerr), np.asarray(emierr), \
+           np.asarray(phaerr), np.asarray(ioferr), np.asarray(count)
 
 
 class Binner(object):
@@ -3865,7 +3986,8 @@ class Binner(object):
  v1.0.0 : 11/1/2015, JYL @PSI
     '''
 
-    def __init__(self, dims=['inc','emi','pha'], bins=(5,5,5), boundary=None):
+    def __init__(self, dims=['inc', 'emi', 'pha'], bins=(5, 5, 5),
+                boundary=None):
         #if not isinstance(sca, ScatteringGeometry):
         #   raise TypeError('ScatteringGeometry class instance is expected.')
         self.dims = dims
@@ -3890,46 +4012,56 @@ class Binner(object):
         data = []
         for p in self.dims:
             data.append(getattr(pho.sca, p).value)
-        data.append(getattr(pho,pho.refkey[0]))
+        data.append(getattr(pho, pho.refkey[0]))
 
         method = 'boundary'
         if self.boundary == None:
             self.boundary = []
             method = 'bin'
             for b, d in zip(self.bins, data):
-                self.boundary.append(np.arange(d.min(), d.max()+b, b))
+                self.boundary.append(np.arange(d.min(), d.max() + b, b))
 
         if verbose:
-            print('Bin {0} photometric data points to grid:'.format(len(data[0])))
-            for p, d, bn, bd in zip(self.dims, data[:3], self.bins, self.boundary):
-                print('  {0} from {1} to {2} with {3}: {4}'.format(p, d.min(), d.max(), method, bn if method=='bin' else bd))
+            print('Bin {0} photometric data points to grid:'.format(
+                    len(data[0])))
+            for p, d, bn, bd in zip(self.dims, data[:3], self.bins,
+                                    self.boundary):
+                print('  {0} from {1} to {2} with {3}: {4}'.format(
+                        p, d.min(), d.max(), method,
+                        bn if method=='bin' else bd))
 
         binned = [[], [], [], []]
         error = [[], [], [], []]
         count = []
 
-        for a1,a2 in zip(self.boundary[0][:-1],self.boundary[0][1:]):
+        for a1, a2 in zip(self.boundary[0][:-1], self.boundary[0][1:]):
             a_idx = (data[0] >= a1) & (data[0] < a2)
             if a_idx.any():
-                for i1, i2 in zip(self.boundary[1][:-1],self.boundary[1][1:]):
+                for i1, i2 in zip(self.boundary[1][:-1], self.boundary[1][1:]):
                     i_idx = a_idx & (data[1] >= i1) & (data[1] < i2)
                     if i_idx.any():
-                        for e1, e2 in zip(self.boundary[2][:-1],self.boundary[2][1:]):
+                        for e1, e2 in zip(self.boundary[2][:-1],
+                                        self.boundary[2][1:]):
                             e_idx = i_idx & (data[2] >= e1) & (data[2] < e2)
                             if e_idx.any():
                                 data_in = [data[i][e_idx] for i in range(4)]
-                                [binned[i].append(data_in[i].mean(axis=0)) for i in range(4)]
+                                _ = [binned[i].append(data_in[i].mean(
+                                        axis=0)) for i in range(4)]
                                 count.append(len(data_in[0]))
                                 if count[-1] > 1:
-                                    [error[i].append(data_in[i].std(axis=0)) for i in range(4)]
+                                    _ = [error[i].append(data_in[i].std(
+                                            axis=0)) for i in range(4)]
                                 else:
-                                    [error[i].append(0.) for i in range(3)]
+                                    _ = [error[i].append(0.) for i in \
+                                                range(3)]
                                     if data[3].ndim == 1:
                                         error[3].append(0.)
                                     else:
-                                        error[3].append(np.zeros_like(data_in[3][0]))
+                                        error[3].append(np.zeros_like(
+                                                data_in[3][0]))
 
-        parms = {'dims': self.dims, 'bins': self.bins, 'boundary': self.boundary, 'count': np.array(count)}
+        parms = {'dims': self.dims, 'bins': self.bins,
+                 'boundary': self.boundary, 'count': np.array(count)}
         keys = {}
         for i in range(3):
             keys[self.dims[i]] = binned[i]
@@ -3959,16 +4091,17 @@ class ROLOModelFitter(PhotometricModelFitter):
         plt.clf()
         mu0 = np.cos(self.data.inc)
         mu = np.cos(self.data.emi)
-        k = (mu0+mu)/mu0
+        k = (mu0 + mu) / mu0
         pha = self.data.pha.value
-        plt.plot(pha, self.data.BDR*k, 'o')
-        ph = np.linspace(pha.min(),pha.max(),300)
+        plt.plot(pha, self.data.BDR * k, 'o')
+        ph = np.linspace(pha.min(), pha.max(), 300)
         pars = {}
         for i in range(len(self.model.parameters)):
             pars[self.model.param_names[i]] = self.model.parameters[i]
         model = ROLOPhase(**pars)
         plt.plot(ph, model(ph))
-        pplot(xlabel='Phase ('+str(self.data.pha.unit)+')',ylabel='Phase Function')
+        pplot(xlabel='Phase (' + str(self.data.pha.unit) + ')',
+                ylabel='Phase Function')
         return figs
 
 
@@ -4016,7 +4149,8 @@ class Mul(mappings.Mapping):
         return y
 
 
-def extract_phodata(illfile, iofdata=0, maskdata=None, backplanes=None, binsize=None, verbose=True):
+def extract_phodata(illfile, iofdata=0, maskdata=None, backplanes=None,
+        binsize=None, verbose=True):
     '''Extract I/F data from one geometric backplane cube and
  corresponding image cube
 
@@ -4046,27 +4180,42 @@ def extract_phodata(illfile, iofdata=0, maskdata=None, backplanes=None, binsize=
    Adopted from `extact_phodata` from Dawn.py package
     '''
     # List of all possible geometric backplanes generated by isis.phocube
-    geo_backplanes = {'Phase Angle':'pha', 'Local Emission Angle':'emi', 'Local Incidence Angle':'inc', 'Latitude':'lat', 'Longitude':'lon', 'Incidence Angle':'inc0', 'Emission Angle':'emi0', 'Pixel Resolution':'res', 'Line Resolution':'lres', 'Sample Resolution':'sres', 'Detector Resolution':'dres', 'North Azimuth':'noraz', 'Sun Azimuth':'sunaz', 'Spacecraft Azimuth':'scaz', 'OffNadir Angle':'offang', 'Sub Spacecraft Ground Azimuth':'subscaz', 'Sub Solar Ground Azimuth':'subsaz', 'Morphology':'mor', 'Albedo':'alb', 'Mask': 'mask'}
+    geo_backplanes = {
+        'Phase Angle':'pha', 'Local Emission Angle':'emi',
+        'Local Incidence Angle':'inc', 'Latitude':'lat',
+        'Longitude':'lon', 'Incidence Angle':'inc0',
+        'Emission Angle':'emi0', 'Pixel Resolution':'res',
+        'Line Resolution':'lres', 'Sample Resolution':'sres',
+        'Detector Resolution':'dres', 'North Azimuth':'noraz',
+        'Sun Azimuth':'sunaz', 'Spacecraft Azimuth':'scaz',
+        'OffNadir Angle':'offang',
+        'Sub Spacecraft Ground Azimuth':'subscaz',
+        'Sub Solar Ground Azimuth':'subsaz', 'Morphology':'mor',
+        'Albedo':'alb', 'Mask': 'mask'}
 
     if backplanes is None:
-        backplanes = ['Phase Angle', 'Local Emission Angle', 'Local Incidence Angle', 'Latitude', 'Longitude']
+        backplanes = ['Phase Angle', 'Local Emission Angle',
+                      'Local Incidence Angle', 'Latitude', 'Longitude']
 
     # Read in and select illumination cube
     illcub = CubeFile(illfile)
     ill0 = illcub.apply_numpy_specials()
-    illbackplanes = [x.strip('"') for x in illcub.label['IsisCube']['BandBin']['Name']]
+    illbackplanes = [x.strip('"') for x in \
+                illcub.label['IsisCube']['BandBin']['Name']]
     for b in backplanes:
         if b not in illbackplanes:
             if verbose:
-                print('Warning: backplane {0} not found in input cube, dropped'.format(b))
+                print('Warning: backplane {0} not found in input cube, '
+                        'dropped'.format(b))
             backplanes.pop(backplanes.index(b))
-    ill = np.array([ill0[illbackplanes.index(backplanes[i])] for i in range(len(backplanes))])
+    ill = np.array([ill0[illbackplanes.index(backplanes[i])] \
+                    for i in range(len(backplanes))])
 
     # Read in image data
     if isinstance(iofdata, (str, bytes)):
         if not os.path.isfile(iofdata):
             raise IOError('I/F data not found.')
-        if iofdata.lower().endswith(('.fits','.fit')):
+        if iofdata.lower().endswith(('.fits', '.fit')):
             im = fits.open(iofdata, verbose=verbose)[0].data
         elif iofdata.lower().endswith('.img'):
             im = PDS.readpds(iofdata)
@@ -4088,7 +4237,7 @@ def extract_phodata(illfile, iofdata=0, maskdata=None, backplanes=None, binsize=
     # Read mask
     if maskdata is not None:
         if isinstance(maskdata, (str, bytes)):
-            if maskdata.lower().endswith(('.fits','.fit')):
+            if maskdata.lower().endswith(('.fits', '.fit')):
                 mask = readfits(maskdata,verbose=False).astype(bool)
             else:
                 mask = CubeFile(maskdata)
@@ -4102,7 +4251,7 @@ def extract_phodata(illfile, iofdata=0, maskdata=None, backplanes=None, binsize=
         if 'Mask' in illbackplanes:
             mask = ill0[illbackplanes.index('Mask')].astype(bool)
         else:
-            mask = np.zeros(ill.shape[1:],dtype=bool)
+            mask = np.zeros(ill.shape[1:], dtype=bool)
     for k in ill:
         mask |= ~np.isfinite(k)
     ndim = im.shape
@@ -4118,17 +4267,18 @@ def extract_phodata(illfile, iofdata=0, maskdata=None, backplanes=None, binsize=
     if binsize is not None:
         ndim = len(im.shape)
         if ndim == 2:
-            im = rebin(im, [binsize,binsize], mean=True)
+            im = rebin(im, [binsize, binsize], mean=True)
         else:
-            im = rebin(im, [1,binsize,binsize], mean=True)
-        ill = rebin(ill, [1,binsize,binsize], mean=True)
+            im = rebin(im, [1,binsize, binsize], mean=True)
+        ill = rebin(ill, [1,binsize, binsize], mean=True)
         mask = rebin(mask, [binsize, binsize])
 
     # organize data
     ww = np.where(~mask)
     if len(ww[0])>0:
-        data = np.concatenate((im[np.newaxis,...].astype('f4'), ill.astype('f4')))
-        data = data[:,~mask]
+        data = np.concatenate((im[np.newaxis,...].astype('f4'),
+                                ill.astype('f4')))
+        data = data[:, ~mask]
         names = imnames + backplanes
         out = Table(list(data), names=names)
         for n in backplanes:
