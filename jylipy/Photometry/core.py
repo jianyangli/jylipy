@@ -2412,7 +2412,7 @@ class PhotometricDataGrid(object):
             ver = inf[0].header['version']
             lon = inf['lon'].data * units.Unit(inf['lon'].header['bunit'])
             lat = inf['lat'].data * units.Unit(inf['lat'].header['bunit'])
-            infodata = np.asarray(inf['info'].data)
+            infodata = np.asanyarray(inf['info'].data)
             nodata = infodata['count'] == 0
             geokeys = ['incmin', 'incmax', 'emimin', 'emimax',
                         'phamin', 'phamax']
