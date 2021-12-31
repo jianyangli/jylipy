@@ -1,32 +1,41 @@
 """Toolkit to support DDAP Ceres local spectrophotometry project"""
 
 from glob import glob
-from os.path import basename, splitext, isfile
-import numpy as np
-import matplotlib.pyplot as plt
-import astropy.units as u
+from warnings import warn
+import os, numpy as np, matplotlib.pyplot as plt, astropy.units as u
 from astropy.time import Time
+from astropy.io import ascii
 from pysis import CubeFile
 import spiceypy as spice
 
 from ..geometry import load_generic_kernels
 from ..Photometry import PhotometricData
-
+from ..projects.dawn import FCImage
 
 class RegionalData:
     """Regional data object
     """
 
-    def __init__(self, datadir='.', maskdir='.', roi_tags=[66, 185, 0, 255],
-            mask_sfx='mask', outfile='{}_roi{}.fits'):
+    def __init__(self, cubedir='.', maskdir='.', data_catalog=None,
+            roi_tags=[66, 185, 0, 255], mask_sfx='mask',
+            outfile='{}_roi{}.fits'):
         """
         Parameters
         ----------
-        datadir : str
-            Directory of input data
+        cubedir : str
+            Directory of input backplane data in ISIS cubes
         maskdir : str
             Directory of ROI masks
-        roi_tags : list of int
+        data_catalog : str
+            Catalog file that provides the path name of image data file.
+            Default is to take the image data from ISIS cubes.  If this
+            parameter is provided (not None), then the image data will
+            be taken from a separate file pointed by the catalog file.
+            Catalog file must have columns 'ID', 'L1a', 'L1b', 'L1c',
+            which stores the exposure ID, paths to level 1a, 1b, and l1c
+            image files, all in strings.  The paths are assumed to be
+            relative to the path of the catalog file.
+        roi_tags : list of int, optional
             Values of ROI tags
         mask_sfx : str
             Suffix to be added to data file names to make them mask file names
@@ -34,8 +43,11 @@ class RegionalData:
             Root name of output data files.  It has two {} to be filled in by
             filter name and ROI number.  ROI number starts from 1 in stead of 0.
         """
-        self.datadir = datadir
+        self.cubedir = cubedir
         self.maskdir = maskdir
+        self.data_catalog = data_catalog
+        self.catalog = None if self.data_catalog is None \
+                else ascii.read(self.data_catalog)
         self.mask_sfx = mask_sfx
         self.roi_tags = roi_tags
         self.outfile = outfile
@@ -49,8 +61,8 @@ class RegionalData:
                        'F7': 1.572,
                        'F8': 1.743}
         # Ceres SPK file
-        self.ceres_spk = \
-            '/Users/jyli/Work/Ceres/spice/ceres_1900-2100_20151014.bsp'
+        self.ceres_spk = os.path.join(os.path.sep, 'Users', 'jyli',
+                'Work', 'Ceres', 'spice', 'ceres_1900-2100_20151014.bsp')
 
     @property
     def n_roi(self):
@@ -58,7 +70,7 @@ class RegionalData:
 
     def _output_filename(self, filter, roi, ext='fits', binned=False):
         base = self.outfile.format(filter, roi)
-        name, _ = splitext(base)
+        name, _ = os.path.splitext(base)
         if binned:
             name = name + '_binned'
         return '.'.join([name, ext])
@@ -66,10 +78,13 @@ class RegionalData:
     def phodata_extract(self, overwrite=False):
         """Extract photometric data"""
 
-        files = np.array(glob(self.datadir+'*.cub'))
-        get_filter = lambda f: splitext(basename(f))[0][-3:-1]
+        files = np.array(glob(self.cubedir+'*.cub'))
+        get_filter = lambda f: os.path.splitext(os.path.basename(f))[0][-3:-1]
         filters = np.array([get_filter(f) for f in files])
         self.filter_list = np.unique(filters)
+
+        if self.data_catalog is not None:
+            data_path = os.path.split(self.data_catalog)[0]
 
         load_generic_kernels()
         spice.furnsh(self.ceres_spk)
@@ -79,6 +94,7 @@ class RegionalData:
             print(' '*80, end='\r')
             print('filter : {}'.format(flt), end='')
             ff = files[filters == flt]  # files of filter 'flt'
+            ff = [x for x in ff if x.find('FC1') == -1] # filter out FC1
             print(', {} files'.format(len(ff)))
             iof = [[] for i in range(self.n_roi)]
             pha = [[] for i in range(self.n_roi)]
@@ -90,12 +106,29 @@ class RegionalData:
             # loop through files
             for j, f in enumerate(ff):
                 print('    {}: {}'.format(j+1, f), end='\r')
-                # load data
+                # load backplane data
                 datacube = CubeFile(f)
                 data = datacube.apply_numpy_specials()
+                # load image data if needed
+                if self.catalog is not None:
+                    tmp = os.path.basename(f).split('_')[0]
+                    ww = tmp.find('1B') + 2
+                    img_id = int(tmp[ww:])
+                    row = self.catalog[self.catalog['ID'] == img_id]
+                    if not row['L1c'].mask:
+                        img_file = row['L1c'][0]
+                    elif not row['L1b'].mask:
+                        img_file = row['L1b'][0]
+                    else:
+                        warn('Image {} not found, use cube data'.format(img_id))
+                        im = data[0]
+                    im = FCImage(os.path.join(data_path, img_file),
+                                quickload=True)
+                else:
+                    im = data[0]
                 # calibrate to i/f
                 if 'Instrument' not in datacube.label['IsisCube']:
-                    utc = basename(f)[15:26]
+                    utc = os.path.basename(f)[15:26]
                     utc = '20'+utc[:2] + '-' + utc[2:5] + 'T' + \
                             utc[5:7] + ':' + utc[7:9] + ':' + utc[9:]
                     utc = Time(utc).isot
@@ -106,10 +139,10 @@ class RegionalData:
                 st, lt = spice.spkezr('sun', et, 'j2000', 'lt+s', 'ceres')
                 rh = np.sqrt(st[0]*st[0] + st[1]*st[1] + st[2]*st[2]) * \
                         u.km.to('au')
-                data[0] = data[0] * rh * rh * np.pi / self.iofcal[flt]
+                im = im * rh * rh * np.pi / self.iofcal[flt]
                 # prepare mask
-                maskfile = self.maskdir + self.mask_sfx + basename(f)
-                if not isfile(maskfile):
+                maskfile = self.maskdir + self.mask_sfx + os.path.basename(f)
+                if not os.path.isfile(maskfile):
                     continue
                 mask = CubeFile(maskfile)
                 mask = np.squeeze(mask.apply_numpy_specials())
@@ -122,7 +155,7 @@ class RegionalData:
                     for d in data[1:]:  # filter out nan values
                         ww = ww & np.isfinite(d)
                     if ww.any():
-                        iof[i].append(data[0][ww])
+                        iof[i].append(im[ww])
                         pha[i].append(data[1][ww])
                         emi[i].append(data[2][ww])
                         inc[i].append(data[3][ww])
