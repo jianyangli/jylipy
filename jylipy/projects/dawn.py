@@ -500,7 +500,7 @@ class FC2(object):
 class FCImage(Image):
     '''FC Image class'''
 
-    def __init__(self, data):
+    def __init__(self, data, quickload=False):
         '''FCImage class can be initialized with the same signature as
         ccdproc.CCDData class, or a str containing the input file name.
 
@@ -511,7 +511,7 @@ class FCImage(Image):
             super(FCImage, self).__init__(data)
             self._copy_properties(data)
         elif isinstance(data, PDS.PDSData):
-            self._init_from_pdsdata(data)
+            self._init_from_pdsdata(data, quickload=quickload)
         elif isinstance(data, str):
             self.read(data)
         else:
@@ -525,15 +525,22 @@ class FCImage(Image):
             for k in self.records:
                 setattr(self, k, getattr(data, k))
 
-    def _init_from_pdsdata(self, inputfile):
+    def _init_from_pdsdata(self, inputfile, quickload=False):
+        """
+        Initialize from PDS data
+
+        If `quickload` is True, then the uncertainty array set up for
+        Level 1a data is skipped.
+        """
         pdsdata = PDS.PDSData(inputfile)
-        data = pdsdata.IMAGE
+        data = getattr(pdsdata, pdsdata.records[0])
         header = pdsdata.header
         #header.update(data.header)
         super(FCImage, self).__init__(data, meta=header)
-        if self.unit == 'adu':  # if Level 1a data, add uncertainty plane
-            self.uncertainty = ccdproc.create_deviation(self, gain=FC2.gain, readnoise=FC2.readnoise).uncertainty
-            self.meta['create_deviation'] = 'ccd_data=<FCImage>, readnoise={0}, gain={1}'.format(FC2.readnoise, FC2.gain)
+        if not quickload:
+            if self.unit == 'adu':  # if Level 1a data, add uncertainty plane
+                self.uncertainty = ccdproc.create_deviation(self, gain=FC2.gain, readnoise=FC2.readnoise).uncertainty
+                self.meta['create_deviation'] = 'ccd_data=<FCImage>, readnoise={0}, gain={1}'.format(FC2.readnoise, FC2.gain)
         #else:  # If level 1b or 1c, add 'flux_cal' key to the header
         #    self.header['flux_cal'] = 'MPS'
         if len(pdsdata.records) > 1:
