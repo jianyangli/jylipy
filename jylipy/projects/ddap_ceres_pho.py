@@ -78,6 +78,18 @@ class RegionalData:
     def phodata_extract(self, overwrite=False):
         """Extract photometric data"""
 
+        print('Extract photometric data')
+        print('    ISIS cube directory: {}'.format(self.cubedir))
+        print('    ROI mask directory: {}, suffix: {}'.format(self.maskdir,
+                    self.mask_sfx))
+        print('    ROI tags: ', self.roi_tags)
+        if self.data_catalog is None:
+            print('    Data imbedded in ISIS cube')
+        else:
+            print('    Data catalog file: {}'.format(self.data_catalog))
+        print('    Output file name template: {}'.format(self.outfile))
+        print()
+
         files = np.array(glob(self.cubedir+'*.cub'))
         get_filter = lambda f: os.path.splitext(os.path.basename(f))[0][-3:-1]
         filters = np.array([get_filter(f) for f in files])
