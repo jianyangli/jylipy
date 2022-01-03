@@ -75,6 +75,27 @@ class RegionalData:
             name = name + '_binned'
         return '.'.join([name, ext])
 
+    def _search_catalog(self, f):
+        """Search catalog to find calibrated image from input image name.
+
+        If Level 1c calibration exists, then return it.  Otherwise return
+        Level 1b calibration.
+        """
+        if self.data_catalog is None:
+            raise ValueError('catalog file is not specified.')
+        data_path = os.path.split(self.data_catalog)[0]
+        tmp = os.path.basename(f).split('_')[0]
+        ww = tmp.find('1B') + 2
+        img_id = int(tmp[ww:])
+        row = self.catalog[self.catalog['ID'] == img_id]
+        if not row['L1c'].mask:
+            img_file = os.path.join(data_path, row['L1c'][0])
+        elif not row['L1b'].mask:
+            img_file = os.path.join(data_path, row['L1b'][0])
+        else:
+            img_file = ''
+        return img_file
+
     def phodata_extract(self, overwrite=False):
         """Extract photometric data"""
 
@@ -94,9 +115,6 @@ class RegionalData:
         get_filter = lambda f: os.path.splitext(os.path.basename(f))[0][-3:-1]
         filters = np.array([get_filter(f) for f in files])
         self.filter_list = np.unique(filters)
-
-        if self.data_catalog is not None:
-            data_path = os.path.split(self.data_catalog)[0]
 
         load_generic_kernels()
         spice.furnsh(self.ceres_spk)
@@ -118,29 +136,21 @@ class RegionalData:
             # loop through files
             for j, f in enumerate(ff):
                 print('    {}: {}'.format(j+1, f), end='\r')
+                f_base = os.path.basename(f)
                 # load backplane data
                 datacube = CubeFile(f)
                 data = datacube.apply_numpy_specials()
+                im = data[0]
                 # load image data if needed
                 if self.catalog is not None:
-                    tmp = os.path.basename(f).split('_')[0]
-                    ww = tmp.find('1B') + 2
-                    img_id = int(tmp[ww:])
-                    row = self.catalog[self.catalog['ID'] == img_id]
-                    if not row['L1c'].mask:
-                        img_file = row['L1c'][0]
-                    elif not row['L1b'].mask:
-                        img_file = row['L1b'][0]
-                    else:
-                        warn('Image {} not found, use cube data'.format(img_id))
-                        im = data[0]
-                    im = FCImage(os.path.join(data_path, img_file),
-                                quickload=True)
-                else:
-                    im = data[0]
+                    img_file = self._search_catalog(f)
+                    if not img_file:
+                        warn('Image {} not found, use cube data'.format(
+                                f_base))
+                    im = FCImage(img_file, quickload=True) if img_file
                 # calibrate to i/f
                 if 'Instrument' not in datacube.label['IsisCube']:
-                    utc = os.path.basename(f)[15:26]
+                    utc = f_base[15:26]
                     utc = '20'+utc[:2] + '-' + utc[2:5] + 'T' + \
                             utc[5:7] + ':' + utc[7:9] + ':' + utc[9:]
                     utc = Time(utc).isot
@@ -153,7 +163,7 @@ class RegionalData:
                         u.km.to('au')
                 im = im * rh * rh * np.pi / self.iofcal[flt]
                 # prepare mask
-                maskfile = self.maskdir + self.mask_sfx + os.path.basename(f)
+                maskfile = self.maskdir + self.mask_sfx + f_base
                 if not os.path.isfile(maskfile):
                     continue
                 mask = CubeFile(maskfile)
