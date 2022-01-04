@@ -17,6 +17,7 @@ class RegionalData:
     """
 
     def __init__(self, cubedir='.', maskdir='.', data_catalog=None,
+            force_catalog_data=False,
             roi_tags=[66, 185, 0, 255], mask_sfx='mask',
             outfile='{}_roi{}.fits'):
         """
@@ -26,7 +27,7 @@ class RegionalData:
             Directory of input backplane data in ISIS cubes
         maskdir : str
             Directory of ROI masks
-        data_catalog : str
+        data_catalog : str, optional
             Catalog file that provides the path name of image data file.
             Default is to take the image data from ISIS cubes.  If this
             parameter is provided (not None), then the image data will
@@ -35,11 +36,16 @@ class RegionalData:
             which stores the exposure ID, paths to level 1a, 1b, and l1c
             image files, all in strings.  The paths are assumed to be
             relative to the path of the catalog file.
+        force_catalog_data : bool, optional
+            By default, if no separate data found in `data_catalog`,
+            then the embedded data in the ISIS cube will be used.  If
+            set `True`, then the corresponding image will be dropped
+            in this case.
         roi_tags : list of int, optional
             Values of ROI tags
-        mask_sfx : str
+        mask_sfx : str, optional
             Suffix to be added to data file names to make them mask file names
-        outfile : str
+        outfile : str, optional
             Root name of output data files.  It has two {} to be filled in by
             filter name and ROI number.  ROI number starts from 1 in stead of 0.
         """
@@ -48,6 +54,7 @@ class RegionalData:
         self.data_catalog = data_catalog
         self.catalog = None if self.data_catalog is None \
                 else ascii.read(self.data_catalog)
+        self.force_catalog_data = force_catalog_data
         self.mask_sfx = mask_sfx
         self.roi_tags = roi_tags
         self.outfile = outfile
@@ -96,6 +103,10 @@ class RegionalData:
             img_file = ''
         return img_file
 
+    @property
+    def cubefiles(self):
+        return np.array(glob(self.cubedir+'*.cub'))
+
     def phodata_extract(self, overwrite=False):
         """Extract photometric data"""
 
@@ -108,10 +119,12 @@ class RegionalData:
             print('    Data imbedded in ISIS cube')
         else:
             print('    Data catalog file: {}'.format(self.data_catalog))
+            print('        Catalog data use forced: {}'.format(
+                    self.force_catalog_data))
         print('    Output file name template: {}'.format(self.outfile))
         print()
 
-        files = np.array(glob(self.cubedir+'*.cub'))
+        files = self.cubefiles
         get_filter = lambda f: os.path.splitext(os.path.basename(f))[0][-3:-1]
         filters = np.array([get_filter(f) for f in files])
         self.filter_list = np.unique(filters)
@@ -147,8 +160,12 @@ class RegionalData:
                     if img_file:
                         im = FCImage(img_file, quickload=True)
                     else:
-                        warn('Image {} not found, use cube data'.format(
-                                f_base))
+                        if self.force_catalog_data:
+                            warn('Image {} not found, skipped'.format(f_base))
+                            continue
+                        else:
+                            warn('Image {} not found, embedded cube data used'.
+                                    format(f_base))
                 # calibrate to i/f
                 if 'Instrument' not in datacube.label['IsisCube']:
                     utc = f_base[15:26]
