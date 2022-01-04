@@ -144,10 +144,11 @@ class RegionalData:
                 # load image data if needed
                 if self.catalog is not None:
                     img_file = self._search_catalog(f)
-                    if not img_file:
+                    if img_file:
+                        im = FCImage(img_file, quickload=True)
+                    else:
                         warn('Image {} not found, use cube data'.format(
                                 f_base))
-                    im = FCImage(img_file, quickload=True) if img_file
                 # calibrate to i/f
                 if 'Instrument' not in datacube.label['IsisCube']:
                     utc = f_base[15:26]
