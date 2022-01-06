@@ -375,7 +375,7 @@ class DS9(pyds9.DS9):
         v = np.array(v)
         if self.zerobased:
             v += 1
-        self.set('pan {} {}'.format(v[0], v[1]))
+        self.set('pan to {} {}'.format(v[0], v[1]))
 
     @property
     def zoom(self):
