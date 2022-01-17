@@ -3230,20 +3230,27 @@ class ModelGrid(object):
                 self.extra[k] = hdus[k].data.copy()
         hdus.close()
 
-    def add_extra(self, **kwargs):
+    def add_extra(self, replace=False, **kwargs):
         """Add extra data to the class
 
         Parameters
         ----------
+        replace : bool, optional
+            If `True`, then the data with the same key will replace
+            existing data.  Default is to ignore existing keys that are
+            already in `.extra`.
         kwargs : dict
             Data to be added in a dict.  The key values that don't have
             the same shape as the class object itself will be ignored,
             and a warning will be issued.
         """
+        existing_keys = self.extra.keys()
         for k, v in kwargs.items():
+            if (k in existing_keys) and (not replace):
+                continue
             if np.shape(v) != self.shape:
-                warnings.warn('{} is ignored due to differnet shape {}'
-                    ' from class object {}.'.format(k, np.shape(v),
+                warnings.warn("'{}' is ignored due to different shape {}"
+                    " from class object {}.".format(k, np.shape(v),
                         self.shape))
             self.extra[k] = np.asarray(v)
 
