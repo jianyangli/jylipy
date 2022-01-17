@@ -3230,6 +3230,24 @@ class ModelGrid(object):
                 self.extra[k] = hdus[k].data.copy()
         hdus.close()
 
+    def add_extra(self, **kwargs):
+        """Add extra data to the class
+
+        Parameters
+        ----------
+        kwargs : dict
+            Data to be added in a dict.  The key values that don't have
+            the same shape as the class object itself will be ignored,
+            and a warning will be issued.
+        """
+        for k, v in kwargs.items():
+            if np.shape(v) != self.shape:
+                warnings.warn('{} is ignored due to differnet shape {}'
+                    ' from class object {}.'.format(k, np.shape(v),
+                        self.shape))
+            self.extra[k] = np.asarray(v)
+
+
 class PhaseFunction(FittableModel):
 
     inputs = ('a',)
