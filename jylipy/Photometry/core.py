@@ -2940,17 +2940,20 @@ class ModelGrid(object):
 
     _version = '1.0.0'
 
-    def __init__(self, m0=None, nlon=None, nlat=None, datafile=None):
+    def __init__(self, m0=None, nlon=None, nlat=None, lon=None, lat=None,
+            datafile=None):
         """Initialization
 
-        m0 : Model class
+        m0 : Model class, optional
             The class name of model.
-        nlon : number
-            The number of longitude grid points.  Non-integer will be rounded
-            to integer.
-        nlat : number
-            The number of latitude grid points.  Non-integer will be rounded
-            to integer.
+        nlon : number, optional
+            Number of longitude grid points.
+        nlat : number, optional
+            Number of latitude grid points.
+        lon : 1d array, Quantity, optional
+            Longitudes of grid boundaries.  Overrides `nlon` if set.
+        lat : 1d array, Quantity, optional
+            Latitudes of grid boundaries.  Overrides `nlat` if set.
         datafile : str
             Name of data file to initialize class.
        """
@@ -2962,8 +2965,10 @@ class ModelGrid(object):
         self._model_class = None
         self._model_grid = None
         self._param_names = None
-        self._nlon = nlon
-        self._nlat = nlat
+        self._lon = u.Quantity(lon, u.deg) if lon is not None else None
+        self._lat = u.Quantity(lat, u.deg) if lat is not None else None
+        self._nlon = nlon if self._lon is None else len(self._lon) - 1
+        self._nlat = nlat if self._lat is None else len(self._lat) - 1
         self._mask = None
         self.model_class = m0
         self._init_model_params()
@@ -2971,6 +2976,12 @@ class ModelGrid(object):
     def _init_model_params(self):
         """Initialize model class using default parameters of self.model_class
         """
+        # If only `_nlon` or `_nlat`, the default is to cover the whole
+        # range of longitude or latitude, respectively.
+        if (self._lon is None) and (self._nlon is not None):
+            self._lon = np.linspace(0, 360, self._nlon + 1)
+        if (self._lat is None) and (self._nlat is not None):
+            self._lat = np.linspace(-90, 90, self._nlat + 1)
         if self.model_class is not None:
             m = self.model_class()
             self._param_names = m.param_names
@@ -3002,6 +3013,14 @@ class ModelGrid(object):
     def nlat(self):
         """Number of latitude grid points"""
         return self._nlat
+
+    @property
+    def lon(self):
+        return self._lon
+
+    @property
+    def lat(self):
+        return self._lat
 
     @property
     def model_class(self):
@@ -3135,6 +3154,12 @@ class ModelGrid(object):
         hdu.header['model'] = self.model_class.name
         hdu.header['parnames'] = str(self.param_names)
         out.append(hdu)
+        hdu = fits.ImageHDU(self.lon.value, name='lon')
+        hdu.header['bunit'] = str(self.lon.unit)
+        out.append(hdu)
+        hdu = fits.ImageHDU(self.lat.value, name='lat')
+        hdu.header['bunit'] = str(self.lat.unit)
+        out.append(hdu)
         hdu = fits.ImageHDU(self.mask.astype('i'), name='mask')
         out.append(hdu)
         indx = np.where(~self.mask.flatten())[0][0]
@@ -3196,8 +3221,11 @@ class ModelGrid(object):
         hdus = fits.open(filename)
         self._model_class = eval(hdus['primary'].header['model'])
         self._param_names = eval(hdus['primary'].header['parnames'])
+        self._lon = hdus['lon'].data * u.Unit(hdus['lon'].header['bunit'])
+        self._lat = hdus['lat'].data * u.Unit(hdus['lat'].header['bunit'])
+        self._nlat = len(self._lon) - 1
+        self._nlon = len(self._lat) - 1
         self._mask = hdus['mask'].data.astype(bool)
-        self._nlat, self._nlon = self.mask.shape
         if hdus[self._param_names[0]].data.ndim == 2:
             for k in self.param_names:
                 self.__dict__[k] = hdus[k].data.copy()
