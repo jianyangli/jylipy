@@ -3282,6 +3282,60 @@ class ModelGrid(object):
                         self.shape))
             self.extra[k] = np.asarray(v)
 
+    def plot(self, keys=None, figno=None, cmap=None):
+        """Plot the model parameter maps
+
+        Parameters
+        ----------
+        keys : iterable of str, optional
+            The parameter names to be plotted.  It can also include
+            any extra maps in the model grid saved in `.extra`.  By
+            default, all model parameters will be plotted.
+        figno : number, optional
+            If `None`, a new figure will be created.  If provided,
+            then plot will be drawn in the indicated figure.
+        cmap : str, `matplotlib.colors.Colormap`, optional
+            Specify color map
+        """
+        if keys is None:
+            keys = self.param_names
+        if figno is None:
+            figno = plt.gcf().number
+        n_keys = len(keys)
+        f, ax = plt.subplots(int(np.ceil(n_keys / 2)), 2, num=figno,
+                    sharex=True, sharey=True)
+        ax1d = ax.reshape(-1)
+        for i, k in enumerate(keys):
+            v = getattr(self, k, None)
+            if v is None:
+                if k.lower() in self.extra.keys():
+                    v = self.extra[k.lower()]
+                elif k.upper() in self.extra.keys():
+                    v = self.extra[k.upper()]
+                else:
+                    raise ValueError("'{}' not found.".format(k))
+            im = ax1d[i].imshow(v, cmap=cmap)
+            plt.colorbar(mappable=im, ax=ax1d[i])
+            ax1d[i].set_title(k)
+        if n_keys // 2 * 2 != n_keys:
+            ax1d[-1].axis('off')
+        lonmin = self.lon.value.min()
+        lonmax = self.lon.value.max()
+        latmin = self.lat.value.min()
+        latmax = self.lat.value.max()
+        ax[0, 0].set_xticklabels(
+            (ax[0, 0].get_xticks() / self.shape[1]) * (lonmax - lonmin) \
+                    + lonmin)
+        ax[0, 0].set_yticklabels(
+            (ax[0, 0].get_yticks() / self.shape[0]) * (latmax - latmin) \
+                    + latmin)
+        for a in ax[:, 0]:
+            a.set_ylabel('Latitude ({})'.format(self.lat.unit))
+        for a in ax[-1]:
+            a.set_xlabel('Longitude ({})'.format(self.lon.unit))
+
+        return ax
+
 
 class PhaseFunction(FittableModel):
 
