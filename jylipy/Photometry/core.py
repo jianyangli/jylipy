@@ -3284,7 +3284,7 @@ class ModelGrid(object):
                         self.shape))
             self.extra[k] = np.asarray(v)
 
-    def plot(self, keys=None, figno=None, cmap=None):
+    def plot(self, keys=None, lim=None, figno=None, cmap=None):
         """Plot the model parameter maps
 
         Parameters
@@ -3293,6 +3293,9 @@ class ModelGrid(object):
             The parameter names to be plotted.  It can also include
             any extra maps in the model grid saved in `.extra`.  By
             default, all model parameters will be plotted.
+        lim : array or equivalent of shape (N, 2), optional
+            Limits of plotted data [min, max].  N must be equal or larger
+            than the number of keys to be plotted.
         figno : number, optional
             If `None`, a new figure will be created.  If provided,
             then plot will be drawn in the indicated figure.
@@ -3316,7 +3319,12 @@ class ModelGrid(object):
                     v = self.extra[k.upper()]
                 else:
                     raise ValueError("'{}' not found.".format(k))
-            im = ax1d[i].imshow(v, cmap=cmap)
+            if lim is not None:
+                vmin, vmax = lim[i]
+            else:
+                vmin = None
+                vmax = None
+            im = ax1d[i].imshow(v, vmin=vmin, vmax=vmax, cmap=cmap)
             plt.colorbar(mappable=im, ax=ax1d[i])
             ax1d[i].set_title(k)
         if n_keys // 2 * 2 != n_keys:
