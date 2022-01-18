@@ -3155,24 +3155,24 @@ class ModelGrid(object):
         hdu.header['model'] = self.model_class.name
         hdu.header['parnames'] = str(self.param_names)
         out.append(hdu)
-        hdu = fits.ImageHDU(self.lon.value, name='lon')
+        hdu = fits.ImageHDU(self.lon.value.astype('f4'), name='lon')
         hdu.header['bunit'] = str(self.lon.unit)
         out.append(hdu)
-        hdu = fits.ImageHDU(self.lat.value, name='lat')
+        hdu = fits.ImageHDU(self.lat.value.astype('f4'), name='lat')
         hdu.header['bunit'] = str(self.lat.unit)
         out.append(hdu)
-        hdu = fits.ImageHDU(self.mask.astype('i'), name='mask')
+        hdu = fits.ImageHDU(self.mask.astype('uint8'), name='mask')
         out.append(hdu)
         indx = np.where(~self.mask.flatten())[0][0]
         n_models = len(self._model_grid.flatten()[indx])
         if n_models == 1:
             for k in self.param_names:
-                hdu = fits.ImageHDU(getattr(self, k), name=k)
+                hdu = fits.ImageHDU(getattr(self, k).astype('f4'), name=k)
                 out.append(hdu)
         else:
             for k in self.param_names:
                 v = getattr(self, k)
-                par = np.zeros((self.nlat, self.nlon, n_models))
+                par = np.zeros((self.nlat, self.nlon, n_models), dtype='f4')
                 for i in range(self.nlat):
                     for j in range(self.nlon):
                         if self.mask[i,j]:
@@ -3186,7 +3186,7 @@ class ModelGrid(object):
             out[0].header['extra'] = str(tuple(ex_keys))
             for k in ex_keys:
                 try:
-                    data = self.extra[k].astype(float)
+                    data = self.extra[k].astype('f4')
                 except ValueError:
                     len_arr = np.zeros(self.extra[k].shape, dtype=int)
                     it = np.nditer(self.extra[k], flags=['multi_index',
@@ -3199,7 +3199,7 @@ class ModelGrid(object):
                             pass
                         it.iternext()
                     sz = len_arr.max()
-                    data = np.zeros(self.extra[k].shape+(sz,))
+                    data = np.zeros(self.extra[k].shape+(sz,), dtype='f4')
                     it = np.nditer(self.extra[k], flags=['multi_index',
                         'refs_ok'])
                     while not it.finished:
