@@ -3167,7 +3167,8 @@ class ModelGrid(object):
         n_models = len(self._model_grid.flatten()[indx])
         if n_models == 1:
             for k in self.param_names:
-                hdu = fits.ImageHDU(getattr(self, k).astype('f4'), name=k)
+                hdu = fits.ImageHDU(np.asarray(getattr(self, k), dtype='f4'),
+                                    name=k)
                 out.append(hdu)
         else:
             for k in self.param_names:
