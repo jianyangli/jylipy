@@ -2666,6 +2666,7 @@ class PhotometricDataGrid(object):
         for a in ax[-1]:
             a.set_xlabel('Longitude (deg)')
 
+
 class PhotometricModelFitter(object):
     '''Base class for fitting photometric data to model
 
@@ -2830,7 +2831,7 @@ class PhotometricGridFitter(object):
         if not hasattr(self, 'fitter'):
             raise ValueError('Fitter not defined.')
         nlat, nlon = data.shape
-        self.model = ModelGrid(type(model), nlon, nlat)
+        self.model = ModelGrid(type(model), lon=data.lon, lat=data.lat)
         self.fit_info = np.zeros((nlat, nlon), dtype=object)
         self.fit = np.zeros((nlat, nlon), dtype=np.ndarray)
         self.RMS = np.zeros((nlat, nlon), dtype=object)
