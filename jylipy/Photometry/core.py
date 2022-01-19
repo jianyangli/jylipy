@@ -3319,6 +3319,7 @@ class ModelGrid(object):
                     v = self.extra[k.upper()]
                 else:
                     raise ValueError("'{}' not found.".format(k))
+            v[self.mask] = np.nan
             if lim is not None:
                 vmin, vmax = lim[i]
             else:
