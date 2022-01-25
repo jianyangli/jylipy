@@ -13,7 +13,9 @@ History
 '''
 
 import numpy as np
+import astropy.units as u
 from jylipy.core import *
+from .core import quadeq
 
 class Vector(np.ndarray):
     '''Vector object class
@@ -29,7 +31,8 @@ class Vector(np.ndarray):
     `axis` defines the three coordinate components of the array.  Default
     is the last axis.
 
-    If initialized with three arrays, then they must have the same shape.
+    If initialized with three arrays, then their shapes must satisfy
+    numpy broadcast rules.
 
     Keyword `type` defines the coordinate type of input components (if
     string, then not type sensitive):
@@ -79,15 +82,16 @@ class Vector(np.ndarray):
       Bug fix in .__str__() and .reshape()
     '''
 
-    _types = ({'code': ('cartesian', 'car'), 'colnames': 'x y z'.split()}, \
-              {'code': ('spherical', 'sph'), 'colnames': 'r theta phi'.split()}, \
-              {'code': ('cylindrical', 'cyl'), 'colnames': 'rho phi z'.split()}, \
+    _types = ({'code': ('cartesian', 'car'), 'colnames': 'x y z'.split()},
+              {'code': ('spherical', 'sph'), 'colnames': 'r theta phi'.split()},
+              {'code': ('cylindrical', 'cyl'), 'colnames': 'rho phi z'.split()},
               {'code': ('geographic', 'geo'), 'colnames': 'r lat lon'.split()})
 
     def __new__(cls, *var, **kwargs):
 
         if len(var) not in [1,3]:
-            raise TypeError('{0} takes either 1 argument or 3 arguments ({1} given)'.format(cls, len(var)))
+            raise TypeError('{} takes either 1 argument or 3 arguments ({}'
+                    ' given)'.format(cls, len(var)))
 
         axis = kwargs.pop('axis', -1)
         ctype = kwargs.pop('type', 0)
@@ -104,7 +108,8 @@ class Vector(np.ndarray):
             if base.ndim == 1:
                 base = np.asarray(base)
             elif base.shape[axis] != 3:
-                raise ValueError('the length of input array along axis {0} must be 3, length {1} received'.format(axis, base.shape[axis]))
+                raise ValueError('the length of input array along axis {0} must'
+                    ' be 3, length {1} received'.format(axis, base.shape[axis]))
             else:
                 base = np.rollaxis(base, axis)
             b1, b2, b3 = base
@@ -115,11 +120,17 @@ class Vector(np.ndarray):
             b1 = np.asarray(b1)
             b2 = np.asarray(b2)
             b3 = np.asarray(b3)
-            l1 = np.shape(b1)
-            l2 = np.shape(b2)
-            l3 = np.shape(b3)
-            if (l1 != l2) | (l1 != l3):
-                raise ValueError('three arrays must have the same shape')
+            shapes = [b1.shape, b2.shape, b3.shape]
+            nds = [b1.ndim, b2.ndim, b3.ndim]
+            dmax = np.argmax(nds)
+            unity = np.ones(shapes[np.argmax(nds)])
+            try:
+                b1 = b1 * unity
+                b2 = b2 * unity
+                b3 = b3 * unity
+            except ValueError:
+                raise ValueError('incompatible shapes of three coordinates {}, '
+                        '{}, {}'.format(shapes[0], shapes[1], shapes[2]))
 
         # convert to (x,y,z) if needed
         typecode = cls._choose_type(ctype)
@@ -139,7 +150,7 @@ class Vector(np.ndarray):
             b1, b2, b3 = cls.geo2xyz(b1, b2, b3)
 
         # generate object
-        data = np.asarray([b1,b2,b3])
+        data = np.asarray([b1, b2, b3])
         data = np.rollaxis(data, 0, data.ndim)
         obj = data.view(Vector)
         obj.coordinate = kwargs.pop('coordinate', None)
@@ -154,16 +165,22 @@ class Vector(np.ndarray):
         '''The multiplication operand applies scaling of vectors.  For
         dot product or cross product, use `.dot` or `.cross` instead.
         '''
-        arr1 = np.rollaxis(self.view(np.ndarray),-1)
+        arr1 = np.rollaxis(self.view(np.ndarray), -1)
         arr2 = np.asarray(other)
-        return Vector(arr1*arr2, axis=0)
+        return Vector(arr1 * arr2, axis=0)
 
-    def __rmul__(self, other):
-        '''To satisfy the commutative rule for scaling multiplication'''
-        return self.__mul__(other)
+    def __truediv__(self, other):
+        arr1 = np.rollaxis(self.view(np.ndarray), -1)
+        arr2 = np.asarray(other)
+        return Vector(arr1 / arr2, axis=0)
+
+    def __floordiv__(self, other):
+        arr1 = np.rollaxis(self.view(np.ndarray), -1)
+        arr2 = np.asarray(other)
+        return Vector(arr1 // arr2, axis=0)
 
     def __eq__(self, other):
-        comp = self.view(np.ndarray)==np.asarray(other)
+        comp = self.view(np.ndarray) == np.asarray(other)
         if isinstance(comp, np.ndarray):
             comp = comp.all(axis=-1)
         return comp
@@ -191,7 +208,7 @@ class Vector(np.ndarray):
     def __repr__(self):
         d = self.view(np.ndarray)
         d = np.rollaxis(d, -1)
-        return d.__repr__().replace('array','Vector')
+        return d.__repr__().replace('array', 'Vector')
 
     def __len__(self):
         if self.shape == ():
@@ -201,30 +218,34 @@ class Vector(np.ndarray):
 
     @property
     def ndim(self):
-        return self.view(np.ndarray).ndim-1
+        return self.view(np.ndarray).ndim - 1
 
     @property
     def shape(self):
         return self.view(np.ndarray).shape[:-1]
 
     @property
+    def size(self):
+        return self.view(np.ndarray).size // 3
+
+    @property
     def x(self):
         '''Cartesian x in 1-D array'''
-        return np.rollaxis(self.view(np.ndarray),-1,0)[0]
+        return np.moveaxis(self.view(np.ndarray), -1, 0)[0]
 
     @property
     def y(self):
         '''Cartesian y in 1-D array'''
-        return np.rollaxis(self.view(np.ndarray),-1,0)[1]
+        return np.moveaxis(self.view(np.ndarray), -1, 0)[1]
 
     @property
     def z(self):
         '''Cartesian z in 1-D array'''
-        return np.rollaxis(self.view(np.ndarray),-1,0)[2]
+        return np.moveaxis(self.view(np.ndarray), -1, 0)[2]
 
     @property
     def xyz(self):
-        return np.rollaxis(self.view(np.ndarray),-1,0)
+        return np.moveaxis(self.view(np.ndarray), -1, 0)
 
     @property
     def r(self):
@@ -241,7 +262,7 @@ class Vector(np.ndarray):
     def phi(self):
         '''Spherical phi (radiance) in 1-D array
         0 <= phi < 2 pi'''
-        return np.arctan2(self.y, self.x) % (2*np.pi)
+        return np.arctan2(self.y, self.x) % (2 * np.pi)
 
     @property
     def sph(self):
@@ -268,7 +289,7 @@ class Vector(np.ndarray):
     @property
     def rho(self):
         '''Cylindrical rho in 1-D array'''
-        return np.sqrt(self.x*self.x+self.y*self.y)
+        return np.sqrt(self.x * self.x + self.y * self.y)
 
     @property
     def cyl(self):
@@ -282,7 +303,8 @@ class Vector(np.ndarray):
             raise TypeError('`order` must be an integer type.')
         if order < 1:
             raise ValueError('`order` must be a positive integer.')
-        return (np.abs(self.x)**order+np.abs(self.y)**order+np.abs(self.z)**order)**(1./order)
+        return (np.abs(self.x)**order + np.abs(self.y)**order + \
+                np.abs(self.z)**order)**(1. / order)
 
     def dot(self, other):
         '''dot product with another vector
@@ -293,7 +315,7 @@ class Vector(np.ndarray):
         '''
         if not isinstance(other, Vector):
             other = Vector(other)
-        return (self.view(np.ndarray)*other.view(np.ndarray)).sum(axis=-1)
+        return (self.view(np.ndarray) * other.view(np.ndarray)).sum(axis=-1)
 
     def cross(self, other):
         '''cross product with other vector(s)
@@ -303,17 +325,17 @@ class Vector(np.ndarray):
         broadcast rules'''
         if not isinstance(other, Vector):
             other = Vector(other)
-        x = self.y*other.z-self.z*other.y
-        y = self.z*other.x-self.x*other.z
-        z = self.x*other.y-self.y*other.x
+        x = self.y * other.z - self.z * other.y
+        y = self.z * other.x - self.x * other.z
+        z = self.x * other.y - self.y * other.x
         return Vector(x, y, z)
 
     def reshape(self, *var):
-        if isinstance(var[0],tuple):
-            var = (3,)+var[0]
+        if isinstance(var[0], tuple):
+            var = (3,) + var[0]
         else:
-            var = (3,)+var
-        v = np.rollaxis(self.view(np.ndarray),-1)
+            var = (3,) + var
+        v = np.rollaxis(self.view(np.ndarray), -1)
         v = v.reshape(*var)
         return Vector(v, axis=0)
 
@@ -326,10 +348,10 @@ class Vector(np.ndarray):
         '''
         if not isinstance(v2, Vector):
             v2 = Vector(v2, axis=axis, type=type)
-        angle = np.arccos(self.dot(v2)/(self.norm()*v2.norm()))
+        angle = np.arccos(self.dot(v2) / (self.norm() * v2.norm()))
         if directional:
-            pi2 = np.pi*2
-            zcomp = self.x*v2.y - self.y*v2.x
+            pi2 = np.pi * 2
+            zcomp = self.x * v2.y - self.y * v2.x
             wz = zcomp < 0
             if angle[wz].size > 0:
                 if hasattr(angle, '__iter__'):
@@ -338,20 +360,20 @@ class Vector(np.ndarray):
                     angle = pi2 - angle
             wz = zcomp == 0
             if angle[wz].size > 0:
-                xcomp = self.y*v2.z - self.z*v2.y
+                xcomp = self.y * v2.z - self.z * v2.y
                 wx = xcomp < 0
-                if angle[wz&wx].size > 0:
+                if angle[wz & wx].size > 0:
                     if hasattr(angle, '__iter__'):
-                        angle[wz&wx] = pi2 - angle[wx&wz]
+                        angle[wz & wx] = pi2 - angle[wx & wz]
                     else:
                         angle = pi2 - angle
                 wx = xcomp == 0
                 if angle[wx].size > 0:
-                    ycomp = self.z*v2.x - self.x*v2.z
+                    ycomp = self.z * v2.x - self.x * v2.z
                     wy = ycomp < 0
-                    if angle[wz&wx&wy].size > 0:
+                    if angle[wz & wx & wy].size > 0:
                         if hasattr(angle, '__iter__'):
-                            angle[wz&wx&wy] = pi2 - angle[wz&wx&wy]
+                            angle[wz & wx & wy] = pi2 - angle[wz & wx & wy]
                         else:
                             angle = pi2 - angle
         if deg:
@@ -364,7 +386,7 @@ class Vector(np.ndarray):
         `phi` must be a scalar.  Broadcast is not supported'''
         if deg:
             phi = np.deg2rad(phi)
-        return VectRot(rotm(phi, axis=axis).T)*self
+        return VectRot(rotm(phi, axis=axis).T) * self
 
     def eular(self, phi, theta, psi, deg=True):
         '''Rotate vector(s) by three Eular angles
@@ -375,7 +397,7 @@ class Vector(np.ndarray):
             phi = np.deg2rad(phi)
             theta = np.deg2rad(theta)
             psi = np.deg2rad(psi)
-        return VectRot(eularm(phi, theta, psi).T)*self
+        return VectRot(eularm(phi, theta, psi).T) * self
 
     def astable(self, type=0):
         typecode = self._choose_type(type)
@@ -388,11 +410,55 @@ class Vector(np.ndarray):
             c1, c2, c3 = self.cyl
         elif typecode == 3:
             c1, c2, c3 = self.geo
-        return Table((c1.flatten(),c2.flatten(),c3.flatten()), names=names)
+        return Table((c1.flatten(), c2.flatten(), c3.flatten()), names=names)
+
+    def paraproj(self, los, pa=0, invert=False):
+        """Parallel projection to/from a new frame defined by line-of-sight.
+
+        When position angle (`pa`) is 0, the new frame has its z-axis
+        along the line-of-sight (`los`) direction and points to the
+        opposite direction (towards observer), y-axis is in plane defined
+        by the line-of-sight and the original z-axis, and x-axis completes
+        the right-hand system.  In this case, the original z-axis is
+        always projected to the up-direction (y-direction) in the new
+        x-y plane.
+
+        When position angle is none-zero, the new system rotates along
+        its z-axis clockwise by `pa`, such that the original z-axis is
+        projected to the new x-y plane to `pa` from up-direction towards
+        left (counter-clockwise).
+
+        Parameters
+        ----------
+        los : Vector instance, iterable that can initialize a Vector
+            Line-of-sight vector
+        pa : number, astropy.units.Quantity, optional
+            Position angle of the projected z-axis in the new x-y plane.
+            If a number, the default unit is degree.
+        invert : bool, optional
+            If `True`, then perform inverted projection from the frame
+            defined by line-of-sight to the original frame.
+
+        Return
+        ------
+        Vector : Projected or unprojected vector
+        """
+        los = Vector(los)
+        pa = u.Quantity(pa, unit='deg')
+        # Rotate along z-axis by sub-observer longitude
+        m1 = rotm(-los.lon - np.pi / 2, axis=2)
+        # Rotate along x-axis by sub-observer azimuth
+        m2 = rotm(-los.theta, axis=0)
+        # Rotate along z-axis by position angle
+        m3 = rotm(pa, axis=2)
+        if invert:
+            return VectRot(m1) * VectRot(m2) * VectRot(m3) * self
+        else:
+            return VectRot(m3.T) * VectRot(m2.T) * VectRot(m1.T) * self
 
     @staticmethod
     def _choose_type(ctype):
-        if ctype in [0,1,2,3]:
+        if ctype in [0, 1, 2, 3]:
             return ctype
         if isinstance(ctype, str):
             ctype = ctype.lower()
@@ -404,24 +470,24 @@ class Vector(np.ndarray):
 
     @staticmethod
     def sph2xyz(r, phi, theta):
-        z = r*np.cos(theta)
-        rho = r*np.sin(theta)
-        x = rho*np.cos(phi)
-        y = rho*np.sin(phi)
+        z = r * np.cos(theta)
+        rho = r * np.sin(theta)
+        x = rho * np.cos(phi)
+        y = rho * np.sin(phi)
         return x, y, z
 
     @staticmethod
     def cyl2xyz(rho, phi, z):
-        x = rho*np.cos(phi)
-        y = rho*np.sin(phi)
+        x = rho * np.cos(phi)
+        y = rho * np.sin(phi)
         return x, y, z
 
     @staticmethod
     def geo2xyz(r, lon, lat):
-        z = r*np.sin(lat)
-        rho = r*np.cos(lat)
-        x = rho*np.cos(lon)
-        y = rho*np.sin(lon)
+        z = r * np.sin(lat)
+        rho = r * np.cos(lat)
+        x = rho * np.cos(lon)
+        y = rho * np.sin(lon)
         return x, y, z
 
 
@@ -813,8 +879,8 @@ def rotm(phi, axis=2):
 
  Parameters
  ----------
- phi : floating point
-   Angle of rotation [deg]
+ phi : floating point, astropy.units.Quantity
+   Angle of rotation [rad]
  axis: integer 0, 1, or 2
    Axis of rotation.   0 for x-axis, 1 for y-axis, 2 for z-axis
 
@@ -831,6 +897,7 @@ def rotm(phi, axis=2):
      revision with astropy.units
     '''
 
+    phi = u.Quantity(phi, unit='rad').value
     cosphi = np.cos(phi)
     sinphi = np.sin(phi)
     m = np.matrix([[cosphi,sinphi,0],[-sinphi,cosphi,0],[0,0,1]])
@@ -1403,72 +1470,6 @@ def vecpa(los, vec, row=False):
     return np.asarray([xyz2sph(m.dot(v))[1:] for v in vec.T]).T
 
 
-def vect2proj(vect, viewpt, pa=0.):
-    '''Convert vector coordinates to its coordinates in a parallel
-    projected plane defined by `viewpt`.
-
-    The projection plane is defined as +x along horizontal direction
-    towards right, +y along verticle direction towards up.  The +z
-    axis completes the right-hand system towards viewer.
-
-    Parameter
-    ---------
-    vect : Vector
-      The vector to be projected
-    viewpt : Vector
-      The vector of the view point
-    pa : number, optional
-      Position angle of the z-axis in projection plane, measured in
-      radiance from up to left (ccw).
-
-    Return
-    ------
-    A Vector instance containing the projected coordinates of the input
-    Vector.
-
-    v1.0.0 : JYL @PSI, 2/21/2016
-    '''
-    # Rotate along z-axis by sub-observer longitude
-    m1 = VectRot(rotm(-viewpt.lon-np.pi/2, axis=2).T)
-    # Rotate along x-axis by sub-observer azimuth
-    m2 = VectRot(rotm(-viewpt.theta, axis=0).T)
-    # Rotate along z-axis by position angle
-    m3 = VectRot(rotm(pa, axis=2).T)
-    return m3*m2*m1*vect
-
-
-def proj2body(vect, viewpt, pa=0.):
-    '''Convert the vector coordinates in a parallel projected plane
-    defined by `viewpt` to their body-fixed coordiantes.
-
-    Parameters
-    ----------
-    vect : Vector
-      The vector with coordinates in a parallel projected plane.  Note
-      that the z-coordinates in this vector is ignored.
-    viewpt : Vector
-      The vector of the view point
-    pa : number, optional
-      Position angle of the z-axis in projection plane, measured in
-      degrees from up to left (ccw).
-
-    Return
-    ------
-    A Vector instance contaning the coordinates of the input vector
-    in the body-fixed frame.  NOTE: Only the x- and y-coordinates of
-    the returned vector is valid.  The valid z-coordinates can only
-    be calculated with the actual shape of the body.
-
-    This program is essentially the inverse of `vect2proj`.
-
-    v1.0.0 : JYL @PSI, 2/21/2016
-    '''
-    m1 = VectRot(rotm(-viewpt.lon-np.pi/2, axis=2))
-    m2 = VectRot(rotm(-viewpt.theta, axis=0))
-    m3 = VectRot(rotm(pa, axis=2))
-    return m1*m2*m3*vect
-
-
 def sphere_vert(r=1., nlon=360, nlat=181):
     '''Generate a Vector instance containing the verticies of a sphere
 
@@ -1518,206 +1519,206 @@ def ellipsoid_vert(a=1., b=1., c=1., nlon=360, nlat=181):
 #       return Vector(2*self.verticies.x/self.a**2, 2*self.verticies.y/self.b**2, 2*self.verticies.z/self.c**2)
 
 
-def xy2lonlat(r, viewpt, pxlscl, pa=0., imsz=(1024, 1024), center=None):
-    '''Convert (x,y) coordinate of a CCD to body-fixed (lon,lat) for a
-    sphere or an ellipsoid
+class EllipsoidProjection():
+    """Project ellipsoid surface (latitude, longitude) to image (x, y)"""
 
-    r : number of sequence of numbers
-      If a scalar or a 1-element sequence, it's the radius of a sphere.
-      If a 2- or 3-element sequence, then it defines the (a, c) or
-        (a, b, c) of an ellipsoid.
-    viewpt : Vector
-      The view point vector in body-fixed frame of the object.  Only
-      parallel projection is considered, so the distance of viewer
-      `viewpt.norm()` doesn't matter.
-    pxlscl : scalar number
-      The size of pixel in the same unit as `body`.
-    pa : scalar
-      Position angle of image plane, measured from up to left (ccw).
-    imsz : 2-element sequence
-      Image size (y, x)
-    center : 2-element sequence
-      The CCD coordinates of body center
-
-    Return
-    ------
-    lon, lat : two arrays
-      Each array elements contains the longitude and latitude of
-      corresponding pixel in the body-fixed frame.   The size of
-      arrays is defined by `imsz`.
-
-    Algorithm
-    ---------
-    For a sphere, calculate the z-coordinates for each (x,y) position,
-    then convert the (x,y,z) to the body-fixed frame based on `viewpt`
-    for their (lon, lat).
-
-    For an ellipsoid, convert the image plane (x,y,0) to body-fixed
-    frame coordinate (x',y',z'), based on `viewpt`.  Then find the
-    intersection of the elllipsoid and the line parallel to the image
-    plane normal and passing each (x',y',z') by solving a quadratic
-    equation.  The (lon, lat) are calculated based on the coordinates
-    of intersection.
-
-    v1.0.0 : JYL @PSI, 2/23/2016
-    '''
-    imsz = np.asarray(imsz)
-    if center is None:
-        center = (imsz-1.)/2
-    else:
-        center = np.asarray(center)
-
-    # CCD coordinates
-    yarr, xarr = makenxy(-center[0]*pxlscl, (imsz[0]-1-center[0])*pxlscl, imsz[0], -center[1]*pxlscl, (imsz[1]-1-center[1])*pxlscl, imsz[1])
-
-    # set up shape
-    sphere = False
-    if hasattr(r, '__iter__'):
-        if len(r) == 1:
-            sphere = True
-        elif len(r) == 2:
-            a, c = r
-            b = a
-        elif len(r) == 3:
-            a, b, c = r
+    def __init__(self, r, viewpt, pxlscl, pa=0., imsz=(512, 512),
+                center=None, angle_unit=u.deg, equivalencies=None):
+        """
+        Parameters
+        ----------
+        r : float, iterables of 2 or 3 float
+            The radius or semi-axes of a sphere or bi- or tri-axial ellispoid.
+            If ellpsoid, then the last number in the iterable refers to the
+            polar axis.
+        viewpt : Vector
+            The view point vector in body-fixed frame of the object.  Only
+            parallel projection is considered, so the distance of viewer
+            `viewpt.norm()` doesn't matter.
+        pxlscl : float
+            The size of pixel in the same unit as `body`.
+        pa : float, optional
+          Position angle of the polar axis in image, measured from up to left
+          (counter-clockwise).
+        imsz : 2-element iterable of int, optional
+            Image size (y, x) in pixels
+        center : 2-element iterable of float, optional
+            The pixel coordinates of body center
+        angle_unit : astropy.units.Unit, str, optional
+            Default unit of angles.
+        """
+        if hasattr(r, '__iter__'):
+            if len(r) == 1:
+                self.r = r
+            elif len(r) == 2:
+                self.r = np.array([r[0], r[0], r[1]])
+            else:
+                self.r = np.array([r[0], r[1], r[2]])
         else:
-            raise Warning('`r` has {0} elements, the first three elements define the triaxial ellpsoid shape, others are discarded')
-            a, b, c = r[:3]
-    else:
-        sphere = True
+            self.r = r
+        self.view_point = Vector(viewpt)
+        self.pixel_scale = pxlscl
+        self.image_size = np.array(imsz)
+        if center is None:
+            self.body_center = (self.image_size - 1) / 2
+        else:
+            self.body_center = center
+        angle_unit = u.Unit(angle_unit)
+        if not angle_unit.is_equivalent(u.deg, equivalencies=equivalencies):
+            raise ValueError('unit must be equivalent to degrees.')
+        self.angle_unit = angle_unit
+        self.equivalencies = equivalencies
+        self.position_angle = u.Quantity(pa, self.angle_unit)
 
-    # calculate lon/lat
-    if sphere:  # for a sphere
-        z = np.sqrt(r*r-xarr*xarr-yarr*yarr)
-        w = np.isfinite(z)
-        v = proj2body(Vector(xarr[w], yarr[w], z[w]), viewpt, pa=pa)
-        lon = np.zeros_like(xarr)*np.nan
-        lat = np.zeros_like(yarr)*np.nan
-        lon[w] = v.lon
-        lat[w] = v.lat
+    @property
+    def issphere(self):
+        return not hasattr(self.r, '__iter__')
+
+    def xy2lonlat(self, x, y, angle_unit=None):
+        """Convert (x,y) coordinate of a CCD to body-fixed (lon,lat) for a
+        sphere or an ellipsoid
+
+        Parameters
+        ----------
+        x, y : number, sequence of numbers
+            The x and y pixel coordinates to be converted.  In the same
+            unit as `self.r`
+
+        Return
+        ------
+        lon, lat : two arrays
+          Each array elements contains the longitude and latitude of
+          corresponding pixel in the body-fixed frame.   The size of
+          arrays is defined by `imsz`.
+        angle_unit : astropy.units.Unit, str, optional
+            Default unit of `lon`, `lat` if not specified.  If `None`, then
+            `self.angle_unit` is used.
+
+        Algorithm
+        ---------
+        For a sphere, calculate the z-coordinates for each (x, y) position,
+        then convert the (x, y, z) to the body-fixed frame based on `viewpt`
+        for their (lon, lat).
+
+        For an ellipsoid, convert the image plane (x, y, 0) to body-fixed
+        frame coordinate (x', y', z'), based on `viewpt`.  Then find the
+        intersection of the elllipsoid and the line parallel to the image
+        plane normal and passing each (x', y', z') by solving a quadratic
+        equation.  The (lon, lat) are calculated based on the coordinates
+        of intersection.
+        """
+        if angle_unit is None:
+            angle_unit = self.angle_unit
+        yarr = (np.asanyarray(y) - self.body_center[0]) * self.pixel_scale
+        xarr = (np.asanyarray(x) - self.body_center[1]) * self.pixel_scale
+
+        # calculate lon/lat
+        if self.issphere:  # for a sphere
+            z = np.sqrt(self.r * self.r - xarr * xarr - yarr * yarr)
+            w = np.isfinite(z)
+            v = Vector(xarr[w], yarr[w], z[w]).paraproj(self.view_point,
+                    pa=self.position_angle, invert=True)
+            lon = np.full_like(xarr, np.nan)
+            lat = np.full_like(yarr, np.nan)
+            lon[w] = v.lon
+            lat[w] = v.lat
+        else:  # for an ellipsoid
+            vb = Vector(xarr, yarr, 0).paraproj(
+                    self.view_point, pa=self.position_angle, invert=True)
+            n = self.view_point
+            p1 = np.full_like(vb.x, ((n.xyz / self.r)**2).sum())
+            p2 = 2 * (n.xyz * np.moveaxis(vb.xyz, 0, -1) / self.r**2).sum(
+                    axis=-1)
+            p3 = ((np.moveaxis(vb.xyz, 0, -1) / self.r)**2).sum(axis=-1) - 1
+            t = quadeq(p1, p2, p3)
+            # output arrays
+            lon = np.full_like(xarr, np.nan)
+            lat = np.full_like(xarr, np.nan)
+            # when two roots have different signs, take the positive root
+            w = (t[..., 0] * t[..., 1] < 0)
+            x = n.x * t[..., 1][w] + vb.x[w]
+            y = n.y * t[..., 1][w] + vb.y[w]
+            z = n.z * t[..., 1][w] + vb.z[w]
+            vect = Vector(x, y, z)
+            lon[w] = vect.lon
+            lat[w] = vect.lat
+            # when two roots have the same sign, need extra test
+            w = (t[..., 0] * t[..., 1] >= 0)
+            for i in range(2):
+                x = n.x * t[..., i][w] + vb.x[w]
+                y = n.y * t[..., i][w] + vb.y[w]
+                z = n.z * t[..., i][w] + vb.z[w]
+                vect = Vector(x, y, z)
+                x_test, y_test = self.lonlat2xy(vect.lon, vect.lat)
+                valid = np.isclose(xarr[w], x_test) & \
+                        np.isclose(yarr[w], y_test)
+                lon[w][valid] = vect.lon[valid]
+                lat[w][valid] = vect.lat[valid]
+        lat = u.Quantity(lat, u.rad).to(angle_unit, self.equivalencies).value
+        lon = u.Quantity(lon % (2 * np.pi), u.rad).to(angle_unit,
+                self.equivalencies).value
         return lon, lat
-    else:  # for an ellipsoid
-        vb = proj2body(Vector(xarr,yarr,np.zeros_like(xarr)), viewpt, pa=pa)
-        n = viewpt
-        a2 = 1./a**2
-        b2 = 1./b**2
-        c2 = 1./c**2
-        p1 = (np.ones_like(vb.x)*(n.x**2*a2+n.y**2*b2+n.z**2*c2)).flatten()
-        p2 = 2*(n.x*vb.x*a2+n.y*vb.y*b2+n.z*vb.z*c2).flatten()
-        p3 = (vb.x*vb.x*a2+vb.y*vb.y*b2+vb.z*vb.z*c2-1).flatten()
-        t = (np.ones_like(p1)*np.nan).flatten()
-        for i in range(len(t)):
-            s = quadeq(p1[i], p2[i], p3[i])
-            if s is not None:
-                if len(s) == 2:
-                    t[i] = s.max()
-                else:
-                    t[i] = s[0]
-        w = np.isfinite(t)
-        x = n.x*t[w]+vb.x.flatten()[w]
-        y = n.y*t[w]+vb.y.flatten()[w]
-        z = n.z*t[w]+vb.z.flatten()[w]
-        vect = Vector(x, y, z)
-        lon = np.ones_like(t)*np.nan
-        lon[w] = vect.lon
-        lat = np.ones_like(t)*np.nan
-        lat[w] = vect.lat
-        return lon.reshape(imsz), lat.reshape(imsz)
 
+    def lonlat2xy(self, lon, lat, angle_unit=None):
+        """Convert the body-fixed (lon, lat) coordinates to the corresponding
+        (x,y) pixel position in a CCD
 
-def lonlat2xy(lon, lat, r, viewpt, pa=0., center=None, pxlscl=None, deg=True):
-    '''Convert the body-fixed (lon, lat) coordinates to the corresponding
-    (x,y) pixel position in a CCD
+        lon, lat : array-like, astropy.units.Quantity
+          The longitude and latitude to be converted.  They must have the
+          same shape.
+        angle_unit : astropy.units.Unit, str, optional
+            Default unit of `lon`, `lat` if not specified.  If `None`, then
+            `self.angle_unit` is used.
 
-    lon, lat : array-like
-      The longitude and latitude to be converted.  They must have the
-      same shape.
-    r : number of sequence of numbers
-      If a scalar or a 1-element sequence, it's the radius of a sphere.
-      If a 2- or 3-element sequence, then it defines the (a, c) or
-        (a, b, c) of an ellipsoid.
-    viewpt : Vector
-      The view point vector in body-fixed frame of the object.  Only
-      parallel projection is considered, so the distance of viewer
-      `viewpt.norm()` doesn't matter.
-    pa : scalar, optional
-      Position angle of the z-axis in image plane, measured from up to
-      left (ccw).
-    center : 2-element sequence, optional
-      The CCD coordinates (y0,x0) of body center.  If `None`, then the
-      body center will be at (0,0) image coordinates
-    pxlscl : scalar number, optional
-      The size of pixel in the same unit as `body`.  If `None`, then
-      the pixel size will be assumed to be 1 with the same unit as
-      `r`.
-    deg : bool, optional
-      The unit of input `lon` and `lat`.
+        Return
+        ------
+        x, y : two arrays
+          Two arrays of the same shape as `lon` and `lat` containing the
+          corresponding (x, y) image coordinates.
 
-    Return
-    ------
-    x, y : two arrays
-      Two arrays of the same shape as `lon` and `lat` containing the
-      corresponding (x, y) image coordinates.
+        Algorithm
+        ---------
+        Calculate the (x, y, z) for input (lon, lat) using the shape model
+        defined by `r`, discard those with surface normal pi/2 away from
+        `viewpt`, convert to image plane, return (x, y)
+        """
+        if angle_unit is None:
+            angle_unit = self.angle_unit
+        lon = np.asarray(lon).astype(float)
+        lat = np.asarray(lat).astype(float)
+        if lon.shape != lat.shape:
+            raise ValueError('`lon` and `lat` must have the same shape, {0} {1}'
+                    ' received'.format(lon.shape, lat.shape))
 
-    Algorithm
-    ---------
-    Calculate the (x,y,z) for input (lon,lat) using the shape model
-    defined by `r`, discard those with surface normal pi/2 away from
-    `viewpt`, convert to image plane, return (x,y)
-
-    v1.0.0 : JYL @PSI, 2/24/2016
-    '''
-    lon = np.asarray(lon).astype(float)
-    lat = np.asarray(lat).astype(float)
-    if lon.shape != lat.shape:
-        raise ValueError('`lon` and `lat` must have the same shape, {0} {1} received'.format(lon.shape, lat.shape))
-
-    # set up shape
-    if hasattr(r, '__iter__'):
-        if len(r) == 1:
-            a = r[0]
-            b = a
-            c = a
-        elif len(r) == 2:
-            a, c = r
-            b = a
-        elif len(r) == 3:
-            a, b, c = r
+        if self.issphere:
+            a, b, c = self.r, self.r, self.r
         else:
-            raise Warning('`r` has {0} elements, the first three elements define the triaxial ellpsoid shape, others are discarded')
-            a, b, c = r[:3]
-    else:
-        a = r
-        b = a
-        c = a
+            a, b, c = self.r
+        # calculate projection
+        lon = u.Quantity(lon, angle_unit).to('rad').value
+        lat = u.Quantity(lat, angle_unit).to('rad').value
+        pa = self.position_angle.to('rad').value
+        angle = Vector(1, lon, lat, type='geo').vsep(self.view_point)
+        w = angle < (np.pi / 2)# only keep where normal is within pi/2 of viewpt
+        coslon = np.cos(lon[w])
+        sinlon = np.sin(lon[w])
+        coslat = np.cos(lat[w])
+        xcomp = coslon * coslat
+        ycomp = sinlon * coslat
+        zcomp = np.sin(lat[w])
+        r_recip = np.sqrt((xcomp / a)**2 + (ycomp / b)**2 + (zcomp / c)**2)
+        v = Vector(xcomp, ycomp, zcomp) / r_recip
+        v = v.paraproj(self.view_point, pa=self.position_angle)
+        x = np.full_like(lon, np.nan)
+        y = np.full_like(lon, np.nan)
+        x[w] = v.x
+        y[w] = v.y
 
-    # calculate projection
-    if deg:
-        lon = np.deg2rad(lon)
-        lat = np.deg2rad(lat)
-        pa = np.deg2rad(pa)
-    coslon = np.cos(lon)
-    sinlon = np.sin(lon)
-    coslat = np.cos(lat)
-    sinlat = np.sin(lat)
-    v = Vector(a*coslon*coslat, b*sinlon*coslat, c*sinlat)
-    angle = Vector(v.x/a**2, v.y/b**2, v.z/c**2).vsep(viewpt)
-    w = angle<(np.pi/2)  # only keep where normal is within pi/2 of viewpt
-    v = vect2proj(v[w], viewpt, pa=pa)
-    x = np.ones_like(lon)*np.nan
-    y = np.ones_like(lon)*np.nan
-    x[w] = v.x
-    y[w] = v.y
+        # add pixel scale and pixel center
+        x = x / self.pixel_scale + self.body_center[1]
+        y = y / self.pixel_scale + self.body_center[0]
 
-    # add pixel scale and pixel center
-    if pxlscl is not None:
-        x /= pxlscl
-        y /= pxlscl
-    if center is not None:
-        x += center[1]
-        y += center[0]
-
-    return x, y
+        return x, y
 
 
 def xy2iea(*args, **kwargs):
