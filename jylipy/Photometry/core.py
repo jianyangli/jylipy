@@ -3,7 +3,7 @@ Units of all angles are in degrees!!!
 
 '''
 
-import os, sys, warnings, multiprocessing, numbers
+import os, sys, warnings, multiprocessing, numbers, importlib
 import numpy as np, matplotlib.pyplot as plt, astropy.units as u
 from collections import OrderedDict
 from astropy.io import fits
@@ -3221,7 +3221,12 @@ class ModelGrid(object):
             The name of input FITS file
         """
         hdus = fits.open(filename)
-        self._model_class = eval(hdus['primary'].header['model'])
+        if hdus['primary'].header['model'] not in locals():
+            self._model_class = getattr(importlib.import_module(
+                    'jylipy.Photometry.Hapke'),
+                hdus['primary'].header['model'])
+        else:
+            self._model_class = eval(hdus['primary'].header['model'])
         self._param_names = eval(hdus['primary'].header['parnames'])
         self._lon = hdus['lon'].data * u.Unit(hdus['lon'].header['bunit'])
         self._lat = hdus['lat'].data * u.Unit(hdus['lat'].header['bunit'])
