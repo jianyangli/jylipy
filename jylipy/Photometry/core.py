@@ -3221,7 +3221,8 @@ class ModelGrid(object):
             The name of input FITS file
         """
         hdus = fits.open(filename)
-        if hdus['primary'].header['model'] not in locals():
+        if hdus['primary'].header['model'] not in {**locals(),
+                **globals()}:
             self._model_class = getattr(importlib.import_module(
                     'jylipy.Photometry.Hapke'),
                 hdus['primary'].header['model'])
