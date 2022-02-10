@@ -3230,8 +3230,8 @@ class ModelGrid(object):
         self._param_names = eval(hdus['primary'].header['parnames'])
         self._lon = hdus['lon'].data * u.Unit(hdus['lon'].header['bunit'])
         self._lat = hdus['lat'].data * u.Unit(hdus['lat'].header['bunit'])
-        self._nlat = len(self._lon) - 1
-        self._nlon = len(self._lat) - 1
+        self._nlat = len(self._lat) - 1
+        self._nlon = len(self._lon) - 1
         self._mask = hdus['mask'].data.astype(bool)
         if hdus[self._param_names[0]].data.ndim == 2:
             for k in self.param_names:
