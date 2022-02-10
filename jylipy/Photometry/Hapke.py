@@ -2208,7 +2208,7 @@ def modelfit(inc, emi, pha, iof, ioferr=None, parlist=['w', 'g', 'shoe', 'theta'
             figs = plot
         for i in range(3-len(figs),0,-1):
             f = plt.figure(dpi=120)
-            if i is 1:
+            if i == 1:
                 f.set_size_inches(6,6,forward=True)
             else:
                 f.set_size_inches(6,8.5,forward=True)

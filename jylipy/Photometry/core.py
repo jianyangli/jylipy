@@ -3,7 +3,7 @@ Units of all angles are in degrees!!!
 
 '''
 
-import os, sys, warnings, multiprocessing, numbers
+import os, sys, warnings, multiprocessing, numbers, importlib
 import numpy as np, matplotlib.pyplot as plt, astropy.units as u
 from collections import OrderedDict
 from astropy.io import fits
@@ -2666,6 +2666,7 @@ class PhotometricDataGrid(object):
         for a in ax[-1]:
             a.set_xlabel('Longitude (deg)')
 
+
 class PhotometricModelFitter(object):
     '''Base class for fitting photometric data to model
 
@@ -2830,7 +2831,7 @@ class PhotometricGridFitter(object):
         if not hasattr(self, 'fitter'):
             raise ValueError('Fitter not defined.')
         nlat, nlon = data.shape
-        self.model = ModelGrid(type(model), nlon, nlat)
+        self.model = ModelGrid(type(model), lon=data.lon, lat=data.lat)
         self.fit_info = np.zeros((nlat, nlon), dtype=object)
         self.fit = np.zeros((nlat, nlon), dtype=np.ndarray)
         self.RMS = np.zeros((nlat, nlon), dtype=object)
@@ -2940,17 +2941,20 @@ class ModelGrid(object):
 
     _version = '1.0.0'
 
-    def __init__(self, m0=None, nlon=None, nlat=None, datafile=None):
+    def __init__(self, m0=None, nlon=None, nlat=None, lon=None, lat=None,
+            datafile=None):
         """Initialization
 
-        m0 : Model class
+        m0 : Model class, optional
             The class name of model.
-        nlon : number
-            The number of longitude grid points.  Non-integer will be rounded
-            to integer.
-        nlat : number
-            The number of latitude grid points.  Non-integer will be rounded
-            to integer.
+        nlon : number, optional
+            Number of longitude grid points.
+        nlat : number, optional
+            Number of latitude grid points.
+        lon : 1d array, Quantity, optional
+            Longitudes of grid boundaries.  Overrides `nlon` if set.
+        lat : 1d array, Quantity, optional
+            Latitudes of grid boundaries.  Overrides `nlat` if set.
         datafile : str
             Name of data file to initialize class.
        """
@@ -2962,8 +2966,10 @@ class ModelGrid(object):
         self._model_class = None
         self._model_grid = None
         self._param_names = None
-        self._nlon = nlon
-        self._nlat = nlat
+        self._lon = u.Quantity(lon, u.deg) if lon is not None else None
+        self._lat = u.Quantity(lat, u.deg) if lat is not None else None
+        self._nlon = nlon if self._lon is None else len(self._lon) - 1
+        self._nlat = nlat if self._lat is None else len(self._lat) - 1
         self._mask = None
         self.model_class = m0
         self._init_model_params()
@@ -2971,6 +2977,12 @@ class ModelGrid(object):
     def _init_model_params(self):
         """Initialize model class using default parameters of self.model_class
         """
+        # If only `_nlon` or `_nlat`, the default is to cover the whole
+        # range of longitude or latitude, respectively.
+        if (self._lon is None) and (self._nlon is not None):
+            self._lon = np.linspace(0, 360, self._nlon + 1)
+        if (self._lat is None) and (self._nlat is not None):
+            self._lat = np.linspace(-90, 90, self._nlat + 1)
         if self.model_class is not None:
             m = self.model_class()
             self._param_names = m.param_names
@@ -3002,6 +3014,14 @@ class ModelGrid(object):
     def nlat(self):
         """Number of latitude grid points"""
         return self._nlat
+
+    @property
+    def lon(self):
+        return self._lon
+
+    @property
+    def lat(self):
+        return self._lat
 
     @property
     def model_class(self):
@@ -3135,18 +3155,25 @@ class ModelGrid(object):
         hdu.header['model'] = self.model_class.name
         hdu.header['parnames'] = str(self.param_names)
         out.append(hdu)
-        hdu = fits.ImageHDU(self.mask.astype('i'), name='mask')
+        hdu = fits.ImageHDU(self.lon.value.astype('f4'), name='lon')
+        hdu.header['bunit'] = str(self.lon.unit)
+        out.append(hdu)
+        hdu = fits.ImageHDU(self.lat.value.astype('f4'), name='lat')
+        hdu.header['bunit'] = str(self.lat.unit)
+        out.append(hdu)
+        hdu = fits.ImageHDU(self.mask.astype('uint8'), name='mask')
         out.append(hdu)
         indx = np.where(~self.mask.flatten())[0][0]
         n_models = len(self._model_grid.flatten()[indx])
         if n_models == 1:
             for k in self.param_names:
-                hdu = fits.ImageHDU(getattr(self, k), name=k)
+                hdu = fits.ImageHDU(np.asarray(getattr(self, k), dtype='f4'),
+                                    name=k)
                 out.append(hdu)
         else:
             for k in self.param_names:
                 v = getattr(self, k)
-                par = np.zeros((self.nlat, self.nlon, n_models))
+                par = np.zeros((self.nlat, self.nlon, n_models), dtype='f4')
                 for i in range(self.nlat):
                     for j in range(self.nlon):
                         if self.mask[i,j]:
@@ -3160,7 +3187,7 @@ class ModelGrid(object):
             out[0].header['extra'] = str(tuple(ex_keys))
             for k in ex_keys:
                 try:
-                    data = self.extra[k].astype(float)
+                    data = self.extra[k].astype('f4')
                 except ValueError:
                     len_arr = np.zeros(self.extra[k].shape, dtype=int)
                     it = np.nditer(self.extra[k], flags=['multi_index',
@@ -3173,7 +3200,7 @@ class ModelGrid(object):
                             pass
                         it.iternext()
                     sz = len_arr.max()
-                    data = np.zeros(self.extra[k].shape+(sz,))
+                    data = np.zeros(self.extra[k].shape+(sz,), dtype='f4')
                     it = np.nditer(self.extra[k], flags=['multi_index',
                         'refs_ok'])
                     while not it.finished:
@@ -3194,10 +3221,19 @@ class ModelGrid(object):
             The name of input FITS file
         """
         hdus = fits.open(filename)
-        self._model_class = eval(hdus['primary'].header['model'])
+        if hdus['primary'].header['model'] not in {**locals(),
+                **globals()}:
+            self._model_class = getattr(importlib.import_module(
+                    'jylipy.Photometry.Hapke'),
+                hdus['primary'].header['model'])
+        else:
+            self._model_class = eval(hdus['primary'].header['model'])
         self._param_names = eval(hdus['primary'].header['parnames'])
+        self._lon = hdus['lon'].data * u.Unit(hdus['lon'].header['bunit'])
+        self._lat = hdus['lat'].data * u.Unit(hdus['lat'].header['bunit'])
+        self._nlat = len(self._lat) - 1
+        self._nlon = len(self._lon) - 1
         self._mask = hdus['mask'].data.astype(bool)
-        self._nlat, self._nlon = self.mask.shape
         if hdus[self._param_names[0]].data.ndim == 2:
             for k in self.param_names:
                 self.__dict__[k] = hdus[k].data.copy()
@@ -3229,6 +3265,94 @@ class ModelGrid(object):
             for k in keys:
                 self.extra[k] = hdus[k].data.copy()
         hdus.close()
+
+    def add_extra(self, replace=False, **kwargs):
+        """Add extra data to the class
+
+        Parameters
+        ----------
+        replace : bool, optional
+            If `True`, then the data with the same key will replace
+            existing data.  Default is to ignore existing keys that are
+            already in `.extra`.
+        kwargs : dict
+            Data to be added in a dict.  The key values that don't have
+            the same shape as the class object itself will be ignored,
+            and a warning will be issued.
+        """
+        existing_keys = self.extra.keys()
+        for k, v in kwargs.items():
+            if (k in existing_keys) and (not replace):
+                continue
+            if np.shape(v) != self.shape:
+                warnings.warn("'{}' is ignored due to different shape {}"
+                    " from class object {}.".format(k, np.shape(v),
+                        self.shape))
+            self.extra[k] = np.asarray(v)
+
+    def plot(self, keys=None, lim=None, figno=None, cmap=None):
+        """Plot the model parameter maps
+
+        Parameters
+        ----------
+        keys : iterable of str, optional
+            The parameter names to be plotted.  It can also include
+            any extra maps in the model grid saved in `.extra`.  By
+            default, all model parameters will be plotted.
+        lim : array or equivalent of shape (N, 2), optional
+            Limits of plotted data [min, max].  N must be equal or larger
+            than the number of keys to be plotted.
+        figno : number, optional
+            If `None`, a new figure will be created.  If provided,
+            then plot will be drawn in the indicated figure.
+        cmap : str, `matplotlib.colors.Colormap`, optional
+            Specify color map
+        """
+        if keys is None:
+            keys = self.param_names
+        if figno is None:
+            figno = plt.gcf().number
+        n_keys = len(keys)
+        f, ax = plt.subplots(int(np.ceil(n_keys / 2)), 2, num=figno,
+                    sharex=True, sharey=True)
+        ax1d = ax.reshape(-1)
+        for i, k in enumerate(keys):
+            v = getattr(self, k, None)
+            if v is None:
+                if k.lower() in self.extra.keys():
+                    v = self.extra[k.lower()]
+                elif k.upper() in self.extra.keys():
+                    v = self.extra[k.upper()]
+                else:
+                    raise ValueError("'{}' not found.".format(k))
+            v[self.mask] = np.nan
+            if lim is not None:
+                vmin, vmax = lim[i]
+            else:
+                vmin = None
+                vmax = None
+            im = ax1d[i].imshow(v, vmin=vmin, vmax=vmax, cmap=cmap)
+            plt.colorbar(mappable=im, ax=ax1d[i])
+            ax1d[i].set_title(k)
+        if n_keys // 2 * 2 != n_keys:
+            ax1d[-1].axis('off')
+        lonmin = self.lon.value.min()
+        lonmax = self.lon.value.max()
+        latmin = self.lat.value.min()
+        latmax = self.lat.value.max()
+        ax[0, 0].set_xticklabels(
+            (ax[0, 0].get_xticks() / self.shape[1]) * (lonmax - lonmin) \
+                    + lonmin)
+        ax[0, 0].set_yticklabels(
+            (ax[0, 0].get_yticks() / self.shape[0]) * (latmax - latmin) \
+                    + latmin)
+        for a in ax[:, 0]:
+            a.set_ylabel('Latitude ({})'.format(self.lat.unit))
+        for a in ax[-1]:
+            a.set_xlabel('Longitude ({})'.format(self.lon.unit))
+
+        return ax
+
 
 class PhaseFunction(FittableModel):
 

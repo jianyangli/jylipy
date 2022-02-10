@@ -375,7 +375,7 @@ class DS9(pyds9.DS9):
         v = np.array(v)
         if self.zerobased:
             v += 1
-        self.set('pan {} {}'.format(v[0], v[1]))
+        self.set('pan to {} {}'.format(v[0], v[1]))
 
     @property
     def zoom(self):
@@ -582,16 +582,16 @@ class DS9(pyds9.DS9):
                 self.xpa()
                 shift = False
             elif k == 'Right':
-                self.set_np2arr(shift(self.get_arr2np(),(0,1)))
+                self.set('pan -1, 0')
                 self.data[self.get('frame')]['shift'][1] += 1
             elif k == 'Left':
-                self.set_np2arr(shift(self.get_arr2np(),(0,-1)))
+                self.set('pan 1 0')
                 self.data[self.get('frame')]['shift'][1] -= 1
             elif k == 'Up':
-                self.set_np2arr(shift(self.get_arr2np(),(1,0)))
+                self.set('pan 0 -1')
                 self.data[self.get('frame')]['shift'][0] += 1
             elif k == 'Down':
-                self.set_np2arr(shift(self.get_arr2np(),(-1,0)))
+                self.set('pan 0 1')
                 self.data[self.get('frame')]['shift'][0] -= 1
 
     def imdisp(self, im, ext=None, par=None, newframe=True, verbose=True):
