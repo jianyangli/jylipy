@@ -8,16 +8,18 @@ from astropy.io import ascii
 from pysis import CubeFile
 import spiceypy as spice
 
+from ..core import rebin
 from ..geometry import load_generic_kernels
 from ..Photometry import PhotometricData
 from ..projects.dawn import FCImage
+
 
 class RegionalData:
     """Regional data object
     """
 
     def __init__(self, cubedir='.', maskdir='.', data_catalog=None,
-            force_catalog_data=False,
+            force_catalog_data=False, spatial_bin=None,
             roi_tags=[66, 185, 0, 255], mask_sfx='mask',
             outfile='{}_roi{}.fits'):
         """
@@ -41,6 +43,10 @@ class RegionalData:
             then the embedded data in the ISIS cube will be used.  If
             set `True`, then the corresponding image will be dropped
             in this case.
+        spatial_bin : num, optional
+            Factor for spatial binning before extracting data.  This
+            factor should be power of 2.  If not, then it will be changed
+            to the closest power of 2, and a warning is issued.
         roi_tags : list of int, optional
             Values of ROI tags
         mask_sfx : str, optional
@@ -55,6 +61,13 @@ class RegionalData:
         self.catalog = None if self.data_catalog is None \
                 else ascii.read(self.data_catalog)
         self.force_catalog_data = force_catalog_data
+        # check and process `spatial_bin` to make sure it's the power of 2
+        spatial_bin_ = 2**int(np.log2(spatial_bin))
+        if spatial_bin_ != spatial_bin:
+            spatial_bin = spatial_bin_
+            warn('spatial_bin of {} is not a power of 2, changed to {}'.
+                format(spatial_bin, spatial_bin_))
+        self.spatial_bin = spatial_bin
         self.mask_sfx = mask_sfx
         self.roi_tags = roi_tags
         self.outfile = outfile
@@ -105,7 +118,7 @@ class RegionalData:
 
     @property
     def cubefiles(self):
-        return np.array(glob(self.cubedir+'*.cub'))
+        return np.array(glob(os.path.join(self.cubedir, '*.cub')))
 
     def phodata_extract(self, overwrite=False):
         """Extract photometric data"""
@@ -121,6 +134,10 @@ class RegionalData:
             print('    Data catalog file: {}'.format(self.data_catalog))
             print('        Catalog data use forced: {}'.format(
                     self.force_catalog_data))
+        if self.spatial_bin is not None:
+            print('    Spatial binning: {}'.format(self.spatial_bin))
+        else:
+            print('    No spatial binning.')
         print('    Output file name template: {}'.format(self.outfile))
         print()
 
@@ -181,13 +198,36 @@ class RegionalData:
                         u.km.to('au')
                 im = im * rh * rh * np.pi / self.iofcal[flt]
                 # prepare mask
-                maskfile = self.maskdir + self.mask_sfx + f_base
+                maskfile = os.path.join(self.maskdir, self.mask_sfx + f_base)
                 if not os.path.isfile(maskfile):
                     continue
                 mask = CubeFile(maskfile)
                 mask = np.squeeze(mask.apply_numpy_specials())
                 mask[~np.isfinite(mask)] = -255
                 mask = mask.astype('int16')
+                # clean up noise values.  usually those are single pixels
+                nn = 0
+                while (len(np.unique(mask)) > len(self.roi_tags) + 1) \
+                        and nn < 3:
+                    for v in np.unique(mask):
+                        if v not in list(self.roi_tags) + [-255]:
+                            ww = np.where(mask == v)
+                            ww1_ = ww[1] + 1
+                            ww1_bad = np.where(ww1_ >= mask.shape[1])
+                            if len(ww1_bad[0]) > 0:
+                                ww1_[ww1_bad] = ww[1][ww1_bad] - 1
+                            mask[ww] = mask[ww[0], ww1_]
+                    nn += 1
+                if nn >= 3:
+                    warn('mask {} contains many noise values'.format(f_base))
+                # spatially bin data and mask
+                if (self.spatial_bin is not None) and (self.spatial_bin != 1):
+                    im = rebin(im, (self.spatial_bin, self.spatial_bin),
+                                mean=True)
+                    data = rebin(data, (1, self.spatial_bin, self.spatial_bin),
+                                mean=True)
+                    mask = rebin_mask(mask,
+                            (self.spatial_bin, self.spatial_bin))
                 # extract data
                 for i, t in enumerate(self.roi_tags):
                     ww = (mask == t)  # pixels within roi mask
@@ -255,3 +295,37 @@ class RegionalData:
                 phob = pho.bin(bins=bins)
                 phob.write(self._output_filename(flt, ii, binned=True),
                         overwrite=overwrite)
+
+
+def rebin_mask(mask, bin):
+    """Rebin mask with specified binning factors
+
+    Mask will be binned based on the specified factors.  The pixel value
+    in the output mask is the value of the most pixels in each bin,
+    rather than the arithmatic calculation of those pixel values.  This
+    will avoid introducing new mask values in the binning.
+
+    Parameters
+    ----------
+    mask : 2D array
+        Input mask to be rebinned.
+    bin : 2-element sequence of positive int
+        Bin size in two dimentions
+
+    Return
+    ------
+    2D array, binned mask
+    """
+
+    sz = np.shape(mask)
+    out_sz = np.ceil(np.array(sz) / bin).astype(int)
+    out = np.zeros(out_sz)
+    for i in range(out.shape[0]):
+        for j in range(out.shape[1]):
+            y0 = i * bin[0]
+            x0 = j * bin[1]
+            sub = mask[y0:y0 + bin[0], x0:x0 + bin[1]]
+            v, c = np.unique(sub, return_counts=True)
+            out[i, j] = v[c.argmax()]
+
+    return out
