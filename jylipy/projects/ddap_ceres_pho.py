@@ -61,12 +61,13 @@ class RegionalData:
         self.catalog = None if self.data_catalog is None \
                 else ascii.read(self.data_catalog)
         self.force_catalog_data = force_catalog_data
-        # check and process `spatial_bin` to make sure it's the power of 2
-        spatial_bin_ = 2**int(np.log2(spatial_bin))
-        if spatial_bin_ != spatial_bin:
-            spatial_bin = spatial_bin_
-            warn('spatial_bin of {} is not a power of 2, changed to {}'.
-                format(spatial_bin, spatial_bin_))
+        if spatial_bin is not None:
+            # check and process `spatial_bin` to make sure it's the power of 2
+            spatial_bin_ = 2**int(np.log2(spatial_bin))
+            if spatial_bin_ != spatial_bin:
+                spatial_bin = spatial_bin_
+                warn('spatial_bin of {} is not a power of 2, changed to {}'.
+                    format(spatial_bin, spatial_bin_))
         self.spatial_bin = spatial_bin
         self.mask_sfx = mask_sfx
         self.roi_tags = roi_tags
