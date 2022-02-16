@@ -949,7 +949,10 @@ class PhotometricData(object):
 
     @property
     def refkey(self):
-        return list(self._data.keys())
+        if self._data is not None:
+            return list(self._data.keys())
+        else:
+            return []
 
     @property
     def BDR(self):
@@ -1154,7 +1157,7 @@ class PhotometricData(object):
         if self.latlim is not None:
             out.meta['maxlat'] = self.latlim[1]
             out.meta['minlat'] = self.latlim[0]
-        if self.binparms is not None:
+        if getattr(self, 'binparms', None) is not None:
             out.meta['binparms'] = self.binparms
         return out
 
@@ -1256,8 +1259,10 @@ class PhotometricData(object):
                 binner = Binner(boundary=boundary)
                 pho_binned = binner(pho)
                 type = 'binned'
-            else:
+            elif (self.type == 'binned') and (pho.type == 'binned'):
                 type = 'binned'
+            else:
+                type = 'simple'
         if type == 'binned':
             # bin pho first, then merge
             if 'pho_binned' in locals():
@@ -1272,6 +1277,14 @@ class PhotometricData(object):
     def _simple_merge(self, pho):
         '''Merge two photometric datasets in a simple case, i.e., both
         `measured` type.'''
+
+        if len(self) == 0:
+            self._data = pho._data.copy()
+            self.sca = pho.sca.copy()
+            self.geo = pho.geo.copy()
+            self._type = pho._type
+            self.band = getattr(pho, 'band', None)
+            return
 
         self.sca.merge(pho.sca)
         if self.geo is not None and pho.geo is not None:
