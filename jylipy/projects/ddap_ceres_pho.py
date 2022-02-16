@@ -176,7 +176,7 @@ class RegionalData:
                 if self.catalog is not None:
                     img_file = self._search_catalog(f)
                     if img_file:
-                        im = FCImage(img_file, quickload=True)
+                        im = FCImage(img_file, quickload=True).data[::-1]
                     else:
                         if self.force_catalog_data:
                             warn('Image {} not found, skipped'.format(f_base))
