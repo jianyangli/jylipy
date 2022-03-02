@@ -3242,11 +3242,22 @@ class ModelGrid(object):
         else:
             self._model_class = eval(hdus['primary'].header['model'])
         self._param_names = eval(hdus['primary'].header['parnames'])
-        self._lon = hdus['lon'].data * u.Unit(hdus['lon'].header['bunit'])
-        self._lat = hdus['lat'].data * u.Unit(hdus['lat'].header['bunit'])
-        self._nlat = len(self._lat) - 1
-        self._nlon = len(self._lon) - 1
         self._mask = hdus['mask'].data.astype(bool)
+        self._nlat, self._nlon = self.mask.shape
+        if 'lon' in hdus:
+            self._lon = hdus['lon'].data * u.Unit(hdus['lon'].header['bunit'])
+            if self._nlon != len(self._lon) - 1:
+                raise ValueError('inconsistent data from input file {}'.
+                        format(filename))
+        else:
+            self._lon = np.mgrid[0:360:(self._nlon+1)*1j] * u.deg
+        if 'lat' in hdus:
+            self._lat = hdus['lat'].data * u.Unit(hdus['lat'].header['bunit'])
+            if self._nlat != len(self._lat) - 1:
+                raise ValueError('inconsistent data from input file {}'.
+                    format(filename))
+        else:
+            self._lat = np.mgrid[-90:90:(self._nlat+1)*1j] * u.deg
         if hdus[self._param_names[0]].data.ndim == 2:
             for k in self.param_names:
                 self.__dict__[k] = hdus[k].data.copy()
