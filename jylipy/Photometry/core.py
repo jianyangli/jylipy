@@ -3269,7 +3269,7 @@ class ModelGrid(object):
             self._lat = np.mgrid[-90:90:(self._nlat+1)*1j] * u.deg
         if 'band' in hdus:
             self._band = hdus['band'].data * \
-                    u.Unit(hdus['band'].header['bunit'])
+                    u.Unit(hdus['band'].header.pop('bunit', ''))
         if hdus[self._param_names[0]].data.ndim == 2:
             for k in self.param_names:
                 self.__dict__[k] = hdus[k].data.copy()
