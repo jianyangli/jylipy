@@ -72,8 +72,9 @@ class PDSData():
                     pt = int(pt)
                 with open(join(dirname(datafile), imgfile), 'rb') as f:
                     s = f.read()
-            self.__dict__[k] = self._read_image_rec(k, s[pt:])
-            self.records.append(k)
+            if 'IMAGE' in k:
+                self.__dict__[k] = self._read_image_rec(k, s[pt:])
+                self.records.append(k)
 
     def __array__(self):
         return np.asarray(getattr(self, self.records[0], None))
