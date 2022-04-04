@@ -3065,6 +3065,10 @@ class ModelGrid(object):
         else:
             return self._model_grid.shape
 
+    @property
+    def band(self):
+        return getattr(self, '_band', None)
+
     def __len__(self):
         return len(self._model_grid)
 
@@ -3174,6 +3178,11 @@ class ModelGrid(object):
         hdu = fits.ImageHDU(self.lat.value.astype('f4'), name='lat')
         hdu.header['bunit'] = str(self.lat.unit)
         out.append(hdu)
+        band = self.band
+        if band is not None:
+            hdu = fits.ImageHDU(np.asarray(band).astype('f4'), name='band')
+            hdu.header['bunit'] = str(getattr(band, 'unit', ''))
+            out.append(hdu)
         hdu = fits.ImageHDU(self.mask.astype('uint8'), name='mask')
         out.append(hdu)
         indx = np.where(~self.mask.flatten())[0][0]
@@ -3242,11 +3251,25 @@ class ModelGrid(object):
         else:
             self._model_class = eval(hdus['primary'].header['model'])
         self._param_names = eval(hdus['primary'].header['parnames'])
-        self._lon = hdus['lon'].data * u.Unit(hdus['lon'].header['bunit'])
-        self._lat = hdus['lat'].data * u.Unit(hdus['lat'].header['bunit'])
-        self._nlat = len(self._lat) - 1
-        self._nlon = len(self._lon) - 1
         self._mask = hdus['mask'].data.astype(bool)
+        self._nlat, self._nlon = self.mask.shape
+        if 'lon' in hdus:
+            self._lon = hdus['lon'].data * u.Unit(hdus['lon'].header['bunit'])
+            if self._nlon != len(self._lon) - 1:
+                raise ValueError('inconsistent data from input file {}'.
+                        format(filename))
+        else:
+            self._lon = np.mgrid[0:360:(self._nlon+1)*1j] * u.deg
+        if 'lat' in hdus:
+            self._lat = hdus['lat'].data * u.Unit(hdus['lat'].header['bunit'])
+            if self._nlat != len(self._lat) - 1:
+                raise ValueError('inconsistent data from input file {}'.
+                    format(filename))
+        else:
+            self._lat = np.mgrid[-90:90:(self._nlat+1)*1j] * u.deg
+        if 'band' in hdus:
+            self._band = hdus['band'].data * \
+                    u.Unit(hdus['band'].header.pop('bunit', ''))
         if hdus[self._param_names[0]].data.ndim == 2:
             for k in self.param_names:
                 self.__dict__[k] = hdus[k].data.copy()
