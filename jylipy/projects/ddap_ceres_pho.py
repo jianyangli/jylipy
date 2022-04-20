@@ -4,11 +4,11 @@ from glob import glob
 from warnings import warn
 import os, numpy as np, matplotlib.pyplot as plt, astropy.units as u
 from astropy.time import Time
-from astropy.io import ascii
+from astropy.io import ascii, fits
 from pysis import CubeFile
 import spiceypy as spice
 
-from ..core import rebin
+from ..core import rebin, linfit
 from ..geometry import load_generic_kernels
 from ..Photometry import PhotometricData
 from ..projects.dawn import FCImage
@@ -330,3 +330,132 @@ def rebin_mask(mask, bin):
             out[i, j] = v[c.argmax()]
 
     return out
+
+
+class SpectralCube():
+    """Class to deal with spectral cubes"""
+
+    def __init__(self, data, wavelength=None, spec_axis=-1, sorting=True):
+        """
+        Parameters
+        ----------
+        data : 3D numpy array or Quantity or equivalent
+            Spectral cube data.
+        spec_axis : number, optional
+            Specify the spectral axis.
+        wavelength : array or Quantity
+            Wavelengths of the spectral dimension.  Must have the same
+            length as the data in the spectral dimension.
+        sorting : bool, optional
+            Sort the spectral slice with respect to wavelength
+        """
+        self.data = np.asanyarray(data)
+        if self.data.ndim != 3:
+            raise ValueError('3d array required, {}d array received.'.
+                format(self.data.ndim))
+        if spec_axis != -1:
+            self.data = np.moveaxis(self.data, spec_axis, -1)
+        self.wavelength = wavelength
+        if self.wavelength is not None:
+            if len(self.wavelength) != self.data.shape[-1]:
+                raise ValueError('wavelength array has an inconsistent length '
+                    'as the data.  Length {} expected, length {} received'.
+                    format(self.data.shape[-1], len(self.wavelength)))
+            self.wavelength = np.asanyarray(self.wavelength)
+            if sorting:
+                st = self.wavelength.argsort()
+                self.data = self.data[..., st]
+                self.wavelength = self.wavelength[st]
+
+    @property
+    def shape(self):
+        return self.data.shape
+
+    def _put_data_into_hdu(self, hdutype, data, name=None):
+        """
+        hdutype : `fits.PrimaryHDU` or `fits.ImageHDU`
+            The type of HDU to be generated
+        data : array or Quantity
+            Data to be put into the HDU
+        name : str, optional
+            Name of HDU
+        """
+        if isinstance(data, u.Quantity):
+            dd = data.value
+            ut = data.unit
+        else:
+            dd = data
+            ut = None
+        hdu = hdutype(dd)
+        if not issubclass(hdutype, fits.PrimaryHDU) and name is not None:
+            hdu.header['extname'] = name
+        if ut is not None:
+            hdu.header['bunit'] = str(ut)
+        return hdu
+
+    def write(self, outfile, overwrite=False):
+        """Write data to FITS file"""
+        hdu = self._put_data_into_hdu(fits.PrimaryHDU, self.data)
+        hdus = fits.HDUList([hdu])
+        if self.wavelength is not None:
+            hdu = self._put_data_into_hdu(fits.ImageHDU, self.wavelength,
+                    name='waveleng')
+            hdus.append(hdu)
+        hdus.writeto(outfile, overwrite=overwrite)
+
+    @classmethod
+    def from_fits(cls, infile):
+        """Construct class from a FITS file
+        """
+        with fits.open(infile) as f_:
+            data = f_[0].data
+            if 'bunit' in f_[0].header:
+                data = u.Quantity(data, f_[0].header['bunit'])
+            if 'waveleng' in f_:
+                wavelength = f_['waveleng'].data
+                if 'bunit' in f_['waveleng'].header:
+                    wavelength = u.Quantity(wavelength, f_['waveleng'].
+                        header['bunit'])
+            else:
+                wavelength = None
+        return cls(data, wavelength=wavelength)
+
+    def spectral_slope_map(self, idx_rng=None, wv_rng=None):
+        """Generate spectral slope map
+
+        Parameters
+        ----------
+        idx_rng : two element int array, optional
+            The index range to calculate spectral slope.  Inclusive on both
+            ends.  Overrides `wv_rng` if both provided.
+        wv_rng : two element number array, optional
+            The wavelength range to calculate spectral slope.  Inclusive on both
+            ends.
+        """
+        if idx_rng is None:
+            if wv_rng is None:
+                sub = range(self.shape[-1])
+            else:
+                if self.wavelength is None:
+                    raise ValueError('Wavelength is not defined.')
+                sub = np.where((self.wavelength >= wv_rng[0]) & \
+                            (self.wavelength <= wv_rng[1]))
+        else:
+            idx_rng = np.clip(idx_rng, 0, self.data.shape[-1])
+            sub = range(idx_rng[0], idx_rng[1])
+        wv = self.wavelength[sub]
+        data = self.data[..., sub]
+        if isinstance(wv, u.Quantity) or isinstance(data, u.Quantity):
+            if not isinstance(wv, u.Quantity):
+                wv = u.Quantity(wv)
+            if not isinstance(data, u.Quantity):
+                data = u.Quantity(data)
+        sz = self.shape
+        slp_map = np.empty(sz[:2])
+        for i in range(sz[0]):
+            for j in range(sz[1]):
+                par, _, _ = linfit(np.asarray(wv), np.asarray(data[i, j]))
+                slp_map[i, j] = par[1]
+        if hasattr(data, 'unit'):
+            slp_map = u.Quantity(slp_map, data.unit / wv.unit)
+        return slp_map
