@@ -19,6 +19,7 @@ import ccdproc
 from .saoimage import getds9
 from .apext import *
 import contextlib
+import astropy.units as u
 
 class jylipyDeprecationWarning(DeprecationWarning):
     pass
@@ -2707,7 +2708,7 @@ def linfit(x, y=None, yerr=None, xerr=None, intercept=True, return_all=False):
     '''
 
     if y is None:
-        x = np.asarray(x)
+        x = np.asanyarray(x)
         if x.shape[0] == 2:
             x1, y1 = x
         if x.shape[1] == 2:
@@ -2716,20 +2717,20 @@ def linfit(x, y=None, yerr=None, xerr=None, intercept=True, return_all=False):
             msg = "If only `x` is given as input, it has to be of shape (2, N) or (N, 2), provided shape was %s" % str(x.shape)
             raise ValueError(msg)
     else:
-        x1, y1 = np.asarray(x).flatten(), np.asarray(y).flatten()
+        x1, y1 = np.asanyarray(x).flatten(), np.asanyarray(y).flatten()
 
     n = len(x1)
     if yerr is None:
         yerr1 = np.ones(n)
     else:
-        yerr1 = np.asarray(yerr).astype(float).flatten()
+        yerr1 = np.asanyarray(yerr).astype(float).flatten()
     if len(yerr1) == 1:
         yerr1 = np.repeat(yerr1,n)
 
     if xerr is None:
         xerr1 = np.ones(n)
     else:
-        xerr1 = np.asarray(xerr).astype(float).flatten()
+        xerr1 = np.asanyarray(xerr).astype(float).flatten()
     if len(xerr1) == 1:
         xerr1 = np.repeat(xerr1,n)
 
@@ -2748,16 +2749,17 @@ def linfit(x, y=None, yerr=None, xerr=None, intercept=True, return_all=False):
 
     siga, sigb = np.sqrt(sxx/Delta), np.sqrt(ss/Delta)
     if yerr is None:
-        siga, sigb = (np.array([siga, sigb])*np.sqrt(redchisq)).flat
+        siga = (siga * np.sqrt(redchisq)).flat
+        sigb = (sigb * np.sqrt(redchisq)).flat
         q = None
     else:
         from scipy.special import gammainc
         q = gammainc((n-2)/2., chisq/2)
 
     if not return_all:
-        return np.array([a, b]), np.array([siga, sigb]), redchisq
+        return [a, b], [siga, sigb], redchisq
     else:
-        return np.array([a, b]), np.array([siga, sigb]), redchisq, q, cc
+        return [a, b], [siga, sigb], redchisq, q, cc
 
 
 class PolyFit():
