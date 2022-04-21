@@ -166,16 +166,23 @@ class RegionalData:
             inc = [[] for i in range(self.n_roi)]
             lat = [[] for i in range(self.n_roi)]
             lon = [[] for i in range(self.n_roi)]
-            pxl = [[] for i in range(self.n_roi)]
             # loop through files
             for j, f in enumerate(ff):
                 print('    {}: {}'.format(j+1, f), end='\r')
                 f_base = os.path.basename(f)
                 # load backplane data
                 datacube = CubeFile(f)
+                bandnames = np.array(datacube.label['IsisCube']['BandBin']
+                        ['Name'])
                 data = datacube.apply_numpy_specials()
-                im = data[0]
-                # load image data if needed
+                # load data from cube
+                databand = np.array(['F' in x for x in bandnames])
+                if np.any(databand):
+                    im = data[databand]
+                else:
+                    if self.catalog is None:
+                        raise IOError('data not found')
+                # load data from separate image file if needed
                 if self.catalog is not None:
                     img_file = self._search_catalog(f)
                     if img_file:
@@ -209,7 +216,8 @@ class RegionalData:
                 mask = np.squeeze(mask.apply_numpy_specials())
                 mask[~np.isfinite(mask)] = -255
                 mask = mask.astype('int16')
-                # clean up noise values.  usually those are single pixels
+                # clean up noise values in mask.  usually those are
+                # single pixels
                 nn = 0
                 while (len(np.unique(mask)) > len(self.roi_tags) + 1) \
                         and nn < 3:
@@ -232,20 +240,30 @@ class RegionalData:
                                 mean=True)
                     mask = rebin_mask(mask,
                             (self.spatial_bin, self.spatial_bin))
+                # extract all backplanes
+                pha_band = np.squeeze(data[bandnames == 'Phase Angle'])
+                emi_band = np.squeeze(data[bandnames == 'Local Emission Angle'])
+                inc_band = np.squeeze(data[bandnames == 'Local Incidence '
+                        'Angle'])
+                lat_band = np.squeeze(data[bandnames == 'Latitude'])
+                lon_band = np.squeeze(data[bandnames == 'Longitude'])
+                # filter out nan
+                valid_mask = np.ones_like(pha_band, dtype=bool)
+                for d in [pha_band, emi_band, inc_band, lat_band, lon_band]:
+                    valid_mask &= np.isfinite(d)
+                # apply sun illumination mask
+                illmask = np.squeeze(data[bandnames == 'Sun Illumination Mask'])
+                valid_mask &= illmask == 1
                 # extract data
                 for i, t in enumerate(self.roi_tags):
-                    ww = (mask == t)  # pixels within roi mask
-                    ww = ww & (data[7] == 1) # illuminated by the Sun
-                    for d in data[1:]:  # filter out nan values
-                        ww = ww & np.isfinite(d)
+                    ww = (mask == t) & valid_mask # valid pixels within roi
                     if ww.any():
                         iof[i].append(im[ww])
-                        pha[i].append(data[1][ww])
-                        emi[i].append(data[2][ww])
-                        inc[i].append(data[3][ww])
-                        lat[i].append(data[4][ww])
-                        lon[i].append(data[5][ww])
-                        pxl[i].append(data[6][ww])
+                        pha[i].append(pha_band[ww])
+                        emi[i].append(emi_band[ww])
+                        inc[i].append(inc_band[ww])
+                        lat[i].append(lat_band[ww])
+                        lon[i].append(lon_band[ww])
             print(' '*80, end='\r')
             # save data
             print('    saving data', end='\r')
