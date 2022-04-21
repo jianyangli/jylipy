@@ -20,7 +20,7 @@ class RegionalData:
 
     def __init__(self, cubedir='.', maskdir='.', data_catalog=None,
             force_catalog_data=False, spatial_bin=None,
-            roi_tags=[66, 185, 0, 255], mask_sfx='mask',
+            roi_tags=None, mask_sfx='mask',
             outfile='{}_roi{}.fits'):
         """
         Parameters
@@ -141,6 +141,9 @@ class RegionalData:
             print('    No spatial binning.')
         print('    Output file name template: {}'.format(self.outfile))
         print()
+
+        if self.roi_tags is None:
+            raise ValueError('ROI tags undefined.')
 
         files = self.cubefiles
         get_filter = lambda f: os.path.splitext(os.path.basename(f))[0][-3:-1]
