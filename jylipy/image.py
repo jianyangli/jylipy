@@ -559,7 +559,7 @@ class Centroid(ImageSet):
             ds9.imdisp(self._1d['image'][i])
             xc = self._1d['_xc'][i]
             yc = self._1d['_yc'][i]
-            ds9.sets(['pan to {} {}'.format(xc, yc),
+            ds9.set(['pan to {} {}'.format(xc, yc),
                       'zoom to 2'])
             r = CircularRegion(xc, yc, 3)
             c = CrossPointRegion(xc, yc)
