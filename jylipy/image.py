@@ -7,8 +7,9 @@ __all__ = ['Centroid', 'ImageSet', 'Background', 'CollectFITSHeaderInfo',
 
 import warnings
 import numpy as np
+import os
 from astropy.io import fits, ascii
-from astropy import nddata, table
+from astropy import nddata, table, stats
 from photutils.centroids import centroid_2dg, centroid_com
 from .saoimage import getds9, CircularRegion, CrossPointRegion, TextRegion, \
     BoxRegion, RegionList
@@ -142,8 +143,11 @@ class ImageSet():
             self._1d['image'] = self.image.reshape(-1)
         if self.loader is None:
             ext = self._1d['_ext'][i] if '_ext' in self._1d.keys() else 0
-            self._1d['image'][i] = \
-                    fits.open(self._1d['file'][i])[ext].data
+            img = fits.open(self._1d['file'][i])[ext].data
+            if img is None:
+                warnings.warn("empty fits extension {} in file {}".format(
+                    ext, self._1d['file'][i]))
+            self._1d['image'][i] = img
         else:
             self._1d['image'][i] = self.loader(self._1d['file'][i])
 
@@ -236,8 +240,7 @@ class ImageSet():
         out = self.to_table()
         if format is None:
             format = ''
-            from os.path import splitext
-            ext = splitext(outfile)[1].lower()
+            ext = os.path.splitext(outfile)[1].lower()
             if ext in ['.fits', '.fit']:
                 format = 'fits'
             elif ext in ['.csv', '.tab']:
@@ -256,7 +259,6 @@ class ImageSet():
             raise ValueError('unrecognized output format')
         if save_images:
             if self.file is None:
-                from os import path
                 hdu0 = fits.PrimaryHDU()
                 hdu0.header['ndim'] = len(self._shape)
                 for i in range(len(self._shape)):
@@ -264,7 +266,7 @@ class ImageSet():
                 hdulist = fits.HDUList([hdu0])
                 for im in self._1d['image']:
                     hdulist.append(fits.ImageHDU(im))
-                outname = '{}_images.fits'.format(path.splitext(outfile)[0])
+                outname = '{}_images.fits'.format(os.path.splitext(outfile)[0])
                 overwrite = kwargs.pop('overwrite', False)
                 hdulist.writeto(outname, overwrite=overwrite)
 
@@ -294,8 +296,7 @@ class ImageSet():
         """
         if format is None:
             format = ''
-            from os.path import splitext
-            ext = splitext(infile)[1].lower()
+            ext = os.path.splitext(infile)[1].lower()
             if ext in ['.fits', '.fit']:
                 format = 'fits'
             elif ext in ['.csv', '.tab']:
@@ -318,9 +319,8 @@ class ImageSet():
             keys.remove('file')
             self.image = None
         else:
-            from os import path
-            imgfile = '{}_images.fits'.format(path.splitext(infile)[0])
-            if not path.isfile(imgfile):
+            imgfile = '{}_images.fits'.format(os.path.splitext(infile)[0])
+            if not os.path.isfile(imgfile):
                 raise IOError('input image file not found')
             self.file = None
             # load image
@@ -559,7 +559,7 @@ class Centroid(ImageSet):
             ds9.imdisp(self._1d['image'][i])
             xc = self._1d['_xc'][i]
             yc = self._1d['_yc'][i]
-            ds9.sets(['pan to {} {}'.format(xc, yc),
+            ds9.set(['pan to {} {}'.format(xc, yc),
                       'zoom to 2'])
             r = CircularRegion(xc, yc, 3)
             c = CrossPointRegion(xc, yc)
@@ -726,7 +726,6 @@ class Background(ImageSet):
                 to estimate the background and standard deviation.
             'median': Uses median of image/regions
         """
-        from astropy.stats import sigma_clipped_stats
         # gain settings
         gain = self._1d['_gain'] if '_gain' in self.attr \
                                                     else np.ones(self._size)
@@ -766,12 +765,12 @@ class Background(ImageSet):
                         and (y1 < y2) and (x1 < x2):
                     # measure background from valid region
                     subim = self._1d['image'][i][y1:y2, x1:x2]
-                    mean, median, stddev = sigma_clipped_stats(subim.data,
-                                                           subim.mask)
+                    mean, median, stddev = stats.sigma_clipped_stats(subim.data,
+                                                getattr(subim, 'mask', None))
                     if method == 'median':
                         self._1d['_background'+regstr][i] = median
                         self._1d['_background_error'+regstr][i] = \
-                                    np.sqrt(stddev**2 + bg*gain[i])
+                                    np.sqrt(stddev**2 + median*gain[i])
                     elif method == 'mean':
                         self._1d['_background'+regstr][i] = mean
                         self._1d['_background_error'+regstr][i] = \
