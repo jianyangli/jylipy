@@ -17,11 +17,11 @@ from .multiproc import *
 
 # Modules
 from . import constants
-from . import Photometry
+from . import photometry
 from . import mesh
-from . import HST
+from . import hst
 from . import convenience
-from . import PDS
+from . import pds
 from . import vector
 from . import pysis_ext
 from . import astrometry

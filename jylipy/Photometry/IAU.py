@@ -8,7 +8,7 @@ from astropy.modeling import Parameter
 from astropy import units
 import numpy as np, numbers
 from .core import PhaseFunction
-from .Hapke import DiskInt5
+from .hapke import DiskInt5
 from ..core import condition
 
 __all__ = sorted('HG geoalb bondalb HG2Hapke fitHG HG3P HG12'.split())
