@@ -1,6 +1,6 @@
 import numpy as np
-from ..vector import *
-from ..saoimage import getds9
+from jylipy.vector import *
+from jylipy.saoimage import getds9
 
 class TestEllipsoidProjection():
     def test_xy2lonlat_sphere(self):
