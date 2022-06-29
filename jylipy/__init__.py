@@ -35,3 +35,9 @@ from . import image
 from . import function
 
 __version__ = '0.0.1'
+
+
+# backward compatability
+from . import photometry as Photometry
+from . import hst as HST
+from . import pds as PDS
