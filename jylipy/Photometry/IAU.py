@@ -4,21 +4,17 @@ v1.0.0 : JYL @PSI, December 22, 2013
 '''
 
 
-from astropy.modeling import Parameter
-import astropy.units as u
-import numpy as np, numbers
-from .core import PhaseFunction
-from .hapke import DiskInt5
-from ..core import condition
-from sbpy import photometry
-from sbpy.calib import solar_fluxd
 from functools import wraps
+import numpy as np, astropy.units as u
+from astropy.modeling import Parameter
+from sbpy import photometry, calib, bib
+from .hapke import DiskInt5
 
 
 __all__ = ['HG', 'HG1G2', 'HG12_Pen16', 'HG12', 'HG3P']
 
 
-solar_fluxd.set({'V': -26.77 * u.mag})
+calib.solar_fluxd.set({'V': -26.77 * u.mag})
 
 
 def default_keyword(**default):
