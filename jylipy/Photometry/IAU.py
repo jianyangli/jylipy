@@ -39,8 +39,27 @@ class HG(photometry.HG):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    def toHapke(self, radi, magsun=-26.74):
-        return HG2Hapke(self, radi, magsun)
+    @bib.cite({'method': '1995Icar..115..369V'})
+    def toHapke(self):
+        """Convert IAU HG model to Hapke 5-parameter model
+
+        Reference
+        ---------
+        Verbiscer, A.J., Veverka, J., 1995. Icarus 115, 369.
+
+        """
+        hh = self.H.value
+        gg = self.G.value
+        g = -0.291 + 0.189*gg - 0.256*gg*gg + 0.147*gg*gg*gg
+        B0 = 3.11 - 9.08*gg + 10.98*gg*gg - 5.07*gg*gg*gg
+        h =  0.0516 - 0.00042*gg - 0.042*gg*gg
+        pv = self.geomalb.value
+        apv = 0.006 + 0.65*pv
+        bpv = 0.062 + 2.36*pv
+        cpv = 0.045 - pv + 7.4*pv*pv - 4.9*pv*pv*pv
+        dpv = 0.027 - 0.404*pv + 1.51*pv*pv
+        w = apv + bpv*gg - cpv*gg*gg + dpv*gg*gg*gg
+        return DiskInt5(w, g, 0., B0, h)
 
 
 class HG1G2(photometry.HG1G2):
@@ -61,135 +80,6 @@ HG12 = HG12_Pen16
 
 
 HG3P = HG12  # for backward compatability
-
-
-def geoalb(model, radi, magsun=-26.74):
-    '''Calculate the geometric albedo for IAU HG model.
-
- Parameters
- ----------
- model : HG, Parameter, or a number
-   The IAU HG model, or the H model parameter
- radi : number or astropy Quantity
-   The radius of object.  If number, then the unit is km
- magsun : number, or astropy Quantity, optional
-   Magnitude of the Sun
-
- Returns
- -------
- Number, the geometric albedo of an object
-
- v1.0.0 : JYL @PSI, December 22, 2013
- v1.0.1 : JYL @PSI, January 6, 2015
-   Add type check for input parameters
-    '''
-
-    if isinstance(model, (HG, HG3P, HG12)):
-        hh = model.H.value
-    elif isinstance(model, Parameter):
-        hh = model.value
-    elif isinstance(model, numbers.Number):
-        hh = model
-    else:
-        raise TypeError('an instance of HG, Parameter, or a number is expected, got a %s' % type(model))
-
-    if isinstance(radi, u.Quantity):
-        if radi.unit != u.km:
-            radi = radi.to(u.km).value
-        else:
-            radi = radi.value
-    elif isinstance(radi, numbers.Number):
-        pass
-    else:
-        raise TypeError('an astropy quantity or a number is expected, got a %s' % type(radi))
-
-    from ..core import mag2alb
-    return mag2alb(hh, radi, magsun=magsun)
-
-
-def bondalb(model, radi, magsun=-26.74):
-    '''Calculate Bond albedo
-
- Parameters
- ----------
- See geoalb.
-
- Returns
- -------
- Number, Bond albedo of an object
-
- v1.0.0 : JYL @PSI, December 22, 2013
-    '''
-    return geoalb(model, radi, magsun)*model.phaseint()
-
-
-def HG2Hapke(model, radi, magsun=-26.74):
-    '''Convert IAU HG model to Hapke model parameters
-
- Parameters
- ----------
- model : HG class, or a tuple with two Parameter class or numbers
-   The IAU HG model or the (H, G) parameters
- radi : number or astropy Quantity
-   The radius of object [km]
- magsun : number, or astropy Quantity, optional
-   Magnitude of the Sun
-
- Returns
- -------
- Hapke.DiskInt5 instance
-
- Notes
- -----
- The procedure follows Verbiscer and Veverka (1995).
-
- v1.0.0 : JYL @PSI, December 22, 2013
- v1.0.1 : JYL @PSI, January 6, 2015
-   Add type check for input parameters
-   Change return from a Hapke parameter dictionary to a Hapke disk
-   integrated phase function model `DiskInt5` instance.
-    '''
-
-    if isinstance(model, HG):
-        hh, gg = model.H.value, model.G.value
-    elif hasattr(model,'__iter__'):
-        hh, gg = model
-        if isinstance(hh, Parameter):
-            hh = hh.value
-        elif isinstance(hh, numbers.Number):
-            pass
-        else:
-            raise TypeError('an astropy quantity or a number is expected, got a %s' % type(hh))
-        if isinstance(gg, Parameter):
-            gg = gg.value
-        elif isinstance(gg, numbers.Number):
-            pass
-        else:
-            raise TypeError('an astropy quantity or a number is expected, got a %s' % type(gg))
-    else:
-        raise TypeError('a HG or a tuple of two Parameters or numbers is expected, got a %s' % type(model))
-
-    if isinstance(radi, u.Quantity):
-        if radi.unit != u.km:
-            radi = radi.to(u.km).value
-        else:
-            radi = radi.value
-    elif isinstance(radi, numbers.Number):
-        pass
-    else:
-        raise TypeError('an astropy quantity or a number is expected, got a %s' % type(radi))
-
-    g = -0.291 + 0.189*gg - 0.256*gg*gg + 0.147*gg*gg*gg
-    B0 = 3.11 - 9.08*gg + 10.98*gg*gg - 5.07*gg*gg*gg
-    h =  0.0516 - 0.00042*gg - 0.042*gg*gg
-    pv = geoalb(hh, radi, magsun)
-    apv = 0.006 + 0.65*pv
-    bpv = 0.062 + 2.36*pv
-    cpv = 0.045 - pv + 7.4*pv*pv - 4.9*pv*pv*pv
-    dpv = 0.027 - 0.404*pv + 1.51*pv*pv
-    w = apv + bpv*gg - cpv*gg*gg + dpv*gg*gg*gg
-
-    return DiskInt5(w, g, 0., B0, h)
 
 
 def fitHG(alpha, measure, model=0, error=None, par=None, maxiter=1000, verbose=False):
