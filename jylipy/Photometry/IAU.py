@@ -1,7 +1,6 @@
-'''Implementation of IAU HG Phase function model
-
-v1.0.0 : JYL @PSI, December 22, 2013
-'''
+"""Wapper for the IAU phase function models implemented in
+`sbpy.photometry`.
+"""
 
 
 from functools import wraps
@@ -11,7 +10,8 @@ from sbpy import photometry, calib, bib
 from .hapke import DiskInt5
 
 
-__all__ = ['HG', 'HG1G2', 'HG12_Pen16', 'HG12', 'HG3P']
+__all__ = ['HG', 'HG1G2', 'HG12_Pen16', 'HG12', 'HG3P', 'default_keyword',
+           'fitHG']
 
 
 calib.solar_fluxd.set({'V': -26.77 * u.mag})
@@ -65,6 +65,13 @@ class HG1G2(photometry.HG1G2):
         super().__init__(*args, **kwargs)
 
 
+class HG12(photometry.HG12):
+
+    @default_keyword(wfb='V')
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+
 class HG12_Pen16(photometry.HG12_Pen16):
 
     @default_keyword(wfb='V')
@@ -72,14 +79,11 @@ class HG12_Pen16(photometry.HG12_Pen16):
         super().__init__(*args, **kwargs)
 
 
-HG12 = HG12_Pen16
-
-
-HG3P = HG12  # for backward compatability
+HG3P = HG12_Pen16  # for backward compatability
 
 
 def fitHG(alpha, measure, model=0, error=None, par=None, maxiter=1000, verbose=False):
-    '''Fit IAU HG models with data
+    '''Utility function to fit IAU HG models with data
 
  Parameters
  ----------
