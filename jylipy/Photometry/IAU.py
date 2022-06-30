@@ -5,360 +5,62 @@ v1.0.0 : JYL @PSI, December 22, 2013
 
 
 from astropy.modeling import Parameter
-from astropy import units
+import astropy.units as u
 import numpy as np, numbers
 from .core import PhaseFunction
 from .hapke import DiskInt5
 from ..core import condition
-
-__all__ = sorted('HG geoalb bondalb HG2Hapke fitHG HG3P HG12'.split())
-
-
-class spline(object):
-    '''Spline with function values at nodes and the first derivatives at
-    both ends.  Outside the data grid the extrapolations are linear based
-    on the first derivatives at the corresponding ends.
-    '''
-
-    def __init__(self, x, y, dy):
-        x = np.asarray(x)
-        y = np.asarray(y)
-        dy = np.asarray(dy)
-        self.x, self.y, self.dy = x, y, dy
-        n = len(y)
-        h = x[1:]-x[:-1]
-        r = (y[1:]-y[:-1])/(x[1:]-x[:-1])
-        B = np.zeros((n-2,n))
-        for i in range(n-2):
-            k = i+1
-            B[i,i:i+3] = [h[k], 2*(h[k-1]+h[k]), h[k-1]]
-        C = np.empty((n-2,1))
-        for i in range(n-2):
-            k = i+1
-            C[i] = 3*(r[k-1]*h[k]+r[k]*h[k-1])
-        C[0] = C[0]-dy[0]*B[0,0]
-        C[-1] = C[-1]-dy[1]*B[-1,-1]
-        B = B[:,1:n-1]
-        from numpy.linalg import solve
-        dys = solve(B, C)
-        dys = np.array([dy[0]] + [tmp for tmp in dys.flatten()] + [dy[1]])
-        A0 = y[:-1]
-        A1 = dys[:-1]
-        A2 = (3*r-2*dys[:-1]-dys[1:])/h
-        A3 = (-2*r+dys[:-1]+dys[1:])/h**2
-        self.coef = np.array([A0, A1, A2, A3]).T
-        self.polys = []
-        from numpy.polynomial.polynomial import Polynomial
-        for c in self.coef:
-            self.polys.append(Polynomial(c))
-        self.polys.insert(0, Polynomial([1,self.dy[0]]))
-        self.polys.append(Polynomial([self.y[-1]-self.x[-1]*self.dy[-1], self.dy[-1]]))
-
-    def __call__(self, x):
-        x = np.asarray(x)
-        out = np.zeros_like(x)
-        idx = x < self.x[0]
-        if idx.any():
-            out[idx] = self.polys[0](x[idx])
-        for i in range(len(self.x)-1):
-            idx = (self.x[i] <= x ) & (x < self.x[i+1])
-            if idx.any():
-                out[idx] = self.polys[i+1](x[idx]-self.x[i])
-        idx = (x >= self.x[-1])
-        if idx.any():
-            out[idx] = self.polys[-1](x[idx])
-        return out
+from sbpy import photometry
+from sbpy.calib import solar_fluxd
+from functools import wraps
 
 
-class HG(PhaseFunction):
-    '''
- IAU HG phase function model
+__all__ = ['HG', 'HG1G2', 'HG12_Pen16', 'HG12', 'HG3P']
 
- The IAU-HG phase function is defined following Bowell et al. (1989)
- in Asteroids II, pp 524-556.
 
- v1.0.0 : JYL @PSI, December 22, 2013
- v1.0.1 : JYL @PSI, October 09, 2014
-   Removed the `param_dim` parameter for super class Initialization.
-     This parameter is to be deprecated.
-   Add constraints to G: 0.0<G<1.0
- v1.0.2 : JYL @PSI, October 27, 2014
-   Revised for the new features in astropy 0.4.2
-   Optimized the calculation for fit_deriv
- v1.0.3 : JYL @PSI, January 6, 2015
-   Add class methods `GeoAlb`, `BondAlb`, `toHapke`
-    '''
+solar_fluxd.set({'V': -26.77 * u.mag})
 
-    H = Parameter(default=0)
-    G = Parameter(default=0.12)
 
-    @staticmethod
-    def hgphi(alpha, i):
-        '''Core function in IAU HG phase function model
+def default_keyword(**default):
+    def decorator(f):
+        @wraps(f)
+        def wrapper(*args, **kwargs):
+            for k, v in default.items():
+                v_default = kwargs.pop(k, v)
+                kwargs[k] = v_default
+            return f(*args, **kwargs)
+        return wrapper
+    return decorator
 
-     Parameters
-     ----------
-     alpha : number or numpy array of number
-       Phase angle [deg]
-     i : int in [1, 2]
-       Choose the form of function
 
-     Returns
-     -------
-     numpy array of float
+class HG(photometry.HG):
 
-     Note
-     ----
-     See Bowell et al. (1989), Eq. A4.
-        '''
-
-        assert i in [1,2]
-        a, b, c = [3.332, 1.862], [0.631, 1.218], [0.986, 0.238]
-        alpha = np.deg2rad(alpha)
-        alpha_half = alpha*0.5
-        sin_alpha = np.sin(alpha)
-        tan_alpha_half = np.tan(alpha_half)
-        w = np.exp(-90.56 * tan_alpha_half * tan_alpha_half)
-        phiis = 1 - c[i-1]*sin_alpha/(0.119+1.341*sin_alpha-0.754*sin_alpha*sin_alpha)
-        phiil = np.exp(-a[i-1] * tan_alpha_half**b[i-1])
-        return w*phiis + (1-w)*phiil
-
-    @staticmethod
-    def evaluate(alpha, hh, gg):
-        return hh-2.5*np.log10((1-gg)*HG.hgphi(alpha, 1)+gg*HG.hgphi(alpha,2))
-
-    @staticmethod
-    def fit_deriv(alpha, hh, gg):
-        if hasattr(alpha,'__iter__'):
-            ddh = np.ones_like(alpha)
-        else:
-            ddh = 1.
-        phi1, phi2 = HG.hgphi(alpha,1), HG.hgphi(alpha,2)
-        ddg = -1.085736205*(-phi1+phi2)/((1-gg)*phi1+gg*phi2)
-        return [ddh, ddg]
-
-    def phaseint(self, steps=5000):
-        '''
-     Calculate phase integral
-
-     Parameters
-     ----------
-     steps : The number of steps of phase angles [deg] for numerical
-         integration.
-
-     Returns
-     -------
-     The phase integral
-
-     Notes
-     -----
-     This program calculates phase integral numerically.
-
-     v1.0.0 : JYL @PSI, December 22, 2013
-        '''
-
-        pha = np.linspace(0,180,steps)
-        f = 10**(-0.4*HG.evaluate(pha, self.H, self.G))
-        f /= f[0]
-        dpha = np.empty(steps)
-        dpha[:] = np.pi/(steps-1)
-        dpha[[0,-1]] /= 2
-        return 2*(f*np.sin(pha*np.pi/180)*dpha).sum()
-
-    def GeoAlb(self, radi, magsun=-26.74):
-        return geoalb(self, radi, magsun)
-
-    def BondAlb(self, radi, magsun=-26.74):
-        return bondalb(self, radi, magsun)
+    @default_keyword(wfb='V')
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
     def toHapke(self, radi, magsun=-26.74):
         return HG2Hapke(self, radi, magsun)
 
 
-class HG3P(PhaseFunction):
-    '''IAU 3-parameter model (Muinonen et al., 2010)
+class HG1G2(photometry.HG1G2):
 
-    Phase angles are in degrees'''
-
-    H = Parameter(default=0)
-    G1 = Parameter(default=0.5)
-    G2 = Parameter(default=0.2)
-
-    from scipy.interpolate import interp1d, PchipInterpolator
-
-    phi1v = np.deg2rad([7.5, 30., 60, 90, 120, 150]),[7.5e-1, 3.3486016e-1, 1.3410560e-1, 5.1104756e-2, 2.1465687e-2, 3.6396989e-3],[-1.9098593, -9.1328612e-2]
-    phi1 = spline(*phi1v)
-    phi2v = np.deg2rad([7.5, 30., 60, 90, 120, 150]),[9.25e-1, 6.2884169e-1, 3.1755495e-1, 1.2716367e-1, 2.2373903e-2, 1.6505689e-4],[-5.7295780e-1, -8.6573138e-8]
-    phi2 = spline(*phi2v)
-    phi3v = np.deg2rad([0.0, 0.3, 1., 2., 4., 8., 12., 20., 30.]),[1., 8.3381185e-1, 5.7735424e-1, 4.2144772e-1, 2.3174230e-1, 1.0348178e-1, 6.1733473e-2, 1.6107006e-2, 0.],[-1.0630097, 0]
-    phi3 = spline(*phi3v)
-
-    @staticmethod
-    def evaluate(ph, h, g1, g2):
-        ph = np.deg2rad(ph)
-        return h-2.5*np.log10(g1*HG3P.phi1(ph)+g2*HG3P.phi2(ph)+(1-g1-g2)*HG3P.phi3(ph))
-
-    @staticmethod
-    def fit_deriv(ph, h, g1, g2):
-        if hasattr(ph, '__iter__'):
-            ddh = np.ones_like(ph)
-        else:
-            ddh = 1.
-        ph = np.deg2rad(ph)
-        phi1 = HG3P.phi1(ph)
-        phi2 = HG3P.phi2(ph)
-        phi3 = HG3P.phi3(ph)
-        dom = (g1*phi1+g2*phi2+(1-g1-g2)*phi3)
-        ddg1 = -1.085736205*(phi1-phi3)/dom
-        ddg2 = -1.085736205*(phi2-phi3)/dom
-        return [ddh, ddg1, ddg2]
-
-    def phaseint_num(self, steps=5000):
-        '''
-     Calculate phase integral numerically
-
-     Parameters
-     ----------
-     steps : The number of steps of phase angles [deg] for numerical
-         integration.
-
-     Returns
-     -------
-     The phase integral
-
-     Notes
-     -----
-     This program calculates phase integral numerically.
-
-     v1.0.0 : JYL @PSI, December 22, 2013
-        '''
-
-        pha = np.linspace(0,150,steps)
-        f = 10**(-0.4*self(pha))
-        f /= f[0]
-        dpha = np.empty(steps)
-        dpha[:] = np.pi/(steps-1)
-        dpha[[0,-1]] /= 2
-        return 2*(f*np.sin(np.deg2rad(pha))*dpha).sum()
-
-    @property
-    def phaseint(self):
-        '''Phase integral, q
-        Based on Muinonen et al. (2010) Eq. 22'''
-        return 0.009082+0.4061*self.G1+0.8092*self.G2
-
-    @property
-    def phasecoeff(self):
-        '''Phase coefficient, k
-        Based on Muinonen et al. (2010) Eq. 23'''
-        return -(30*self.G1+9*self.G2)/(5*np.pi*float(self.G1+self.G2))
-
-    @property
-    def oeamp(self):
-        '''Opposition effect amplitude, psi-1
-        Based on Muinonen et al. (2010) Eq. 24)'''
-        tmp = float(self.G1+self.G2)
-        return (1-tmp)/tmp
-
-    def GeoAlb(self, radi, magsun=-26.74):
-        return geoalb(self, radi, magsun)
-
-    def BondAlb(self, radi, magsun=-26.74):
-        return bondalb(self, radi, magsun)
+    @default_keyword(wfb='V')
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
 
-class HG12(PhaseFunction):
-    '''IAU HG12 model (Muinonen et al., 2010)
-    Phase angles are in degrees
-    '''
+class HG12_Pen16(photometry.HG12_Pen16):
 
-    H = Parameter(default=0.)
-    G12 = Parameter(default=0.5)
+    @default_keyword(wfb='V')
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
-    @staticmethod
-    def G1(G12):
-        return condition(G12<0.2, 0.7527*G12+0.06164, 0.9529*G12+0.02162)
 
-    @staticmethod
-    def G2(G12):
-        return condition(G12<0.2, -0.9612*G12+0.6270, -0.6125*G12+0.5572)
+HG12 = HG12_Pen16
 
-    @staticmethod
-    def evaluate(ph, h, g):
-        g1 = HG12.G1(g)
-        g2 = HG12.G2(g)
-        return HG3P.evaluate(ph, h, g1, g2)
 
-    @staticmethod
-    def fit_deriv(ph, h, g):
-        if hasattr(ph, '__iter__'):
-            ddh = np.ones_like(ph)
-        else:
-            ddh = 1.
-        g1 = HG12.G1(g)
-        g2 = HG12.G2(g)
-        ph = np.deg2rad(ph)
-        phi1 = HG3P.phi1(ph)
-        phi2 = HG3P.phi2(ph)
-        phi3 = HG3P.phi3(ph)
-        dom = (g1*phi1+g2*phi2+(1-g1-g2)*phi3)
-        ddg = -1.085736205*((phi1-phi3)*condition(g<0.2,0.7527,0.9529)+(phi2-phi3)*condition(g<0.2,-0.9612,-0.6125))/dom
-        return [ddh, ddg]
-
-    def phaseint_num(self, steps=5000):
-        '''
-     Calculate phase integral numerically
-
-     Parameters
-     ----------
-     steps : The number of steps of phase angles [deg] for numerical
-         integration.
-
-     Returns
-     -------
-     The phase integral
-
-     Notes
-     -----
-     This program calculates phase integral numerically.
-
-     v1.0.0 : JYL @PSI, December 22, 2013
-        '''
-
-        pha = np.linspace(0,150,steps)
-        f = 10**(-0.4*self(pha))
-        f /= f[0]
-        dpha = np.empty(steps)
-        dpha[:] = np.pi/(steps-1)
-        dpha[[0,-1]] /= 2
-        return 2*(f*np.sin(np.deg2rad(pha))*dpha).sum()
-
-    @property
-    def phaseint(self):
-        '''Phase integral, q
-        Based on Muinonen et al. (2010) Eq. 22'''
-        return 0.009082+0.4061*self.G1(self.G12)+0.8092*self.G2(self.G12)
-
-    @property
-    def phasecoeff(self):
-        '''Phase coefficient, k
-        Based on Muinonen et al. (2010) Eq. 23'''
-        G1 = self.G1(self.G12)
-        G2 = self.G2(self.G12)
-        return -(30*G1+9*G2)/(5*np.pi*(G1+G2))
-
-    @property
-    def oeamp(self):
-        '''Opposition effect amplitude, psi-1
-        Based on Muinonen et al. (2010) Eq. 24)'''
-        tmp = self.G1(self.G12)+self.G2(self.G12)
-        return (1-tmp)/tmp
-
-    def GeoAlb(self, radi, magsun=-26.74):
-        return geoalb(self, radi, magsun)
-
-    def BondAlb(self, radi, magsun=-26.74):
-        return bondalb(self, radi, magsun)
+HG3P = HG12  # for backward compatability
 
 
 def geoalb(model, radi, magsun=-26.74):
@@ -391,9 +93,9 @@ def geoalb(model, radi, magsun=-26.74):
     else:
         raise TypeError('an instance of HG, Parameter, or a number is expected, got a %s' % type(model))
 
-    if isinstance(radi, units.Quantity):
-        if radi.unit != units.km:
-            radi = radi.to(units.km).value
+    if isinstance(radi, u.Quantity):
+        if radi.unit != u.km:
+            radi = radi.to(u.km).value
         else:
             radi = radi.value
     elif isinstance(radi, numbers.Number):
@@ -467,9 +169,9 @@ def HG2Hapke(model, radi, magsun=-26.74):
     else:
         raise TypeError('a HG or a tuple of two Parameters or numbers is expected, got a %s' % type(model))
 
-    if isinstance(radi, units.Quantity):
-        if radi.unit != units.km:
-            radi = radi.to(units.km).value
+    if isinstance(radi, u.Quantity):
+        if radi.unit != u.km:
+            radi = radi.to(u.km).value
         else:
             radi = radi.value
     elif isinstance(radi, numbers.Number):
