@@ -3326,7 +3326,7 @@ class ModelGrid(object):
                         self.shape))
             self.extra[k] = np.asarray(v)
 
-    def plot(self, keys=None, lim=None, figno=None, cmap=None):
+    def plot(self, keys=None, band=None, lim=None, figno=None, cmap=None):
         """Plot the model parameter maps
 
         Parameters
@@ -3335,6 +3335,8 @@ class ModelGrid(object):
             The parameter names to be plotted.  It can also include
             any extra maps in the model grid saved in `.extra`.  By
             default, all model parameters will be plotted.
+        band : int, optional
+            The band to be plotted.  Default is middle band.
         lim : array or equivalent of shape (N, 2), optional
             Limits of plotted data [min, max].  N must be equal or larger
             than the number of keys to be plotted.
@@ -3346,6 +3348,11 @@ class ModelGrid(object):
         """
         if keys is None:
             keys = self.param_names
+        idx = np.where(~self.mask.flatten())[0][0]
+        n_band = len(self._model_grid.flatten()[idx])
+        if n_band > 1:
+            if band is None:
+                band = n_band // 2
         if figno is None:
             figno = plt.gcf().number
         n_keys = len(keys)
@@ -3361,7 +3368,14 @@ class ModelGrid(object):
                     v = self.extra[k.upper()]
                 else:
                     raise ValueError("'{}' not found.".format(k))
-            v[self.mask] = np.nan
+            if n_band == 1:
+                v[self.mask] = np.nan
+            else:
+                v = np.array(v)
+                v1 = np.full(np.shape(v)[:2], np.nan)
+                for m, n in zip(*np.where(~self.mask)):
+                    v1[m, n] = v[m, n][band]
+                v = v1
             if lim is not None:
                 vmin, vmax = lim[i]
             else:
@@ -3376,15 +3390,17 @@ class ModelGrid(object):
         lonmax = self.lon.value.max()
         latmin = self.lat.value.min()
         latmax = self.lat.value.max()
-        ax[0, 0].set_xticklabels(
-            (ax[0, 0].get_xticks() / self.shape[1]) * (lonmax - lonmin) \
+        ax1d[0].set_xticklabels(
+            (ax1d[0].get_xticks() / self.shape[1]) * (lonmax - lonmin) \
                     + lonmin)
-        ax[0, 0].set_yticklabels(
-            (ax[0, 0].get_yticks() / self.shape[0]) * (latmax - latmin) \
+        ax1d[0].set_yticklabels(
+            (ax1d[0].get_yticks() / self.shape[0]) * (latmax - latmin) \
                     + latmin)
-        for a in ax[:, 0]:
+        left_axs = ax[:, 0] if ax.ndim == 2 else ax
+        for a in left_axs:
             a.set_ylabel('Latitude ({})'.format(self.lat.unit))
-        for a in ax[-1]:
+        bottom_axs = ax[-1] if ax.ndim == 2 else ax
+        for a in bottom_axs:
             a.set_xlabel('Longitude ({})'.format(self.lon.unit))
 
         return ax
