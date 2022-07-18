@@ -1,0 +1,12 @@
+numpy
+scipy
+astropy
+matplotlib
+pyds9
+pysis
+ccdproc
+visvis
+spiceypy
+astroquery
+sbpy
+photutils
