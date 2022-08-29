@@ -10,7 +10,7 @@ import spiceypy as spice
 
 from ..core import rebin, linfit
 from ..geometry import load_generic_kernels
-from ..Photometry import PhotometricData
+from ..photometry import PhotometricData
 from ..projects.dawn import FCImage
 
 
