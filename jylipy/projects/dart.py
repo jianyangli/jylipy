@@ -324,12 +324,20 @@ didy = Didymos()
 
 @u.quantity_input(r=u.m)
 def ejecta_g(r):
+    """
+    Gravity field at distance `r` from Dimorphos's surface in the direction
+    along the line connecting both objects and away from Dimorphos.
+    """
     gp = (c.G * didy.Mp / (r+didy.dist+didy.Ds/2)**2).decompose()
     gs = (c.G * didy.Ms / (r+didy.Ds/2)**2).decompose()
     return -(gp+gs).decompose()
 
 @u.quantity_input(r=u.m)
 def ejecta_vesc(r):
+    """
+    Escape velocity at distance `r` from Dimorphos's surface in the direction
+    along the line connecting both objects away from Dimorphos.
+    """
     Ep = c.G * didy.Mp / (r+didy.dist+didy.Ds/2)
     Es = c.G * didy.Ms / (r+didy.Ds/2)
     return np.sqrt(2*(Ep+Es)).decompose()
