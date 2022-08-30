@@ -3299,7 +3299,7 @@ class ModelGrid(object):
         if hdus['primary'].header['model'] not in {**locals(),
                 **globals()}:
             self._model_class = getattr(importlib.import_module(
-                    'jylipy.Photometry.Hapke'),
+                    'jylipy.photometry.hapke'),
                 hdus['primary'].header['model'])
         else:
             self._model_class = eval(hdus['primary'].header['model'])
