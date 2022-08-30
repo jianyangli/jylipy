@@ -3,7 +3,7 @@ Units of all angles are in degrees!!!
 
 '''
 
-import os, sys, warnings, multiprocessing, numbers, importlib
+import os, sys, warnings, multiprocessing, numbers, importlib, copy
 import numpy as np, matplotlib.pyplot as plt, astropy.units as u
 from collections import OrderedDict
 from astropy.io import fits
@@ -2799,6 +2799,59 @@ class PhotometricModelFitter(object):
 class PhotometricMPFitter(PhotometricModelFitter):
     '''Photometric model fitter using MPFit'''
     fitter = MPFitter
+
+
+class ModelTester():
+    """Test model parameter
+
+    """
+    def __init__(self, fitter, model, *data):
+        """
+        Parameters
+        ----------
+        fitter : model fitter class
+        model : `astropy.model.Model`
+            Model to be tested.
+        *data :
+            The data associated with model and can be directly passed
+            as parameters to `fitter` class.
+        """
+        self.fitter_class = fitter
+        self.model = model
+        self.data = data
+
+    def test(self, against, **kwargs):
+        """
+        Parameters
+        ----------
+        against : str
+            The name of attribute in fitter that the test is run against.
+        verbose : bool, optional
+            Verbose model
+        kwargs :
+            Defines the name and values of the model parameter to be tested.
+        """
+        verbose = kwargs.pop('verbose', True)
+        nkw = len(kwargs)
+        if nkw == 0:
+            raise ValueError('No parameter specified to be tested.')
+        if nkw > 1:
+            raise ValueError('Only one parameter can be tested at a time, '
+                ' {} specified.'.format(nkw))
+        parname, values = list(kwargs.items())[0]
+        if parname not in self.model.param_names:
+            raise ValueError('Parameter {} is not in model {}.'.
+                format(parname, self.model.__class__.name))
+        fitter = self.fitter_class()
+        m0 = copy.deepcopy(self.model)
+        setattr(getattr(m0, parname), 'fixed', True)
+        criteria = np.zeros_like(values)
+        models = np.zeros_like(values, dtype=object)
+        for i, v in enumerate(values):
+            setattr(m0, parname, v)
+            models[i] = fitter(m0, *self.data, verbose=verbose)
+            criteria[i] = getattr(fitter, against)
+        return models, criteria
 
 
 class PhotometricGridFitter(object):
