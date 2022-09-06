@@ -2887,12 +2887,8 @@ class PhotometricModelFitter(object):
                 if delta_chisq.max() * delta_chisq.min() > 0:
                     # if boundary not included in the search range, shift the
                     # search range
-                    if delta_chisq.min() > 0:
-                        # shift right
-                        search_bounds += test_range * direction
-                    elif delta_chisq.max() < 0:
-                        # shift left
-                        search_bounds -= test_range * direction
+                    search_bounds += test_range * np.sign(delta_chisq[0]) \
+                                     * direction
                 else:
                     # find boundary
                     # use interpolation to increase accuracy and speed
