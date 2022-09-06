@@ -5,6 +5,7 @@ Units of all angles are in degrees!!!
 
 import os, sys, warnings, multiprocessing, numbers, importlib, copy
 import numpy as np, matplotlib.pyplot as plt, astropy.units as u
+from scipy.interpolate import interp1d
 from collections import OrderedDict
 from astropy.io import fits
 from astropy.table import Column, Row, vstack, hstack
@@ -2793,6 +2794,127 @@ class PhotometricModelFitter(object):
         pplot(xlabel='Measured BDR',ylabel='Modeled BDR')
         return figs
 
+    def test_par_error(self, parname, threshold=2, nsteps=10, tol=1e-6):
+        """Derive model parameter error based on chi-square test.
+
+        In this test, the parameter of consideration is fixed at a series
+        of values surrounding the best-fit values, and the model is fitted
+        to derive a series of chi-squared.  The range of parameters that
+        have chi-squared less than 2x the best-fit chi-squared is considered
+        the 1-sigma uncertainty.
+
+        NOTE:
+            Single band data and single model are assumed.  Multiband
+            data and multiple models are not implemented or tested.
+
+        Parameters
+        ----------
+        parname : str
+            The name of parameter to test the uncertainty.
+        threshold : number, optional
+            Chi-squared threshold to define the uncertainty range.  Default
+            is 2x minimum chi-squared.
+        nsteps : int, optional
+            Number of steps in the calculation of chi-squared vs. parameter
+            curve.  Smaller number makes calculation fast, and not necessarily
+            worse results.
+        tol : number, optional
+            Numerical tolerance to exit search iteration.
+
+        Returns
+        -------
+        [lower, upper]
+            The lower and upper bound of the 1-sigma uncertainty
+            of the parameter.  `np.nan` means no boundary can be found.
+        """
+        # check conditions
+        if not hasattr(self, 'fitter'):
+            raise ValueError('Fitter class is undefined.')
+        if not hasattr(self, 'model'):
+            raise ValueError('Best-fit model is unavailable.')
+
+        # initialize tester and input parameters
+        tester = ModelTester(self.__class__, self.model, self.data)
+        par = getattr(self.model, parname)
+        bestfit_value = par.value
+        s = np.sign(bestfit_value)
+        par_bounds = getattr(par, 'bounds', [-1e30, 1e30])
+        bestfit_chisq = self.RMS**2 * len(self.data)
+
+        # variable to save results
+        sigma = [0, 0]
+
+        # iterate for lower and upper bound
+        # lower bound: i=0, direction=1
+        # upper bound: i=1, direction=-1
+        for i, direction in enumerate([1, -1]):
+
+            # prepare search bounds
+            search_bounds = np.ones(2)
+            search_bounds[0] = 1 - s * 0.6 if i == 0 else 1 + s * 1.4
+            search_bounds *= bestfit_value
+
+            # initialize search
+            boundary = search_bounds.mean()
+
+            # iterative search
+            while True:
+                old_boundary = boundary
+
+                # limit the search range within the parameter bounds
+                search_bounds = np.clip(search_bounds, par_bounds[0],
+                                        par_bounds[1])
+
+                # limit the search range to one side of the best-fit value
+                if search_bounds[1] * direction > bestfit_value * direction:
+                    search_bounds[1] = bestfit_value
+
+                # if both bounds fall to the limit of parameters, return np.nan
+                if any([all(search_bounds == par_bounds[i]) for i in [0, 1]]):
+                    boundary = np.nan
+                    break
+
+                # calculate chi-squared for test values
+                test_range = abs(search_bounds[1] - search_bounds[0])
+                test_values = np.linspace(search_bounds[0], search_bounds[1],
+                                          nsteps)
+                testpar_dict = {}
+                testpar_dict[parname] = test_values
+                chisq = tester.test(verbose=False, **testpar_dict)
+                delta_chisq = chisq - bestfit_chisq * threshold
+
+                # check chi-squared values
+                if delta_chisq.max() * delta_chisq.min() > 0:
+                    # if boundary not included in the search range, shift the
+                    # search range
+                    if delta_chisq.min() > 0:
+                        # shift right
+                        search_bounds += test_range * direction
+                    elif delta_chisq.max() < 0:
+                        # shift left
+                        search_bounds -= test_range * direction
+                else:
+                    # find boundary
+                    # use interpolation to increase accuracy and speed
+                    f = interp1d(test_values, delta_chisq, kind='quadratic')
+                    hires_values = np.linspace(search_bounds[0],
+                                               search_bounds[1], 1000)
+                    hires_delta_chisq = f(hires_values)
+                    ww = np.abs(hires_delta_chisq).argmin()
+                    boundary = hires_values[ww]
+                    if abs(boundary - old_boundary) < tol:
+                        # finish iteration if required accuracy reached
+                        break
+                    # refine search
+                    test_range /= 2
+                    search_bounds = boundary + \
+                                np.array([-1, 1]) * test_range / 2 * direction
+
+            # record results
+            sigma[i] = boundary
+
+        return sigma
+
 
 class PhotometricMPFitter(PhotometricModelFitter):
     '''Photometric model fitter using MPFit'''
@@ -2800,8 +2922,11 @@ class PhotometricMPFitter(PhotometricModelFitter):
 
 
 class ModelTester():
-    """Test model parameter
+    """Test model parameter.
 
+    NOTE:
+        Single band data and single model are assumed.  Multiband data
+        and multiple models are not implemented or tested.
     """
     def __init__(self, fitter, model, *data):
         """
@@ -2837,7 +2962,7 @@ class ModelTester():
         The test models are saved to ndarray `self.models`
         """
         if objstr is None:
-            obj_default = np.array(['chisq', 'chi-square', 'chi_square'])
+            obj_default = np.array(['chisq', 'chi-squared', 'chi_squared'])
         nkw = len(kwargs)
         if nkw == 0:
             raise ValueError('No parameter specified to be tested.')
