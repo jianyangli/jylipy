@@ -2694,31 +2694,29 @@ class PhotometricModelFitter(object):
 
     def __call__(self, model, pho, ilim=None, elim=None, alim=None,
                 rlim=None, **kwargs):
-        '''
+        """
         Parameters:
         -----------
         model : PhotometricModel instance
-      The initial model to fit to data
+            The initial model to fit to data
         pho : PhotometricData instance
-      The data to be fitted
-        fitter : Any Fitter-like class
-      The fitter to be used.  If this keyword is present, then the
-      fitter class defined in this class is overrided.  If not specified,
-      and no fitter class is defined in this class or its inherited class,
-      an error will be thrown.
+            The data to be fitted
+        fitter : Any `astropy.modeling.Fitter`-like class
+            The fitter to be used.  If this keyword is present, then the
+            fitter class defined in `self` will be overriden and replaced.
+            If not specified, and no fitter class is defined in this class
+            or its inherited class, an error will be thrown.
         **kwargs: Other keywords accepted by the fitter.
 
-        v1.0.0 : 2015, JYL @PSI
-        v1.0.1 : 1/11/2016, JYL @PSI
-          Added fitter keywords
-        '''
+        Returns
+        -------
+        `astropy.modeling.Model`: Best-fit model or models
+        """
         if 'fitter' in kwargs:
-            f = kwargs.pop('fitter')()
-        else:
-            if not hasattr(self, 'fitter'):
-                raise ValueError('fitter not defined')
-            else:
-                f = self.fitter()
+            self.fitter = kwargs.pop('fitter')
+        elif not hasattr(self, 'fitter'):
+            raise ValueError('fitter not defined')
+        f = self.fitter()
 
         self.data = pho.copy()
         self.data.validate()
