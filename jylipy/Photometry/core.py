@@ -2820,18 +2820,17 @@ class ModelTester():
         self.model = model
         self.data = data
 
-    def test(self, against, **kwargs):
+    def test(self, against='chisq', verbose=True, **kwargs):
         """
         Parameters
         ----------
-        against : str
+        against : str, optional
             The name of attribute in fitter that the test is run against.
         verbose : bool, optional
             Verbose model
         kwargs :
             Defines the name and values of the model parameter to be tested.
         """
-        verbose = kwargs.pop('verbose', True)
         nkw = len(kwargs)
         if nkw == 0:
             raise ValueError('No parameter specified to be tested.')
@@ -2850,7 +2849,13 @@ class ModelTester():
         for i, v in enumerate(values):
             setattr(m0, parname, v)
             models[i] = self.fitter(m0, *self.data, verbose=verbose)
-            criteria[i] = getattr(self.fitter, against)
+            if hasattr(self.fitter, against):
+                criteria[i] = getattr(self.fitter, against)
+            elif (hasattr(self.fitter, 'fit_info')
+                and against in self.fitter.fit_info.keys()):
+                criteria[i] = self.fitter.fit_info[against]
+            else:
+                raise ValueError('{} not found in fitter.'.format(against))
         return models, criteria
 
 
