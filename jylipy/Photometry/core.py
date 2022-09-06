@@ -2842,15 +2842,15 @@ class ModelTester():
         if parname not in self.model.param_names:
             raise ValueError('Parameter {} is not in model {}.'.
                 format(parname, self.model.__class__.name))
-        fitter = self.fitter_class()
+        self.fitter = self.fitter_class()
         m0 = copy.deepcopy(self.model)
         setattr(getattr(m0, parname), 'fixed', True)
         criteria = np.zeros_like(values)
         models = np.zeros_like(values, dtype=object)
         for i, v in enumerate(values):
             setattr(m0, parname, v)
-            models[i] = fitter(m0, *self.data, verbose=verbose)
-            criteria[i] = getattr(fitter, against)
+            models[i] = self.fitter(m0, *self.data, verbose=verbose)
+            criteria[i] = getattr(self.fitter, against)
         return models, criteria
 
 
