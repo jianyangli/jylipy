@@ -2813,24 +2813,33 @@ class ModelTester():
         model : `astropy.model.Model`
             Model to be tested.
         *data :
-            The data associated with model and can be directly passed
+            The data associated with model that can be directly passed
             as parameters to `fitter` class.
         """
         self.fitter_class = fitter
         self.model = model
         self.data = data
 
-    def test(self, against='chisq', verbose=True, **kwargs):
+    def test(self, objstr=None, verbose=True, **kwargs):
         """
         Parameters
         ----------
-        against : str, optional
-            The name of attribute in fitter that the test is run against.
+        objstr : str, optional
+            An attribute in fitter or a field in fitter.fit_info as the
+            object quantity for the test.  Default is one of 'chisq',
+            'chi-square', or 'chi_square'.
         verbose : bool, optional
-            Verbose model
+            Verbose mode.
         kwargs :
-            Defines the name and values of the model parameter to be tested.
+            The name and values of the model parameter to be tested.
+
+        Returns
+        -------
+        Array of the same shape as the model parameter values to be tested.
+        The test models are saved to ndarray `self.models`
         """
+        if objstr is None:
+            obj_default = np.array(['chisq', 'chi-square', 'chi_square'])
         nkw = len(kwargs)
         if nkw == 0:
             raise ValueError('No parameter specified to be tested.')
@@ -2844,19 +2853,33 @@ class ModelTester():
         self.fitter = self.fitter_class()
         m0 = copy.deepcopy(self.model)
         setattr(getattr(m0, parname), 'fixed', True)
-        criteria = np.zeros_like(values)
-        models = np.zeros_like(values, dtype=object)
+        objval = np.zeros_like(values)
+        self.models = np.zeros_like(values, dtype=object)
         for i, v in enumerate(values):
             setattr(m0, parname, v)
-            models[i] = self.fitter(m0, *self.data, verbose=verbose)
-            if hasattr(self.fitter, against):
-                criteria[i] = getattr(self.fitter, against)
+            self.models[i] = self.fitter(m0, *self.data, verbose=verbose)
+            if objstr is None:
+                # search for default object string
+                obj_test = [hasattr(self.fitter, x) for x in obj_default]
+                if not any(obj_test):
+                    if hasattr(self.fitter, 'fit_info'):
+                        obj_test = [x in self.fitter.fit_info.keys()
+                                    for x in obj_default]
+                    else:
+                        obj_test = np.zeros_like(obj_default, dtype=bool)
+                if any(obj_test):
+                    objstr = obj_default[obj_test][0]
+                else:
+                    raise ValueError('Default object string not found in '
+                        'fitter.')
+            if hasattr(self.fitter, objstr):
+                objval[i] = getattr(self.fitter, objstr)
             elif (hasattr(self.fitter, 'fit_info')
-                and against in self.fitter.fit_info.keys()):
-                criteria[i] = self.fitter.fit_info[against]
+                and objstr in self.fitter.fit_info.keys()):
+                objval[i] = self.fitter.fit_info[objstr]
             else:
-                raise ValueError('{} not found in fitter.'.format(against))
-        return models, criteria
+                raise ValueError('{} not found in fitter.'.format(objstr))
+        return objval
 
 
 class PhotometricGridFitter(object):
