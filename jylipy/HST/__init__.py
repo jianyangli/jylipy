@@ -1,3 +1,4 @@
+from . import core
 from . import wfc3
 from . import acs
 from . import wfpc2

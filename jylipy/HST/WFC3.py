@@ -14,10 +14,18 @@ from astropy.table import QTable, Column, Table
 from astropy.io import fits, ascii
 from astropy.nddata import StdDevUncertainty
 import ccdproc
+from .core import pixel_scale
 
 
 filter_table = '/Users/jyli/work/references/HST/WFC3/WFC3_Filter_List.csv'
 wfc3dir = '/Users/jyli/work/references/HST/WFC3/'
+
+
+uvis_pxlscl = 0.04 * u.arcsec / u.pix
+def uvis_pix():
+    """UVIS pixel size equivalency"""
+    return pixel_scale(uvis_pxlscl)
+
 
 def load_filter():
     flist = QTable(ascii.read(filter_table))
