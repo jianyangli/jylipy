@@ -1,5 +1,7 @@
-from .core import Image
-from .apext import fits
+import astropy.units as u
+
+from ..core import Image
+from ..apext import fits
 
 
 class HSTImage(Image):
@@ -38,3 +40,12 @@ class HSTImage(Image):
             for k in obj.records:
                 self.__dict__[k] = copy(getattr(obj, k))
 
+
+@u.quantity_input(ifov=u.arcsec/u.pix)
+def pixel_scale(ifov):
+    """Equivalencies to convert between number of pixels and angular scales"""
+    equiv = []
+    equiv.append([u.pix, u.arcsec,
+                  lambda pix: ifov.value * pix,
+                  lambda scl: scl / ifov.value])
+    return equiv

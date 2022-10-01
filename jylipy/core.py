@@ -20,6 +20,7 @@ from .saoimage import getds9
 from .apext import *
 import contextlib
 import astropy.units as u
+import spiceypy as spice
 
 class jylipyDeprecationWarning(DeprecationWarning):
     pass
@@ -1004,7 +1005,7 @@ def syncsynd(comet, utc, beta, dt, observer='Earth', frame='J2000', kernel=None,
 
  v1.0.0 : JYL @PSI, 6/9/2014
     '''
-
+    from .vector import xyz2sph
     if beta.max() > 1:
         raise ValueError('beta > 1 cannot be calculated.')
 
