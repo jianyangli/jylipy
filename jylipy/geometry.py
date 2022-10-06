@@ -4,7 +4,7 @@ solar system objects.
 import spiceypy as spice
 import numpy as np
 from .core import *
-from .apext import Table, Column
+from astropy.table import Table, Column, QTable
 from numpy.linalg import norm
 from .vector import *
 
@@ -196,19 +196,23 @@ def subcoord(time, target, observer='earth', bodyframe=None, saveto=None, planet
                 poleinc.append(np.nan)
 
     if kp is None:
-        tbl = Table((time, rh, delta, phase, tgtra, tgtdec), names='Time rh Range Phase RA Dec'.split())
+        tbl = QTable((time, rh, delta, phase, tgtra, tgtdec),
+                     names=['Time', 'rh', 'Range', 'Phase', 'RA', 'Dec'],
+                     units=[None, 'au', 'au', 'deg', 'deg', 'deg'])
     else:
-        tbl = Table((time, rh, delta, phase, tgtra, tgtdec, solat, solon, sslat, sslon, polepa, poleinc, sunpa, suninc), names='Time rh Range Phase RA Dec SOLat SOLon SSLat SSLon PolePA PoleInc SunPA SunInc'.split())
+        tbl = QTable((time, rh, delta, phase, tgtra, tgtdec, solat, solon,
+                      sslat, sslon, polepa, poleinc, sunpa, suninc),
+                     names=['Time', 'rh', 'Range', 'Phase', 'RA', 'Dec',
+                            'SOLat', 'SOLon', 'SSLat', 'SSLon', 'PolePA',
+                            'PoleInc', 'SunPA', 'SunInc'],
+                     units=[None, 'au', 'au', 'deg', 'deg', 'deg', 'deg', 'deg',
+                            'deg', 'deg', 'deg', 'deg', 'deg', 'deg'])
 
     for c in tbl.colnames[1:]:
         tbl[c].format='%.2f'
-        tbl[c].unit = units.deg
     tbl['Time'].format='%s'
-    tbl['Time'].unit=None
     tbl['rh'].format = '%.4f'
-    tbl['rh'].unit = units.au
     tbl['Range'].format = '%.4f'
-    tbl['Range'].unit = units.au
     if saveto is not None:
         tbl.write(saveto)
 
@@ -278,7 +282,12 @@ def obsgeom(time, target, observer='earth', frame=None, saveto=None):
     rh *= units.km.to('au')
     delta *= units.km.to('au')
 
-    tbl = Table([tstr, ra, dec, rh, delta, phase, selon, sunpa, suninc, velpa, velinc], names='utc ra dec rh range phase selong sunpa sunalt velpa velalt'.split())
+    tbl = QTable([tstr, ra, dec, rh, delta, phase, selon, sunpa, suninc,
+                  velpa, velinc],
+                 names=['utc', 'ra', 'dec', 'rh', 'range', 'phase',
+                        'selong', 'sunpa', 'sunalt', 'velpa', 'velalt'],
+                 units=[None, 'deg', 'deg', 'au', 'au', 'deg', 'deg',
+                        'deg', 'deg', 'deg', 'deg'])
     if frame is not None:
         tbl.add_column(Column(norpa, name='norpa'))
 
