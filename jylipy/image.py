@@ -9,6 +9,7 @@ import warnings
 import numpy as np
 import os
 from astropy.io import fits, ascii
+import astropy.units as u
 from astropy import nddata, table, stats
 from photutils.centroids import centroid_2dg, centroid_com
 from .saoimage import getds9, CircularRegion, CrossPointRegion, TextRegion, \
@@ -850,10 +851,11 @@ class CollectFITSHeaderInfo(ImageSet):
     """
     def __init__(self, *args, fields=None, **kwargs):
         """
-        fields : array like of (str, int or str)
-            Each element in the array specify the FITS header keyword to be
-            collected, and the extension number or name that contain this
-            keyword in the header.
+        fields : array like of (str, int or str) or (str, int or str, str)
+            For each line in the array:
+                str : FITS header keyword to be collected
+                int or str : FITS extension for this keyword
+                str : If exist, the unit of the value
         """
         if 'loader' in kwargs.keys():
             warnings.warn("`loader` keyword is ignored.  Only FITS files "
@@ -877,10 +879,20 @@ class CollectFITSHeaderInfo(ImageSet):
             setattr(self, k, [])
         for i in range(self._size):
             with fits.open(self._1d['file'][i]) as f_:
-                for k, e in self.fields:
-                    getattr(self, '_'+k).append(f_[e].header[k])
+                for line in self.fields:
+                    k = line[0]
+                    e = line[1]
+                    v = f_[e].header[k]
+                    if len(line) > 2:
+                        v = v * u.Unit(line[2])
+                    getattr(self, '_'+k).append(v)
         for k in keys:
-            setattr(self, k, np.array(getattr(self, k)))
+            v = getattr(self, k)
+            if hasattr(v[0], 'unit'):
+                v = u.Quantity(v)
+            else:
+                v = np.array(v)
+            setattr(self, k, v)
         self._generate_flat_views()
 
 
