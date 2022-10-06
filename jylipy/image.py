@@ -195,7 +195,10 @@ class ImageSet():
             cols.append(table.Column(self._1d[k], name=k.strip('_')))
         if self.file is not None:
             cols.insert(0, table.Column(self._1d['file'], name='file'))
-        out = table.Table(cols)
+        if all([getattr(c, 'unit', None) is None for c in cols]):
+            out = table.Table(cols)
+        else:
+            out = table.QTable(cols)
         return out
 
     def write(self, outfile, format=None, save_images=False, **kwargs):
@@ -244,7 +247,7 @@ class ImageSet():
             ext = os.path.splitext(outfile)[1].lower()
             if ext in ['.fits', '.fit']:
                 format = 'fits'
-            elif ext in ['.csv', '.tab']:
+            elif ext in ['.csv', '.tab', '.ecsv']:
                 format = 'ascii'
         if format == 'ascii':
             out.write(outfile, **kwargs)
