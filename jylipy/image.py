@@ -416,7 +416,9 @@ class Centroid(ImageSet):
         self._1d['_xc'] = self._xc.reshape(-1)
         self._status = np.zeros(self._shape, dtype=bool)
         self._1d['_status'] = self._status.reshape(-1)
-        self.attr.extend(['_xc', '_yc', '_status'])
+        for k in ['_xc', '_yc', '_status']:
+            if k not in self.attr:
+                self.attr.append(k)
 
     @property
     def center(self):
@@ -922,11 +924,13 @@ class Background(ImageSet):
                     if method == 'median':
                         self._1d['_background'+regstr][i] = median
                         self._1d['_background_error'+regstr][i] = \
-                                    np.sqrt(stddev**2 + median*gain[i])
+                                    np.sqrt(stddev**2 +
+                                            np.clip(median*gain[i], 0, None))
                     elif method == 'mean':
                         self._1d['_background'+regstr][i] = mean
                         self._1d['_background_error'+regstr][i] = \
-                                    np.sqrt(stddev**2 + mean*gain[i])
+                                    np.sqrt(stddev**2 +
+                                            np.clip(mean*gain[i], 0, None))
                     elif method == 'gaussian':
                         subim = subim.data[~subim.mask]
                         hist, bin = np.histogram(subim, bins=100,
@@ -936,7 +940,8 @@ class Background(ImageSet):
                         par = gaussfit(x, hist, par0=par0)[0]
                         self._1d['_background'+regstr][i] = par[1]
                         self._1d['_background_error'+regstr][i] = \
-                                    np.sqrt(par[2]**2 + par[1]*gain[i])
+                                    np.sqrt(par[2]**2 +
+                                            np.clip(par[1]*gain[i], 0, None))
                 else:
                     # skip invalid region
                     warnings.warn("invalide region skipped:\n  Image {}, "
