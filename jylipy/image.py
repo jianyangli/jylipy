@@ -7,8 +7,10 @@ __all__ = ['Centroid', 'ImageSet', 'Background', 'CollectFITSHeaderInfo',
 
 import warnings
 import numpy as np
+from scipy import ndimage
 import os
 from astropy.io import fits, ascii
+import astropy.units as u
 from astropy import nddata, table, stats
 from photutils.centroids import centroid_2dg, centroid_com
 from .saoimage import getds9, CircularRegion, CrossPointRegion, TextRegion, \
@@ -135,6 +137,8 @@ class ImageSet():
     def _load_image(self, i):
         """Load the ith image in flattened file name list
         """
+        if self.image is not None and self._1d['image'][i] is not None:
+            return
         if self.file is None:
             raise ValueError('no input file specified')
         if self.image is None:
@@ -188,13 +192,24 @@ class ImageSet():
             _index = np.r_[index]
         return _index
 
+    @property
+    def shape(self):
+        return self._shape
+
+    @property
+    def size(self):
+        return self._size
+
     def to_table(self):
         cols = []
         for k in self.attr:
             cols.append(table.Column(self._1d[k], name=k.strip('_')))
         if self.file is not None:
             cols.insert(0, table.Column(self._1d['file'], name='file'))
-        out = table.Table(cols)
+        if all([getattr(c, 'unit', None) is None for c in cols]):
+            out = table.Table(cols)
+        else:
+            out = table.QTable(cols)
         return out
 
     def write(self, outfile, format=None, save_images=False, **kwargs):
@@ -243,7 +258,7 @@ class ImageSet():
             ext = os.path.splitext(outfile)[1].lower()
             if ext in ['.fits', '.fit']:
                 format = 'fits'
-            elif ext in ['.csv', '.tab']:
+            elif ext in ['.csv', '.tab', '.ecsv']:
                 format = 'ascii'
         if format == 'ascii':
             out.write(outfile, **kwargs)
@@ -389,14 +404,34 @@ class Centroid(ImageSet):
             or images.
         """
         kwargs['box'] = box
+        center = kwargs.pop('center', None)
         super().__init__(*args, **kwargs)
         # preset other attributes
-        self.center = np.zeros(self._shape + (2,))
+        if not hasattr(self, '_yc') or not hasattr(self, '_xc'):
+            if center is not None:
+                self.center = center
+            else:
+                self.center = np.zeros(self._shape + (2,))
+        self._1d['_yc'] = self._yc.reshape(-1)
+        self._1d['_xc'] = self._xc.reshape(-1)
         self._status = np.zeros(self._shape, dtype=bool)
-        self._1d['_yc'] = self.center[..., 0].reshape(-1)
-        self._1d['_xc'] = self.center[..., 1].reshape(-1)
         self._1d['_status'] = self._status.reshape(-1)
-        self.attr.extend(['_xc', '_yc', '_status'])
+        for k in ['_xc', '_yc', '_status']:
+            if k not in self.attr:
+                self.attr.append(k)
+
+    @property
+    def center(self):
+        if hasattr(self, '_xc') and hasattr(self, '_yc'):
+            return np.stack([self._yc, self._xc], axis=self._yc.ndim)
+        else:
+            return None
+
+    @center.setter
+    def center(self, v):
+        v = np.asarray(v)
+        setattr(self, '_yc', v[..., 0])
+        setattr(self, '_xc', v[..., 1])
 
     def centroiding(self, ds9=None, newframe=False, refine=True, box=5,
                     resume=True, verbose=True):
@@ -568,6 +603,125 @@ class Centroid(ImageSet):
                     color='white', font='helvetica 15 bold roman')
             RegionList([r, c, t]).show(ds9=ds9)
 
+
+class Stack(Centroid):
+    """Stack images"""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if '_rotation' not in self.attr:
+            setattr(self, '_rotation', np.zeros(self.size))
+            self._1d['_rotation'] = getattr(self, '_rotation').reshape(-1)
+
+    @staticmethod
+    def _int_shift(im, shift, cval=np.nan):
+        """Shift an array by integer elements"""
+        out = im.copy()
+        if im.ndim > 1 and not hasattr(shift, '__iter__'):
+            shift = np.repeat(shift, im.ndim)
+        for axis in range(im.ndim):
+            out = np.moveaxis(out, axis, 0)
+            temp = out.copy()
+            if shift[axis] > 0:
+                out[:shift[axis]] = cval
+                out[shift[axis]:] = temp[:-shift[axis]]
+            elif shift[axis] < 0:
+                out[shift[axis]:] = cval
+                out[:shift[axis]] = temp[-shift[axis]:]
+            out = np.moveaxis(out, 0, axis)
+        return out
+
+    def stack(self, shape=None, cval=np.nan, order=1, method='mean'):
+        """Stack images
+
+        Parameters
+        ----------
+        shape : sequence of int, optional
+            The shape of stacked image.
+        cval : float, optional
+            Fill value
+        order : int between 1 and 5, optional
+            Order of spline interpolation in shift and rotation
+        method : ['mean', 'median'], optional
+            Method of stacking
+        """
+        for i in range(self.size):
+            self._load_image(i)
+
+        # intial set up
+        # default shape and center of output
+        shapes = np.array([x.shape for x in self._1d['image']])
+        ys = np.max([self._1d['_yc'], shapes[:, 0] - self._1d['_yc']])
+        xs = np.max([self._1d['_xc'], shapes[:, 1] - self._1d['_xc']])
+        center = np.ceil([ys, xs]).astype(int)
+        maxshape = center * 2 + 1  # make sure they are odd numbers
+        # integer center of original images
+        int_yc = np.round(self._1d['_yc']).astype(int)
+        int_xc = np.round(self._1d['_xc']).astype(int)
+        # fractional shift to move the image center to the center of pixel
+        frac_yc = int_yc - self._1d['_yc']
+        frac_xc = int_xc - self._1d['_xc']
+
+        # process each image
+        ims = []
+        for i in range(self.size):
+            # shift center to pixel center
+            self._load_image(i)
+            im = ndimage.shift(self._1d['image'][i],
+                               [frac_yc[i], frac_xc[i]], order=order)
+            # pad to shape
+            padding = []
+            for d in maxshape - im.shape:
+                if d & 0x1:
+                    # if odd
+                    padding.append([d // 2, d // 2 + 1])
+                else:
+                    # if even
+                    padding.append([d // 2, d // 2])
+            im = np.pad(im, padding, constant_values=cval)
+            # center image
+            dy = center[0] - (int_yc[i] + padding[0][0])
+            dx = center[1] - (int_xc[i] + padding[1][0])
+            im = self._int_shift(im, [dy, dx])
+            # rotate image if necessary
+            if not np.isclose(self._1d['_rotation'][i], 0):
+                im = ndimage.rotate(im, self._1d['_rotation'][i],
+                                    order=order, cval=cval,
+                                    prefilter=False, reshape=False)
+            ims.append(im)
+        self.image_cube = np.array(ims)
+
+        # stack images
+        if method == 'mean':
+            stack = np.nanmean(self.image_cube, axis=0)
+        elif method == 'median':
+            stack = np.nanmedian(self.image_cube, axis=0)
+        else:
+            raise ValueError('Unknown stacking method {}'.format(method))
+
+        # final adjustment of size
+        if shape is not None:
+            ds = np.array(shape) - stack.shape
+            zero_padding = [[0, 0]] * (len(shape) - 1)
+            for i, w in enumerate(ds):
+                stack = np.moveaxis(stack, i, 0)
+                w2 = abs(w // 2)
+                if w < 0:
+                    # trim
+                    if w & 0x1:
+                        stack = stack[w2:-w2+1]  # odd
+                    else:
+                        stack = stack[w2:-w2]  # even
+                else:
+                    # pad
+                    if w & 0x1:
+                        stack = np.pad(stack, [[w2, w2+1]] + zero_padding,
+                                       constant_values=cval)
+                    else:
+                        stack = np.pad(stack, [[w2, w2]] + zero_padding,
+                                       constant_values=cval)
+                stack = np.moveaxis(stack, 0, i)
+        self.image_stacked = stack
 
 class Background(ImageSet):
     """Image background
@@ -770,11 +924,13 @@ class Background(ImageSet):
                     if method == 'median':
                         self._1d['_background'+regstr][i] = median
                         self._1d['_background_error'+regstr][i] = \
-                                    np.sqrt(stddev**2 + median*gain[i])
+                                    np.sqrt(stddev**2 +
+                                            np.clip(median*gain[i], 0, None))
                     elif method == 'mean':
                         self._1d['_background'+regstr][i] = mean
                         self._1d['_background_error'+regstr][i] = \
-                                    np.sqrt(stddev**2 + mean*gain[i])
+                                    np.sqrt(stddev**2 +
+                                            np.clip(mean*gain[i], 0, None))
                     elif method == 'gaussian':
                         subim = subim.data[~subim.mask]
                         hist, bin = np.histogram(subim, bins=100,
@@ -784,7 +940,8 @@ class Background(ImageSet):
                         par = gaussfit(x, hist, par0=par0)[0]
                         self._1d['_background'+regstr][i] = par[1]
                         self._1d['_background_error'+regstr][i] = \
-                                    np.sqrt(par[2]**2 + par[1]*gain[i])
+                                    np.sqrt(par[2]**2 +
+                                            np.clip(par[1]*gain[i], 0, None))
                 else:
                     # skip invalid region
                     warnings.warn("invalide region skipped:\n  Image {}, "
@@ -850,10 +1007,11 @@ class CollectFITSHeaderInfo(ImageSet):
     """
     def __init__(self, *args, fields=None, **kwargs):
         """
-        fields : array like of (str, int or str)
-            Each element in the array specify the FITS header keyword to be
-            collected, and the extension number or name that contain this
-            keyword in the header.
+        fields : array like of (str, int or str) or (str, int or str, str)
+            For each line in the array:
+                str : FITS header keyword to be collected
+                int or str : FITS extension for this keyword
+                str : If exist, the unit of the value
         """
         if 'loader' in kwargs.keys():
             warnings.warn("`loader` keyword is ignored.  Only FITS files "
@@ -877,10 +1035,20 @@ class CollectFITSHeaderInfo(ImageSet):
             setattr(self, k, [])
         for i in range(self._size):
             with fits.open(self._1d['file'][i]) as f_:
-                for k, e in self.fields:
-                    getattr(self, '_'+k).append(f_[e].header[k])
+                for line in self.fields:
+                    k = line[0]
+                    e = line[1]
+                    v = f_[e].header[k]
+                    if len(line) > 2:
+                        v = v * u.Unit(line[2])
+                    getattr(self, '_'+k).append(v)
         for k in keys:
-            setattr(self, k, np.array(getattr(self, k)))
+            v = getattr(self, k)
+            if hasattr(v[0], 'unit'):
+                v = u.Quantity(v)
+            else:
+                v = np.array(v)
+            setattr(self, k, v)
         self._generate_flat_views()
 
 
