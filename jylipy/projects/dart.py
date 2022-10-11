@@ -1,6 +1,10 @@
-import numpy as np
-import astropy.units as u
-import astropy.constants as c
+import os, numpy as np, astropy.units as u, astropy.constants as const
+from astropy.time import Time
+from sbpy.bib import cite
+import spiceypy as spice
+import matplotlib.pyplot as plt
+from ..geometry import load_generic_kernels
+from ..core import syncsynd
 
 
 # crater size model scaling clases
@@ -57,6 +61,7 @@ class ScalingLaw():
     """Impact scaling law base class
     """
 
+    @cite({'method': '2011Icar..211..856H'})
     def __init__(self, mu, nu, H1=None, H2=None, impactor=None, target=None, \
                                p=None, n1=None, n2=None, C1=None, k=None, \
                                regime=None):
@@ -328,8 +333,8 @@ def ejecta_g(r):
     Gravity field at distance `r` from Dimorphos's surface in the direction
     along the line connecting both objects and away from Dimorphos.
     """
-    gp = (c.G * didy.Mp / (r+didy.dist+didy.Ds/2)**2).decompose()
-    gs = (c.G * didy.Ms / (r+didy.Ds/2)**2).decompose()
+    gp = (const.G * didy.Mp / (r+didy.dist+didy.Ds/2)**2).decompose()
+    gs = (const.G * didy.Ms / (r+didy.Ds/2)**2).decompose()
     return -(gp+gs).decompose()
 
 @u.quantity_input(r=u.m)
@@ -338,8 +343,8 @@ def ejecta_vesc(r):
     Escape velocity at distance `r` from Dimorphos's surface in the direction
     along the line connecting both objects away from Dimorphos.
     """
-    Ep = c.G * didy.Mp / (r+didy.dist+didy.Ds/2)
-    Es = c.G * didy.Ms / (r+didy.Ds/2)
+    Ep = const.G * didy.Mp / (r+didy.dist+didy.Ds/2)
+    Es = const.G * didy.Ms / (r+didy.Ds/2)
     return np.sqrt(2*(Ep+Es)).decompose()
 
 
@@ -407,7 +412,7 @@ class DARTEjectaMotion(MotionInGravity1DSolver, Didymos):
                 v0 = self.r0[1]
                 import astropy.constants as c
                 Ds2 = self.Ds/2
-                V = v0*v0/(2*c.G)
+                V = v0*v0/(2*const.G)
                 E0 = self.Mp/(self.dist+Ds2)+self.Ms/Ds2
                 a = V-E0
                 b = (V-E0)*(self.dist+2*Ds2) + self.Mp + self.Ms
@@ -448,3 +453,206 @@ class DARTEjectaMotion(MotionInGravity1DSolver, Didymos):
         ww = t<self.tmax
         r[ww], v[ww] = self.solve(t[ww])
         return [r, v]
+
+
+didy_spk = os.path.join('..', '..', 'spice', 'spk',
+                        'didymos_19500101-20501231_20220926_horizons.bsp')
+
+
+class Beta(u.SpecificTypeQuantity):
+    """Solar radiation pressure beta.
+    """
+
+    _equivalent_unit = u.dimensionless_unscaled
+    _include_easy_conversion_members = False
+
+    @classmethod
+    @cite({'method': '1979Icar...40....1B'})
+    @u.quantity_input(r=u.m, rho=u.kg/u.m**3)
+    def from_radius(cls, r, rho=1000*u.kg/u.m**3, Qpr=1):
+        """Initialize from particle radius
+
+        r : `astropy.units.Quantity`
+            Particle radius
+        rho : `astropy.units.Quantity`
+            Particle density
+        Qpr : float
+            Solar radiation pressure coefficient,
+                Qpr = Q_abs + Q_sca * (1 - <cos(alpha)>)
+        """
+        return cls(5.7e-5 * Qpr / (rho.to_value(u.g/u.cm**3) *
+                    r.to_value('cm')), u.dimensionless_unscaled)
+
+    @cite({'method': '1979Icar...40....1B'})
+    @u.quantity_input(rho=u.kg/u.m**3)
+    def radius(self, rho=1000*u.kg/u.m**3, Qpr=1):
+        """Radius of spherical particle corresponding to the beta
+
+        rho : `astropy.units.Quantity`
+            Density of particles
+        Qpr : float
+            Solar radiation pressure coefficient,
+                Qpr = Q_abs + Q_sca * (1 - <cos(alpha)>)
+        """
+        return u.Quantity(5.7e-5 * Qpr / (rho.to_value(u.g/u.cm**3)
+                    * self.value), u.cm)
+
+    @staticmethod
+    @u.quantity_input()
+    def acc_solar(rh: u.au) -> u.m / u.s**2:
+        """Solar gravity acceleration
+
+        Positive means acceleration towards the Sun.
+
+        rh : `astropy.units.Quantity`
+            Heliocentric distance
+        """
+        return (const.G * const.M_sun / rh**2)
+
+    @u.quantity_input()
+    def acc_srp(self, rh: u.au) -> u.m / u.s**2:
+        """Solar radiation pressure acceleration of particles
+
+        Positive value means acceleration towards the Sun.
+
+        rh : `astropy.units.Quantity`
+            Heliocentric distance
+        """
+        return -self.acc_solar(rh) * self
+
+    @u.quantity_input()
+    def acc(self, rh: u.au) -> u.m / u.s**2:
+        """Total acceleration of particle
+
+        Positive value means acceleration towards the Sun.
+
+        rh : `astropy.units.Quantity`
+            Heiocentric distance
+        """
+        return self.acc_solar(rh) * (1 - self)
+
+
+class DidySynchroneSyndyne():
+    """Synchron syndyne model for DART ejecta"""
+
+    target = '2065803'   # Didymos
+
+    def __init__(self, impact_utc='2022-09-26T23:14:24.183', spk=didy_spk):
+        """
+        impact_utc : str, optional
+            DART impact time in UTC.
+        spk : str, optional
+            SPK of Didymos.
+        """
+        self.impact_time = Time(impact_utc)
+        self.spk = spk
+
+    def _load_spice_kernels(self):
+        load_generic_kernels()
+        spice.furnsh(self.spk)
+
+    def _unload_spice_kernels(self):
+        spice.kclear()
+
+    def __call__(self, obs_utc, beta, nt=100):
+        """Calculate synchron and syndynes
+
+        obs_utc : str
+            Observation time in UTC
+        beta : float array
+            Beta of particles to be calculated
+        nt : float, optinal
+            Number of time steps in the calculation
+        """
+        self.obs_time = Time(obs_utc)
+        self.beta = beta
+        self.dt = (self.obs_time - self.impact_time).to_value('d') * \
+                    np.linspace(0, 1, nt)
+        self._load_spice_kernels()
+        self.syncsynd, self.target_pos = syncsynd(self.target,
+                                    self.obs_time.isot, beta, self.dt)
+        self._unload_spice_kernels()
+        return self.syncsynd, self.target_pos
+
+    @property
+    def relative_syncsynd(self):
+        """Synchrones and syndynes coordinates relative to target"""
+        return self.syncsynd - self.target_pos
+
+    def plot(self, beta_sample=None, time_sample=None, ax=None, axis_scale=1,
+             axis_offset=0, **kwargs):
+        """Plot syncrhones and syndynes
+
+        beta_sample : int, slice, list, optional
+            The index of beta samples to be plotted.  Default is to plot all.
+        time_sample : int, slice, list, optional
+            The index of time samples to be plotted.  Default is to plot all.
+        ax : `matplotlib.pyplot.axis`
+            Axis to plot
+        axis_scale : float or [x, y]
+            Scaling factor(s) for coordinates.  Can be used to convert the
+            default unit of coordinate in RA, Dec to other units, such as
+            arcsec or km
+        axis_offset : float or [x, y]
+            Offset(s) of coordinates.  Can be used to shift the coordinate of
+            synchrones and syndynes
+        **kwargs : keyword parameters for `matplotlib.pyplot.plot`
+        """
+        if beta_sample is None and time_sample is None:
+            return None
+
+        s = self.relative_syncsynd * axis_scale + axis_offset
+
+        if beta_sample == 'all':
+            beta_sample = range(len(self.beta))
+        if time_sample == 'all':
+            time_sample = range(len(self.dt))
+
+        if ax is None:
+            fig = plt.figure()
+            ax = fig.add_subplot()
+
+        if beta_sample is not None:
+            for i in beta_sample:
+                ax.plot(s[i, :, 0], s[i, :, 1], **kwargs)
+        if time_sample is not None:
+            for i in time_sample:
+                ax.plot(s[:, i, 0], s[:, i, 1], **kwargs)
+
+        return ax
+
+    def plot_syndyne(self, beta_sample='all', **kwargs):
+        """Plot syncrhones and syndynes
+
+        beta_samples : int, slice, list, optional
+            The index of beta samples to be plotted.  Default is to plot all.
+        ax : `matplotlib.pyplot.axis`
+            Axis to plot
+        axis_scale : float
+            Scaling factor for coordinate.  Can be used to convert the
+            default unit of coordinate in RA, Dec to other units, such as
+            arcsec or km
+        axis_offset : float
+            Offset of coordinate.  Can be used to shift the coordinate of
+            synchrones and syndynes
+        **kwargs : keyword parameters for `matplotlib.pyplot.plot`
+        """
+        return self.plot(beta_sample=beta_sample, **kwargs)
+
+    def plot_synchrone(self, time_sample='all', **kwargs):
+        """Plot syncrhones and syndynes
+
+        time_samples : int, slice, list, optional
+            The index of time samples to be plotted.  Default is to plot all.
+        ax : `matplotlib.pyplot.axis`
+            Axis to plot
+        axis_scale : float
+            Scaling factor for coordinate.  Can be used to convert the
+            default unit of coordinate in RA, Dec to other units, such as
+            arcsec or km
+        axis_offset : float
+            Offset of coordinate.  Can be used to shift the coordinate of
+            synchrones and syndynes
+        **kwargs : keyword parameters for `matplotlib.pyplot.plot`
+        """
+        return self.plot(time_sample=time_sample, **kwargs)
