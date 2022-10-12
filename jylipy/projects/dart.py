@@ -536,16 +536,11 @@ class DidySynchroneSyndyne():
     """Synchron syndyne model for DART ejecta"""
 
     target = '2065803'   # Didymos
+    impact_utc = '2022-09-26T23:14:24.183'  # impact time
+    spk = didy_spk  # Didymos SPK
 
-    def __init__(self, impact_utc='2022-09-26T23:14:24.183', spk=didy_spk):
-        """
-        impact_utc : str, optional
-            DART impact time in UTC.
-        spk : str, optional
-            SPK of Didymos.
-        """
-        self.impact_time = Time(impact_utc)
-        self.spk = spk
+    def __init__(self):
+        self.impact_time = Time(self.impact_utc)
 
     def _load_spice_kernels(self):
         load_generic_kernels()
