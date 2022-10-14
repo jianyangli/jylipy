@@ -1,5 +1,6 @@
 import os, numpy as np, astropy.units as u, astropy.constants as const
 from astropy.time import Time
+from astropy.modeling import Fittable2DModel, Parameter
 from sbpy.bib import cite
 import spiceypy as spice
 import matplotlib.pyplot as plt
@@ -655,3 +656,59 @@ class DidySynchroneSyndyne():
         **kwargs : keyword parameters for `matplotlib.pyplot.plot`
         """
         return self.plot(time_sample=time_sample, **kwargs)
+
+
+class DistanceModel(Fittable2DModel):
+    """Particle motion model under SRP using linear approximation.
+
+    In close distance to the parent body, and within a small duration of
+    time compared to the parent body orbital period, the distance that
+    a particle moves under SRP for a specific beta and at a specific time
+    is approximately linear to beta, and linear to time squared.
+
+        Distance = D0 * beta ** beta_exponential * time ** time_exponential
+
+    Under the approximation of constant acceleration motion along a straight
+    line, the exponential of beta is 1, and the exponential of time is to 2.
+
+    Model Parameters
+    ----------------
+    d0 : Unit distance, the distance of a particle with beta=1 traveling
+         in 1 time unit
+    beta_exp : beta exponential, should be close to 1
+    time_exp : time exponential, should be close to 2
+
+    The model is dimensionless as defined.  When use it, the unit of d0,
+    beta, and time should be consisent with what are used to fit the model.
+    """
+
+    d0 = Parameter(name='Unit Distance', default=4)
+    beta_exp = Parameter(name='Beta Slope', default=1)
+    time_exp = Parameter(name='Time Slope', default=2)
+
+    @staticmethod
+    def evaluate(beta, time, d0, beta_exp, time_exp):
+        return d0 * beta**beta_exp * time**time_exp
+
+    @staticmethod
+    def fit_deriv(beta, time, d0, beta_exp, time_exp):
+        v = DistanceModel.evaluate(beta, time, d0, beta_exp, time_exp)
+        dd0 = v / d0
+        dbe = v * np.log(beta)
+        dte = v * np.log(time)
+        return [dd0, dbe, dte]
+
+
+class BetaModel(DistanceModel):
+    """Inverse of `DistanceModel`.
+
+    This model takes time and distance as input, and calculates beta.
+
+    NOTE: fit_deriv is not set up.  This model CANNOT be used for modeling
+    fitting.
+
+    """
+
+    @staticmethod
+    def evaluate(time, dist, d0, beta_exp, time_exp):
+        return (dist / (d0 * time**time_exp))**(1 / beta_exp)
