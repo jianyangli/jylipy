@@ -466,6 +466,10 @@ class Beta(u.SpecificTypeQuantity):
     _equivalent_unit = u.dimensionless_unscaled
     _include_easy_conversion_members = False
 
+    def __new__(cls, value, unit=None, **kwargs):
+        unit = kwargs.pop('unit', u.dimensionless_unscaled)
+        return super().__new__(cls, value, unit=unit, **kwargs)
+
     @classmethod
     @cite({'method': '1979Icar...40....1B'})
     @u.quantity_input(r=u.m, rho=u.kg/u.m**3)
