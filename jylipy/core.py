@@ -1025,7 +1025,7 @@ def syncsynd(comet, utc, beta, dt, observer='Earth', frame='J2000', kernel=None,
     m = np.array(spice.pxform('eclipj2000', frame, et-lt_c))
     # initial velocity
     if vinit is not None:
-        vinit = np.concatenate((np.zeros(3),m.T.dot(vinit)))
+        vinit = np.concatenate((np.zeros(3),vinit))
     else:
         vinit = np.zeros(6)
 
