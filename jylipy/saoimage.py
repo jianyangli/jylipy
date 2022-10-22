@@ -49,7 +49,7 @@ class Region(object):
                 format(type(self),len(self.parname)+1,len(args)+1))
         self.frame = kwargs.pop('frame', None)
         self.ds9 = kwargs.pop('ds9', None)
-        self.zerobased = kwargs.pop('zerobased', True)
+        self._zerobased = kwargs.pop('zerobased', True)
         for i in range(len(args)):
             self.__dict__[self.parname[i]] = args[i]
         if self._shape is None:
@@ -59,6 +59,19 @@ class Region(object):
         self.specs['width'] = kwargs.pop('width', 1)
         for k, v in kwargs.items():
             self.specs[k] = v
+
+    @property
+    def zerobased(self):
+        return self._zerobased
+
+    @zerobased.setter
+    def zerobased(self, v):
+        if self.zerobased ^ v:
+            self._zerobased = v
+            offset = -1 if v else 1
+            for k in self.parname:
+                if k[0] in ['x', 'y']:
+                    setattr(self, k, getattr(self, k) + offset)
 
     @property
     def shape(self):
@@ -96,7 +109,7 @@ class Region(object):
         for k in self.parname:
             par.append(self.__dict__[k])
             if self.zerobased:
-                if k in ['x','y']:
+                if k[0] in ['x', 'y']:
                     par[-1] += 1
         propstr = ''
         for k, v in self.specs.items():
@@ -191,6 +204,106 @@ class ProjectionRegion(Region):
     _shape = 'projection'
 
 
+class LineRegion(Region):
+    parname = ('x1', 'y1', 'x2', 'y2')
+    _shape = 'line'
+
+    @property
+    def angle(self):
+        """
+        Angle of line with respect to +x axis towards +y axis in degrees
+        """
+        return np.rad2deg(np.arctan2(self.y2 - self.y1, self.x2 - self.x1))
+
+    @property
+    def length(self):
+        """Length of the line segment
+        """
+        return np.sqrt((self.y2 - self.y1)**2 + (self.x2 - self.x1)**2)
+
+    @property
+    def parameters(self):
+        """Parameters of line equation
+
+        Line equation has the form:
+            a * x + b * y + 1 = 0
+
+        Parameters attribute is an array of [a, b]
+        """
+        dy = self.y2 - self.y1
+        dx = self.x2 - self.x1
+        c = dx * self.y1 - dy * self.x1
+        return np.array([dy / c, -dx / c])
+
+    def getx(self, y):
+        """Given a `y`, return an `x` such that (x, y) is on the line
+        """
+        p = self.parameters
+        return (-1 - p[1] * y) / p[0]
+
+    def gety(self, x):
+        """Given an `x`, return a `y` such that (x, y) is on the line
+        """
+        p = self.parameters
+        return (-1 - p[0] * x) / p[1]
+
+    def intersect(self, line):
+        """Return the coordinate (x, y) of the intersection with another line
+
+        Parameters
+        ----------
+        line : LineRegion
+            The line to intersect.
+
+        returns
+        -------
+        [x, y] : 2-element array
+            The coordinate of intersection.  If the two lines are parallel,
+            then return [np.nan, np.nan]
+        """
+        p1 = self.parameters
+        p2 = line.parameters
+        dom = p1[0] * p2[1] - p2[0] * p1[1]
+        if dom == 0:
+            return np.array([np.nan, np.nan])
+        return np.array([(p1[1] - p2[1]) / dom, (p2[0] - p1[0]) / dom])
+
+    def to_vector(self, start=0, **kwargs):
+        """Convert to a VectorRegion
+
+        Parameters
+        ----------
+        start : 0 or 1
+            Start point of the vector.  0 represents (self.x1, self.y1),
+            1 represents (self.x2, self.y2)
+        kwargs : dict
+            Keyword parameters to pass to VectorRegion object
+        Returns
+        -------
+        VectorRegion
+        """
+        if start == 0:
+            x = self.x1
+            y = self.y1
+            angle = self.angle
+        elif start == 1:
+            x = self.x2
+            y = self.y2
+            angle = (self.angle + 180) % 360
+        specs = self.specs
+        keys_to_remove = ['dashlist', 'select', 'line']
+        for k in keys_to_remove:
+            specs.pop(k, None)
+        specs['vector'] = 1
+        zerobased = kwargs.pop('zerobased', self.zerobased)
+        for k, v in kwargs.items():
+            specs[k] = v
+        vect = VectorRegion(x, y, self.length, angle,
+                            zerobased=self.zerobased, **specs)
+        vect.zerobased = zerobased
+        return vect
+
+
 class PointRegion(Region):
     """DS9 point region group"""
     def __init__(self, *args, **kwargs):
@@ -236,6 +349,7 @@ class RegionList(list):
                 'vector': VectorRegion,
                 'text': TextRegion,
                 'projection': ProjectionRegion,
+                'line': LineRegion,
                 'x_point': XPointRegion,
                 'circle_point': CirclePointRegion,
                 'box_point': BoxPointRegion,
@@ -296,16 +410,22 @@ class RegionList(list):
                 par = eval('(' + par)
                 if len(s) > 1:
                     s = s[1].strip()
-                    if s.find('font') == -1:
-                        s = s.split(' ')
-                    else:
+                    if s.find('font') != -1:
                         t = s.split('"')
                         t[0] = t[0].replace('font=', '')
                         s = t[0].strip().split(' ') + t[2].strip().split(' ') + ['font="'+t[1]+'"']
+                    elif s.find('line') != -1:
+                        w = s.find('line')
+                        s = '_'.join([s[:w+6], s[w+7:]])
+                        s = s.split(' ')
+                    else:
+                        s = s.split(' ')
                     for sp in s:
                         #print(sp)
                         k, v = sp.split('=')
                         spec[k] = v
+                    if 'line' in spec:
+                        spec['line'] = ' '.join(spec['line'].split('_'))
                     #if 'text' in spec.keys():
                     #    spec['text'] = spec['text'].strip('{').strip('}')
                 if shape == 'point':
