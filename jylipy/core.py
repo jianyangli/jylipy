@@ -1023,7 +1023,7 @@ def syncsynd(comet, utc, beta, dt, observer='Earth', frame='J2000', kernel=None,
     posobs, lt = spice.spkpos(observer, et-lt_c, frame, 'none', 'sun')
     # initial velocity
     if vinit is not None:
-        vinit = np.concatenate((np.zeros(3),m.T.dot(vinit)))
+        vinit = np.concatenate((np.zeros(3),vinit))
     else:
         vinit = np.zeros(6)
 
