@@ -554,7 +554,7 @@ class DidySynchroneSyndyne():
     def _unload_spice_kernels(self):
         spice.kclear()
 
-    def __call__(self, obs_utc, beta, nt=100):
+    def __call__(self, obs_utc, beta, nt=100, **kwargs):
         """Calculate synchron and syndynes
 
         obs_utc : str
@@ -563,6 +563,7 @@ class DidySynchroneSyndyne():
             Beta of particles to be calculated
         nt : float, optinal
             Number of time steps in the calculation
+        kwargs : optional parameters for `jylipy.syncsynd`
         """
         self.obs_time = Time(obs_utc)
         self.beta = beta
@@ -570,7 +571,7 @@ class DidySynchroneSyndyne():
                     np.linspace(0, 1, nt)
         self._load_spice_kernels()
         self.syncsynd, self.target_pos = syncsynd(self.target,
-                                    self.obs_time.isot, beta, self.dt)
+                                    self.obs_time.isot, beta, self.dt, **kwargs)
         self._unload_spice_kernels()
         return self.syncsynd, self.target_pos
 
@@ -712,3 +713,21 @@ class BetaModel(DistanceModel):
     @staticmethod
     def evaluate(time, dist, d0, beta_exp, time_exp):
         return (dist / (d0 * time**time_exp))**(1 / beta_exp)
+
+
+def mag2xsec(dmag, magerr=None):
+    """Calcluate total cross-section from delta-magnitude
+
+    Assume the dust has the same albedo and phase function as Didymos,
+    the calculation scales from the cross-sectional area of
+    Didymos-Dimorphos system.
+    """
+    didy = Didymos()
+    area_didy = 0.25 * np.pi * (didy.Dp**2 + didy.Ds**2)
+
+    area_dust = (10**(-0.4 * dmag) - 1) * area_didy
+    if magerr is None:
+        return area_dust
+    else:
+        area_dust_err = (10**(-0.4 * magerr) - 1) * area_dust
+        return area_dust, area_dust_err
