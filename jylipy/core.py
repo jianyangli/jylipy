@@ -4180,7 +4180,7 @@ def time_stamp(format=0):
 #class QuantityImage(QuantityMeasurement, Image): pass
 
 
-def imageclean(im, threshold=3., pos=None, box=20, step=None, untouch=None, mask=None):
+def imageclean(im, threshold=5., pos=None, box=20, step=None, untouch=None, mask=None):
     '''
  Clean an image by filling the pixels outside of threshold with the
  average value inside a box.
@@ -4201,7 +4201,7 @@ def imageclean(im, threshold=3., pos=None, box=20, step=None, untouch=None, mask
 
  v1.0.0 : 4/29/2015, JYL @PSI
     '''
-
+    from astropy.stats import sigma_clip
     box2 = box//2
     if step is None:
         step = box2
@@ -4219,8 +4219,13 @@ def imageclean(im, threshold=3., pos=None, box=20, step=None, untouch=None, mask
     im1 = im.copy()
     for x,y in pos.T:
         subim = im[y-box2:y+box2,x-box2:x+box2]#*(1-mask[y-box2:y+box2,x-box2:x+box2])
+        if np.all(~np.isfinite(subim)):
+            continue
         submsk = np.zeros_like(subim,dtype=int)
-        m,std = resmean(subim,threshold,std=True)
+        # m,std = resmean(subim,threshold,std=True)
+        clipped = sigma_clip(subim, sigma=threshold)
+        m = np.nanmean(clipped)
+        std = np.nanstd(clipped)
         submsk[abs(subim-m) > std*threshold] = 1
         mask[y-box2:y+box2,x-box2:x+box2] = submsk
         im1[y-box2:y+box2,x-box2:x+box2][submsk==1] = m
