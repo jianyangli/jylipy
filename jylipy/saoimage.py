@@ -136,12 +136,19 @@ class CircularRegion(Region):
                          self.par[0] + self.par[2], \
                          self.par[1] - self.par[2], \
                          self.par[1] + self.par[2]])
+    @property
+    def area(self):
+        return np.pi * self.r**2
 
 
 class EllipseRegion(Region):
     '''DS9 ellipse region class'''
     parname = ('x','y','a','b','angle')
     _shape = 'ellipse'
+
+    @property
+    def area(self):
+        return np.pi * self.a * self.b
 
 
 class BoxRegion(Region):
@@ -180,11 +187,19 @@ class BoxRegion(Region):
         return np.array([c[:, 0].min(), c[:, 0].max(),
                          c[:, 1].min(), c[:, 1].max()])
 
+    @property
+    def area(self):
+        return self.a * self.b
+
 
 class AnnulusRegion(Region):
     '''DS9 annulus region class'''
     parname = ('x', 'y', 'r_in', 'r_out')
     _shape = 'annulus'
+
+    @property
+    def area(self):
+        return np.pi * (self.r_out**2 - self.r_in**2)
 
 
 class VectorRegion(Region):
