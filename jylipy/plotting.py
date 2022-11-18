@@ -106,7 +106,7 @@ def pplot(ax=None, axfs='large', lfs='x-large', tightlayout=True, xlabel=None, y
     plt.setp(ax.patch, lw=2.0)
 
     if hasattr(plt, "tight_layout") and tightlayout:
-        plt.sca(ax)
+        #plt.sca(ax)
         plt.tight_layout()
 
 
