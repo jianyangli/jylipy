@@ -1,12 +1,14 @@
 import os, numpy as np, astropy.units as u, astropy.constants as const
 from astropy.time import Time
 from astropy.modeling import Fittable2DModel, Parameter
+from astropy.io import ascii
 from sbpy.bib import cite
 import spiceypy as spice
 import matplotlib.pyplot as plt
 from ..geometry import load_generic_kernels
 from ..core import syncsynd
-
+from .dart_display import *
+from .dart_photometry import *
 
 # crater size model scaling clases
 
@@ -731,3 +733,45 @@ def mag2xsec(dmag, magerr=None):
     else:
         area_dust_err = (10**(-0.4 * magerr) - 1) * area_dust
         return area_dust, area_dust_err
+
+
+def show_stacked(ds9, info):
+    """Display all long exposure stacked images
+
+    ds9 : DS9
+        DS9 instance to display images
+    info : str
+        Info file for long exposure stacks
+    """
+    info = ascii.read(info)
+    ds9.set('frame delete all')
+    ds9.imdisp([f.replace('flux', 'flux_clean') for f in info['file']])
+    ds9.set('lock scalelimits')
+    ds9.set('lock scale')
+    ds9.set('lock colorbar')
+    ds9.set('lock frame image')
+    ds9.set('scale log')
+    ds9.set('scale limits 0 0.01')
+    ds9.set('cmap cool')
+
+
+def show_stacked_long(ds9,
+    info='/Users/jyli/Work/DART/HSTGO16674/morphology/stacking/info_long.csv'):
+    show_stacked(ds9, info)
+
+
+def show_stacked_short(ds9,
+    info='/Users/jyli/Work/DART/HSTGO16674/morphology/stacking/info_short.csv'):
+    show_stacked(ds9, info)
+
+
+def mean_angle(angles, axis=None):
+    """Calculate the mean of angles"""
+    cos = np.cos(u.Quantity(angles, u.deg))
+    sin = np.sin(u.Quantity(angles, u.deg))
+    out = np.arctan2(sin.mean(axis=axis), cos.mean(axis=axis))
+    if isinstance(angles, u.Quantity):
+        return ((out + 360 * u.deg) % (360 * u.deg)).to(angles.unit)
+    else:
+        return (out.to_value('deg') + 360) % 360
+
