@@ -234,10 +234,13 @@ class BullsEye(RegionList):
                 self.append(TextRegion(center[0] + r * np.cos(np.deg2rad(45)), center[1] + r * np.sin(np.deg2rad(45)), text=lbl, **label_kwargs))
 
 
-def generate_hst_dart_annotations(info, title=None, sun=None, vel=None, dart=None, scalebar=None, xc=1000, yc=1000, display_text=True, time_unit='hour'):
+def generate_hst_dart_annotations(info, title=None, sun=None, vel=None,
+    dart=None, scalebar=None, xc=1000, yc=1000, display_text=True,
+    fontsize=12, time_unit='hour'):
     """Generate annotation array from info table for HST DART images
     
-    Keyword parameters are used to pass position parameters for all annotation items.
+    Keyword parameters are used to pass position parameters for all annotation
+    items.
         title : [dx, dy]
             Image title
         sun : [dx, dy, length]
@@ -250,6 +253,8 @@ def generate_hst_dart_annotations(info, title=None, sun=None, vel=None, dart=Non
             Scale bar.  Length in km.
         display_text : bool
             Display text if `True`
+        fontsize : int
+            Font size for title
         time_unit : str
             Unit of time displayed in the title
         
@@ -262,7 +267,7 @@ def generate_hst_dart_annotations(info, title=None, sun=None, vel=None, dart=Non
             title_text = '{} | T{:+.1f} {}'.format(r['utc-mid'][5:16], dt, time_unit)
             text = [Text, xc, yc, title_text,
                              {'dx': title[0], 'dy': title[1], 'rotate': 0,
-                              'color': 'white', 'font': 'helvetica 12 normal roman'}]
+                              'color': 'white', 'font': 'helvetica {} normal roman'.format(fontsize)}]
         else:
             text = None
         if dart is not None:
