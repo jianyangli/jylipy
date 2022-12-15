@@ -236,7 +236,7 @@ class BullsEye(RegionList):
 
 def generate_hst_dart_annotations(info, title=None, sun=None, vel=None,
     dart=None, scalebar=None, xc=1000, yc=1000, display_text=True,
-    fontsize=12, time_unit='hour'):
+    fontsize=12, time_unit='auto'):
     """Generate annotation array from info table for HST DART images
     
     Keyword parameters are used to pass position parameters for all annotation
@@ -255,16 +255,30 @@ def generate_hst_dart_annotations(info, title=None, sun=None, vel=None,
             Display text if `True`
         fontsize : int
             Font size for title
-        time_unit : str
-            Unit of time displayed in the title
+        time_unit : str, can be ['auto', 'sec', 'min', 'hour', 'day',
+                                 'week', 'month', 'year']
+            Unit of time displayed in the title.  If 'auto', then use the
+            largest unit possible with value > 1.  For example, use hours
+            for time < 24 hours, and days for 24 hours < time < 1 week,
+            and so on.
         
     Default `None` is not to incude the corresponding annotation.
     """
     anno = []
+    units = [u.second, u.minute, u.hour, u.day, u.week, u.year]
+    time_intervals =  u.Quantity([1 * x for x in units])
     for r in info:
         if title is not None:
-            dt = (Time(r['utc-mid']) - Time('2022-09-26T23:15')).to_value(time_unit)
-            title_text = '{} | T{:+.1f} {}'.format(r['utc-mid'][5:16], dt, time_unit)
+            dt = (Time(r['utc-mid']) - Time('2022-09-26T23:15'))
+            if time_unit == 'auto':
+                unit = units[np.where(abs(dt) > time_intervals)[0][-1]]
+                #print(np.where(abs(dt) > time_intervals)[0][-1])
+            else:
+                unit = time_unit
+            #print(unit)
+            dt = dt.to_value(unit)
+            title_text = '{} | T{:+.1f} {}'.format(r['utc-mid'][5:16], dt,
+                                                   unit)
             text = [Text, xc, yc, title_text,
                              {'dx': title[0], 'dy': title[1], 'rotate': 0,
                               'color': 'white', 'font': 'helvetica {} normal roman'.format(fontsize)}]
