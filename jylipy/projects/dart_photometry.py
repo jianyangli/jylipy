@@ -17,6 +17,22 @@ visits = ['0o', '01', '02', '03', '04', '05', '06', '11', '12', '13',
           '14', '15', '16', '17', '18', '21', '22', '23', '24']
 
 
+# uvis2 photcal constants from
+# https://www.stsci.edu/hst/instrumentation/wfc3/data-analysis/photometric-calibration/uvis-photometric-calibration
+phocal = {'filter': 'F350LP',
+          'photplam': 5851.14829 * u.AA,
+          'photbw': 1483.01704 * u.AA,
+          'abmag': 26.936 * u.mag,
+          'vegamag': 26.78 * VEGAmag,
+          'stmag': 27.08 * u.mag,
+          'error': 0.005 * u.mag,
+          'photflam': 5.3469E-20 * u.Unit('erg cm-2 AA-1 electron-1'),
+          'err_photflam': 2.3475E-22 * u.Unit('erg cm-2 AA-1 electron-1')
+         }
+phocal['fluxzpt'] = np.round((2.5 * np.log10(phocal['photflam'].to_value(
+            'J / (m2 um electron)')) + phocal['vegamag'].value) * VEGAmag, 2)
+
+
 class PhotometryError(Exception):
     pass
 
@@ -44,9 +60,9 @@ class Photometry():
     """
     def __init__(self, visits=visits,
                  datapath=os.path.join('..', 'data'),
-                 ctfile='centroid_{}.csv',
-                 bgfile='bg_{}.csv',
-                 aspfile='aspect_{}.ecsv'):
+                 ctfile='meta/centroid_{}.csv',
+                 bgfile='meta/bg_{}.csv',
+                 aspfile='meta/aspect_{}.ecsv'):
 
         self.datapath = datapath
         info = []
@@ -68,7 +84,8 @@ class Photometry():
         self.info = info
         self.fields = []
     
-    def measure(self, aperture=np.linspace(1, 130, 130)):
+    @u.quantity_input(aperture=[u.pix, u.km])
+    def measure(self, aperture=np.linspace(1, 130, 130) * u.pix):
         """Measure aperture photometry
         
         info : astropy.table.Table
@@ -80,8 +97,8 @@ class Photometry():
         Write photometry to self.counts
         Write error to self.ct_err
         """
+        self.aperture = aperture
         apt = aperture
-        self.aperture = apt * u.pix
         pam = PAM()  # pixel area map
         phos = []
         errs = []
@@ -101,6 +118,12 @@ class Photometry():
                 pam_arr = np.pad(pam_arr, [[0, 0], [0, 1]])
             data = im['sci'].data * pam_arr
             err = im['err'].data * pam_arr
+            # process aperture size
+            if aperture.unit.is_equivalent('km'):
+                apt = (aperture / r['range']).to_value('arcsec',
+                            u.dimensionless_angles()) / 0.04
+            else:
+                apt = aperture.value
             # measure photometry
             pho = table.vstack([aperture_photometry(data,
                         CircularAperture([r['xc'], r['yc']], i)) for i in apt])
@@ -116,7 +139,7 @@ class Photometry():
             errs.append(err_arr)
         
         # save results
-        self.info.add_column(Column(max_r, name='max_apt'))
+        self.info.add_column(table.Column(max_r, name='max_apt'))
         self.counts = u.Quantity(phos, u.electron).T
         self.ct_err = u.Quantity(errs, u.electron).T
         self.fields.extend(['counts', 'ct_err'])
@@ -270,6 +293,6 @@ class Photometry():
                 v = getattr(self, k)
                 for i, a in enumerate(self.aperture):
                     colname = '{}_{}{}'.format(k, a.value, a.unit)
-                    out.add_column(Column(v[i], name=colname))
+                    out.add_column(table.Column(v[i], name=colname))
         return out
     
