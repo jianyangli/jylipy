@@ -1258,8 +1258,8 @@ def azavg(im, ext=0, center=None, centroid=False):
         sz = img.shape
         ct = np.asarray(ct)
         rmax = int(np.ceil(np.linalg.norm([np.asarray([0,0])-ct, np.asarray([0,sz[1]-1])-ct, np.asarray([sz[0]-1,0])-ct, np.asarray([sz[0]-1,sz[1]-1])-ct],axis=1).max()/2))
-        azimg = xy2rt(img, center=ct, ramax=rmax, rastep=0.5, azstep=0.5, method='splinef2d')
-        radprof = interp1d(np.linspace(0,rmax,rmax*2+1), np.median(azimg,axis=1), bounds_error=False, fill_value=1)
+        azimg = xy2rt(img, center=ct, ramax=rmax, rastep=0.5, azstep=0.5, method='linear')
+        radprof = interp1d(np.linspace(0,rmax,rmax*2+1), np.nanmedian(azimg,axis=1), bounds_error=False, fill_value=1)
         dst = dist(-ct[0], sz[0]-ct[0]-1, sz[0], -ct[1], sz[1]-ct[1]-1, sz[1])
         avgim = radprof(dst.reshape(-1)).reshape(sz)
 
