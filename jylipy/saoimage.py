@@ -114,6 +114,7 @@ class Region(object):
         propstr = ''
         for k, v in self.specs.items():
             vstr = '"'+str(v)+'"' if isinstance(v, (str, bytes)) else str(v)
+            #vstr = str(v)
             propstr = propstr + ' {}={}'.format(k, vstr)
         propstr = '#'+propstr
         cmdstr = 'image; {} {} {}'.format(self.shape,
@@ -432,6 +433,9 @@ class RegionList(list):
                     elif s.find('line') != -1:
                         w = s.find('line')
                         s = '_'.join([s[:w+6], s[w+7:]])
+                        w1 = s.rfind('line')
+                        if (w1 != -1) and (w1 != w):
+                            s = '_'.join([s[:w1+6], s[w1+7:]])
                         s = s.split(' ')
                     else:
                         s = s.split(' ')
