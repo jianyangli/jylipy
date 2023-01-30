@@ -91,6 +91,7 @@ class ScatteringGeometry(object):
     '''
 
     def __init__(self, *args, **kwargs):
+        copy = kwargs.pop('copy', False)
         if len(args) == 0:
             if len(kwargs) == 0:
                 # Initialize an empty class.  In this case only `append`
@@ -125,7 +126,7 @@ class ScatteringGeometry(object):
             for i in range(len(data)):
                 if not hasattr(data[i],'__iter__'):
                     data[i] = [data[i]]
-            self._data = Table(data=data, names=names)
+            self._data = Table(data=data, names=names, copy=copy)
         elif len(args) == 1:
             if isinstance(args[0], ScatteringGeometry):
                 # initialize with another ScatteringGeometry
@@ -147,7 +148,7 @@ class ScatteringGeometry(object):
                         v[x].unit = u.deg
                 else:
                     self._unit = v[k[0]].unit
-                self._data = Table(v)
+                self._data = Table(v, copy=copy)
                 self._cos = kwargs.pop('cos', False)
             elif isinstance(args[0], dict):
                 # Initialize from a dictionary
@@ -660,19 +661,20 @@ class ScatteringGeometry(object):
 class LatLon(object):
     '''Latitude-Longitude coordinate class'''
     def __init__(self, *args, **kwargs):
+        copy = kwargs.pop('copy', False)
         if len(args) == 0:
             self._data = None
         elif len(args) == 1:
             if isinstance(args[0], Table):
                 self._data = args[0].copy()
             elif isinstance(args[0], dict):
-                self._data = Table(args[0])
+                self._data = Table(args[0], copy=copy)
             elif isinstance(args[0], LatLon):
                 self._data = args[0]._data.copy()
             else:
                 raise ValueError('Unrecognized data type')
         elif len(args) == 2:
-            self._data = Table(args, names=['lon','lat'])
+            self._data = Table(args, names=['lon','lat'], copy=copy)
         if self._data is not None:
             if self._data['lon'].unit is None:
                 uu = kwargs.pop('unit', None)
@@ -799,6 +801,7 @@ class PhotometricData(object):
     '''
 
     def __init__(self, *args, **kwargs):
+        copy = kwargs.pop('copy', False)
         if (len(args) == 0) or ((len(args) == 1) and (args[0] is None)):
             if len(kwargs) == 0:
                 # Initialize an empty class.  In this case, only `append`
@@ -842,25 +845,25 @@ class PhotometricData(object):
             keys = list(kwargs.keys())
             if 'bdr' in keys:
                 self._data = Table([np.asanyarray(kwargs['bdr'], dtype='f4')],
-                        names=['BDR'])
+                        names=['BDR'], copy=copy)
             elif 'r' in keys:
                 self._data = Table([np.asanyarray(kwargs['r'], dtype='f4')],
-                        names=['BDR'])
+                        names=['BDR'], copy=copy)
             elif 'iof' in keys:
                 self._data = Table([np.asanyarray(kwargs['iof'], dtype='f4')],
-                        names=['RADF'])
+                        names=['RADF'], copy=copy)
             elif 'i/f' in keys:
                 self._data = Table([np.asanyarray(kwargs['i/f'], dtype='f4')],
-                        names=['RADF'])
+                        names=['RADF'], copy=copy)
             elif 'radf' in keys:
                 self._data = Table([np.asanyarray(kwargs['radf'], dtype='f4')],
-                        names=['RADF'])
+                        names=['RADF'], copy=copy)
             elif 'brdf' in keys:
                 self._data = Table([np.asanyarray(kwargs['brdf'], dtype='f4')],
-                        names=['BRDF'])
+                        names=['BRDF'], copy=copy)
             elif 'reff' in keys:
                 self._data = Table([np.asanyarray(kwargs['reff'], dtype='f4')],
-                        names=['REFF'])
+                        names=['REFF'], copy=copy)
             else:
                 raise ValueError('No reflectance data found.')
 
@@ -1180,10 +1183,10 @@ class PhotometricData(object):
             hdulist.append(bandhdu)
         hdulist.writeto(outfile, **kwargs)
 
-    def read(self, filename):
+    def read(self, filename, copy=False):
         '''Read photometric data from file'''
         with fits.open(filename) as infitshdu:
-            indata = Table(infitshdu[1].data)
+            indata = Table(infitshdu[1].data, copy=copy)
             hdr = infitshdu[1].header
             if len(infitshdu) > 2:
                 self.band = infitshdu[2].data.copy()
