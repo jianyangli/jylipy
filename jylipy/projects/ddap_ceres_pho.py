@@ -84,6 +84,11 @@ class RegionalData:
         # Ceres SPK file
         self.ceres_spk = os.path.join(os.path.sep, 'Users', 'jyli',
                 'Work', 'Ceres', 'spice', 'ceres_1900-2100_20151014.bsp')
+        # filters
+        files = self.cubefiles
+        get_filter = lambda f: os.path.splitext(os.path.basename(f))[0][-3:-1]
+        self.cubefile_filters = np.array([get_filter(f) for f in files])
+        self.filter_list = np.unique(self.cubefile_filters)
 
     @property
     def n_roi(self):
@@ -119,10 +124,26 @@ class RegionalData:
 
     @property
     def cubefiles(self):
-        return np.array(glob(os.path.join(self.cubedir, '*.cub')))
+        return np.array(glob(os.path.join(self.cubedir, '**', '*.cub')))
 
-    def phodata_extract(self, overwrite=False):
-        """Extract photometric data"""
+    def phodata_extract(self, filters=None, direct_save=False,
+                overwrite=False):
+        """Extract photometric data
+
+        filters : str or sequence of strings, optional
+            Filter(s) to be processed
+        direct_save : bool, optional
+            By default, the results will be saved as a `PhotometricData`
+            object.  If set `True`, then the results will be saved to
+            a simple multi-extension fits file with the relevant information
+            (name, unit) stored in the respective headers.  The output
+            fits files can be subsequently converted to `PhotometricData`
+            object format using the `.convert` method.  This mode saves
+            memory and time.
+        overwrite : bool, optional
+            Overwrite the existing output file.
+
+        """
 
         print('Extract photometric data')
         print('    ISIS cube directory: {}'.format(self.cubedir))
@@ -145,19 +166,19 @@ class RegionalData:
         if self.roi_tags is None:
             raise ValueError('ROI tags undefined.')
 
-        files = self.cubefiles
-        get_filter = lambda f: os.path.splitext(os.path.basename(f))[0][-3:-1]
-        filters = np.array([get_filter(f) for f in files])
-        self.filter_list = np.unique(filters)
-
         load_generic_kernels()
         spice.furnsh(self.ceres_spk)
 
         # loop through filters
-        for flt in self.filter_list:
+        if filters is None:
+            filters = self.filter_list
+        else:
+            if isinstance(filters, str):
+                filters = [filters]
+        for flt in filters:
             print(' '*80, end='\r')
             print('filter : {}'.format(flt), end='')
-            ff = files[filters == flt]  # files of filter 'flt'
+            ff = self.cubefiles[self.cubefile_filters == flt]
             ff = [x for x in ff if x.find('FC1') == -1] # filter out FC1
             print(', {} files'.format(len(ff)))
             iof = [[] for i in range(self.n_roi)]
@@ -174,7 +195,7 @@ class RegionalData:
                 datacube = CubeFile(f)
                 bandnames = np.array(datacube.label['IsisCube']['BandBin']
                         ['Name'])
-                data = datacube.apply_numpy_specials()
+                data = datacube.apply_numpy_specials().astype('float32')
                 # load data from cube
                 databand = np.array(['F' in x for x in bandnames])
                 if np.any(databand):
@@ -274,10 +295,24 @@ class RegionalData:
                 inc_ = np.concatenate(inc[i])
                 lat_ = np.concatenate(lat[i])
                 lon_ = np.concatenate(lon[i])
-                phodata = PhotometricData(iof=iof_, inc=inc_, emi=emi_,
-                        pha=pha_, geolat=lat_, geolon=lon_)
-                phodata.write(self._output_filename(flt, i+1),
-                        overwrite=overwrite)
+                if direct_save:
+                    # save to fits
+                    hdu = fits.PrimaryHDU()
+                    hdulist = fits.HDUList([hdu])
+                    data = [iof_, pha_, emi_, inc_, lat_, lon_]
+                    name = ['iof', 'pha', 'emi', 'inc', 'lat', 'lon']
+                    bunit = ['', 'deg', 'deg', 'deg', 'deg', 'deg']
+                    for d, n, b in zip(data, name, bunit):
+                        hdu = fits.ImageHDU(d, name=n)
+                        hdu.header['bunit'] = b
+                        hdulist.append(hdu)
+                    hdulist.writeto(self._output_filename(flt, i+1),
+                            overwrite=overwrite)
+                else:
+                    phodata = PhotometricData(iof=iof_, inc=inc_, emi=emi_,
+                            pha=pha_, geolat=lat_, geolon=lon_, copy=False)
+                    phodata.write(self._output_filename(flt, i+1),
+                            overwrite=overwrite)
 
         spice.kclear()
 
@@ -317,6 +352,30 @@ class RegionalData:
                 phob = pho.bin(bins=bins)
                 phob.write(self._output_filename(flt, ii, binned=True),
                         overwrite=overwrite)
+
+    @staticmethod
+    def convert(infile, outfile=None, overwrite=False):
+        """Convert the 'direct_save' format from `.extract` to
+        `PhotometricData` format.
+
+        By default, the input file `infile` will be overwritten.  But
+        a different output file `outfile` can be supplied.  In this case
+        `overwrite` keyword will determine if any existing file will
+        be overwritten.
+        """
+        if outfile is None:
+            outfile = infile
+            overwrite = True
+        with fits.open(infile) as f_:
+            iof = f_['iof'].data.astype('float32')
+            pha = f_['pha'].data.astype('float32')
+            emi = f_['emi'].data.astype('float32')
+            inc = f_['inc'].data.astype('float32')
+            lat = f_['lat'].data.astype('float32')
+            lon = f_['lon'].data.astype('float32')
+        phodata = PhotometricData(iof=iof, inc=inc, emi=emi, pha=pha,
+                geolat=lat, geolon=lon, copy=False)
+        phodata.write(outfile, overwrite=overwrite)
 
 
 def rebin_mask(mask, bin):
