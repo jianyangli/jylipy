@@ -1670,6 +1670,16 @@ class PhotometricData(object):
         self.remove_rows(w)
         return list(w)
 
+    def info(self, indent=''):
+        """Print out information of class object"""
+        print('{}# of points: {:,}'.format(indent, len(self)))
+        print('{}    inc: {:.2f} - {:.2f}'.format(indent, self.inc.min(),
+                self.inc.max()))
+        print('{}    emi: {:.2f} - {:.2f}'.format(indent, self.emi.min(),
+                self.emi.max()))
+        print('{}    pha: {:.2f} - {:.2f}'.format(indent, self.pha.min(),
+                self.pha.max()))
+
 
 class PhotometricDataPlotter():
     """Plotting facility for `PhotometricData` class
