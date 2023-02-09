@@ -665,12 +665,10 @@ class LatLon(object):
         if len(args) == 0:
             self._data = None
         elif len(args) == 1:
-            if isinstance(args[0], Table):
-                self._data = args[0].copy()
-            elif isinstance(args[0], dict):
+            if isinstance(args[0], (dict, Table)):
                 self._data = Table(args[0], copy=copy)
             elif isinstance(args[0], LatLon):
-                self._data = args[0]._data.copy()
+                self._data = args[0]._data.copy() if copy else args[0]._data
             else:
                 raise ValueError('Unrecognized data type')
         elif len(args) == 2:
@@ -925,26 +923,6 @@ class PhotometricData(object):
         else:
             raise ValueError('At most 1 argument expected, {0} '
                 'received'.format(len(args)))
-        self._set_properties()
-
-    def _set_properties(self):
-        if len(self)>0:
-            if self.geo is None:
-                self._lonlim = None
-                self._latlim = None
-            else:
-                self._lonlim = [self.geolon.min(), self.geolon.max()]
-                self._latlim = [self.geolat.min(), self.geolat.max()]
-            sca = self.sca
-            self._inclim = [sca.inc.min(), sca.inc.max()]
-            self._emilim = [sca.emi.min(), sca.emi.max()]
-            self._phalim = [sca.pha.min(), sca.pha.max()]
-        else:
-            self._lonlim = None
-            self._latlim = None
-            self._inclim = None
-            self._emilim = None
-            self._phalim = None
 
     @property
     def type(self):
@@ -1029,23 +1007,38 @@ class PhotometricData(object):
 
     @property
     def lonlim(self):
-        return self._lonlim
+        if len(self) == 0 or self.geolon is None:
+            return None
+        else:
+            return [self.geolon.min(), self.geolon.max()]
 
     @property
     def latlim(self):
-        return self._latlim
+        if len(self) == 0 or self.geolat is None:
+            return None
+        else:
+            return [self.geolat.min(), self.geolat.max()]
 
     @property
     def inclim(self):
-        return self._inclim
+        if len(self) == 0:
+            return None
+        else:
+            return [self.sca.inc.min(), self.sca.inc.max()]
 
     @property
     def emilim(self):
-        return self._emilim
+        if len(self) == 0:
+            return None
+        else:
+            return [self.sca.emi.min(), self.sca.emi.max()]
 
     @property
     def phalim(self):
-        return self._phalim
+        if len(self) == 0:
+            return None
+        else:
+            return [self.sca.pha.min(), self.sca.pha.max()]
 
     def _add_refkey(self, key):
         if key == 'BDR':
@@ -1176,6 +1169,13 @@ class PhotometricData(object):
     def write(self, outfile, **kwargs):
         '''Save photometric data to a FITS file'''
         hdu = fits.PrimaryHDU()
+        hdu.header['version'] = '1.0'
+        info_data = self._collect_info()
+        hdu.header['npts'] = info_data.pop('npts')
+        keys = ', '.join(info_data.pop('keys'))
+        hdu.header['keys'] = keys
+        for k, v in info_data.items():
+            hdu.header[k] = v.value if isinstance(v, u.Quantity) else v
         tblhdu = fits.BinTableHDU(self.astable(), name='phodata')
         hdulist = fits.HDUList([hdu, tblhdu])
         if getattr(self, 'band', None) is not None:
@@ -1220,8 +1220,6 @@ class PhotometricData(object):
         else:
             self.geo = None
 
-        self._set_properties()
-
     def append(self, v):
         '''Append data to the end'''
         if self._data is None:
@@ -1238,7 +1236,6 @@ class PhotometricData(object):
             self._data = vstack((self._data, v._data))
             if self.geo is not None:
                 self.geo.append(v.geo)
-            self._set_properties()
 
     def merge(self, pho, type='auto'):
         '''Merge two PhotometricData instances'''
@@ -1275,7 +1272,6 @@ class PhotometricData(object):
         else:
             # check boundaries of both binned data, then merge
             self._simple_merge(pho)
-        self._set_properties()
 
     def _simple_merge(self, pho):
         '''Merge two photometric datasets in a simple case, i.e., both
@@ -1301,7 +1297,6 @@ class PhotometricData(object):
             if k not in pho.refkey:
                 pho._add_refkey(k)
         self._data = vstack((self._data, pho._data))
-        self._set_properties()
 
     def _binned_merge(self, pho):
         # check binning boundaries
@@ -1438,14 +1433,12 @@ class PhotometricData(object):
         self.sca.remove_rows(*args, **kwargs)
         if self.geo is not None:
             self.geo.remove_rows(*args, **kwargs)
-        self._set_properties()
 
     def remove_row(self, *args, **kwargs):
         self._data.remove_row(*args, **kwargs)
         self.sca.remove_row(*args, **kwargs)
         if self.geo is not None:
             self.geo.remove_row(*args, **kwargs)
-        self._set_properties()
 
     def trim(self, ilim=None, elim=None, alim=None, rlim=None,
         latlim=None, lonlim=None):
@@ -1670,15 +1663,44 @@ class PhotometricData(object):
         self.remove_rows(w)
         return list(w)
 
+    def _collect_info(self):
+        """Collect data information"""
+
+        scakey = self.sca._data.keys()
+        geokey = None if self.geo is None else self.geo._data.keys()
+        datakey = self._data.keys()
+        info = {}
+        info['npts'] = len(self)
+        info['keys'] = []
+        for ks, attr in zip([scakey, geokey, datakey], ['sca', 'geo', '']):
+            if ks is not None:
+                for k in ks:
+                    info['keys'].append(k)
+                    if attr != '':
+                        v = getattr(getattr(self, attr), k)
+                    else:
+                        v = getattr(self, k)
+                    info[k + '_min'] = v.min()
+                    info[k + '_max'] = v.max()
+        return info
+
     def info(self, indent=''):
         """Print out information of class object"""
-        print('{}# of points: {:,}'.format(indent, len(self)))
-        print('{}    inc: {:.2f} - {:.2f}'.format(indent, self.inc.min(),
-                self.inc.max()))
-        print('{}    emi: {:.2f} - {:.2f}'.format(indent, self.emi.min(),
-                self.emi.max()))
-        print('{}    pha: {:.2f} - {:.2f}'.format(indent, self.pha.min(),
-                self.pha.max()))
+        info_data = self._collect_info()
+        print('{}# of points: {:,}'.format(indent, info_data['npts']))
+        for k in np.unique([x.split('_')[0] for x in info_data['keys']]):
+            print('{}    {}: {:.2f} - {:.2f}'.format(indent,
+                            k, info_data[k+'_min'], info_data[k+'_max']))
+
+    @staticmethod
+    def phofits_info(infile):
+        with fits.open(infile) as f_:
+            hdr = f_[0].header
+        if ('version' in hdr) and (hdr['version'] == '1.0'):
+            print('# of points: {:,}'.format(hdr['npts']))
+            for k in [x.strip() for x in hdr['keys'].split(',')]:
+                print('    {}: {:.4f} - {:.4f}'.format(k,
+                    hdr[k+'_min'], hdr[k+'_max']))
 
 
 class PhotometricDataPlotter():
