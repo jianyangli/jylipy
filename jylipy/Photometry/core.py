@@ -3,8 +3,9 @@ Units of all angles are in degrees!!!
 
 '''
 
-import os, sys, warnings, multiprocessing, numbers, importlib
+import os, sys, warnings, multiprocessing, numbers, importlib, copy
 import numpy as np, matplotlib.pyplot as plt, astropy.units as u
+from scipy.interpolate import interp1d
 from collections import OrderedDict
 from astropy.io import fits
 from astropy.table import Column, Row, vstack, hstack
@@ -2729,31 +2730,29 @@ class PhotometricModelFitter(object):
 
     def __call__(self, model, pho, ilim=None, elim=None, alim=None,
                 rlim=None, **kwargs):
-        '''
+        """
         Parameters:
         -----------
         model : PhotometricModel instance
-      The initial model to fit to data
+            The initial model to fit to data
         pho : PhotometricData instance
-      The data to be fitted
-        fitter : Any Fitter-like class
-      The fitter to be used.  If this keyword is present, then the
-      fitter class defined in this class is overrided.  If not specified,
-      and no fitter class is defined in this class or its inherited class,
-      an error will be thrown.
+            The data to be fitted
+        fitter : Any `astropy.modeling.Fitter`-like class
+            The fitter to be used.  If this keyword is present, then the
+            fitter class defined in `self` will be overriden and replaced.
+            If not specified, and no fitter class is defined in this class
+            or its inherited class, an error will be thrown.
         **kwargs: Other keywords accepted by the fitter.
 
-        v1.0.0 : 2015, JYL @PSI
-        v1.0.1 : 1/11/2016, JYL @PSI
-          Added fitter keywords
-        '''
+        Returns
+        -------
+        `astropy.modeling.Model`: Best-fit model or models
+        """
         if 'fitter' in kwargs:
-            f = kwargs.pop('fitter')()
-        else:
-            if not hasattr(self, 'fitter'):
-                raise ValueError('fitter not defined')
-            else:
-                f = self.fitter()
+            self.fitter = kwargs.pop('fitter')
+        elif not hasattr(self, 'fitter'):
+            raise ValueError('fitter not defined')
+        f = self.fitter()
 
         self.data = pho.copy()
         self.data.validate()
@@ -2830,10 +2829,211 @@ class PhotometricModelFitter(object):
         pplot(xlabel='Measured BDR',ylabel='Modeled BDR')
         return figs
 
+    def test_par_error(self, parname, threshold=2, nsteps=10, tol=1e-6):
+        """Derive model parameter error based on chi-square test.
+
+        In this test, the parameter of consideration is fixed at a series
+        of values surrounding the best-fit values, and the model is fitted
+        to derive a series of chi-squared.  The range of parameters that
+        have chi-squared less than 2x the best-fit chi-squared is considered
+        the 1-sigma uncertainty.
+
+        NOTE:
+            Single band data and single model are assumed.  Multiband
+            data and multiple models are not implemented or tested.
+
+        Parameters
+        ----------
+        parname : str
+            The name of parameter to test the uncertainty.
+        threshold : number, optional
+            Chi-squared threshold to define the uncertainty range.  Default
+            is 2x minimum chi-squared.
+        nsteps : int, optional
+            Number of steps in the calculation of chi-squared vs. parameter
+            curve.  Smaller number makes calculation fast, and not necessarily
+            worse results.
+        tol : number, optional
+            Numerical tolerance to exit search iteration.
+
+        Returns
+        -------
+        [lower, upper]
+            The lower and upper bound of the 1-sigma uncertainty
+            of the parameter.  `np.nan` means no boundary can be found.
+        """
+        # check conditions
+        if not hasattr(self, 'fitter'):
+            raise ValueError('Fitter class is undefined.')
+        if not hasattr(self, 'model'):
+            raise ValueError('Best-fit model is unavailable.')
+
+        # initialize tester and input parameters
+        tester = ModelTester(self.__class__, self.model, self.data)
+        par = getattr(self.model, parname)
+        bestfit_value = par.value
+        s = np.sign(bestfit_value)
+        par_bounds = getattr(par, 'bounds', [-1e30, 1e30])
+        bestfit_chisq = self.RMS**2 * len(self.data)
+
+        # variable to save results
+        sigma = [0, 0]
+
+        # iterate for lower and upper bound
+        # lower bound: i=0, direction=1
+        # upper bound: i=1, direction=-1
+        for i, direction in enumerate([1, -1]):
+
+            # prepare search bounds
+            search_bounds = np.ones(2)
+            search_bounds[0] = 1 - s * 0.6 if i == 0 else 1 + s * 1.4
+            search_bounds *= bestfit_value
+
+            # initialize search
+            boundary = search_bounds.mean()
+
+            # iterative search
+            while True:
+                old_boundary = boundary
+
+                # limit the search range within the parameter bounds
+                search_bounds = np.clip(search_bounds, par_bounds[0],
+                                        par_bounds[1])
+
+                # limit the search range to one side of the best-fit value
+                if search_bounds[1] * direction > bestfit_value * direction:
+                    search_bounds[1] = bestfit_value
+
+                # if both bounds fall to the limit of parameters, return np.nan
+                if any([all(search_bounds == par_bounds[i]) for i in [0, 1]]):
+                    boundary = np.nan
+                    break
+
+                # calculate chi-squared for test values
+                test_range = abs(search_bounds[1] - search_bounds[0])
+                test_values = np.linspace(search_bounds[0], search_bounds[1],
+                                          nsteps)
+                testpar_dict = {}
+                testpar_dict[parname] = test_values
+                chisq = tester.test(verbose=False, **testpar_dict)
+                delta_chisq = chisq - bestfit_chisq * threshold
+
+                # check chi-squared values
+                if delta_chisq.max() * delta_chisq.min() > 0:
+                    # if boundary not included in the search range, shift the
+                    # search range
+                    search_bounds += test_range * np.sign(delta_chisq[0]) \
+                                     * direction
+                else:
+                    # find boundary
+                    # use interpolation to increase accuracy and speed
+                    f = interp1d(test_values, delta_chisq, kind='quadratic')
+                    hires_values = np.linspace(search_bounds[0],
+                                               search_bounds[1], 1000)
+                    hires_delta_chisq = f(hires_values)
+                    ww = np.abs(hires_delta_chisq).argmin()
+                    boundary = hires_values[ww]
+                    if abs(boundary - old_boundary) < tol:
+                        # finish iteration if required accuracy reached
+                        break
+                    # refine search
+                    test_range /= 2
+                    search_bounds = boundary + \
+                                np.array([-1, 1]) * test_range / 2 * direction
+
+            # record results
+            sigma[i] = boundary
+
+        return sigma
+
 
 class PhotometricMPFitter(PhotometricModelFitter):
     '''Photometric model fitter using MPFit'''
     fitter = MPFitter
+
+
+class ModelTester():
+    """Test model parameter.
+
+    NOTE:
+        Single band data and single model are assumed.  Multiband data
+        and multiple models are not implemented or tested.
+    """
+    def __init__(self, fitter, model, *data):
+        """
+        Parameters
+        ----------
+        fitter : model fitter class
+        model : `astropy.model.Model`
+            Model to be tested.
+        *data :
+            The data associated with model that can be directly passed
+            as parameters to `fitter` class.
+        """
+        self.fitter_class = fitter
+        self.model = model
+        self.data = data
+
+    def test(self, objstr=None, verbose=True, **kwargs):
+        """
+        Parameters
+        ----------
+        objstr : str, optional
+            An attribute in fitter or a field in fitter.fit_info as the
+            object quantity for the test.  Default is one of 'chisq',
+            'chi-square', or 'chi_square'.
+        verbose : bool, optional
+            Verbose mode.
+        kwargs :
+            The name and values of the model parameter to be tested.
+
+        Returns
+        -------
+        Array of the same shape as the model parameter values to be tested.
+        The test models are saved to ndarray `self.models`
+        """
+        if objstr is None:
+            obj_default = np.array(['chisq', 'chi-squared', 'chi_squared'])
+        nkw = len(kwargs)
+        if nkw == 0:
+            raise ValueError('No parameter specified to be tested.')
+        if nkw > 1:
+            raise ValueError('Only one parameter can be tested at a time, '
+                ' {} specified.'.format(nkw))
+        parname, values = list(kwargs.items())[0]
+        if parname not in self.model.param_names:
+            raise ValueError('Parameter {} is not in model {}.'.
+                format(parname, self.model.__class__.name))
+        self.fitter = self.fitter_class()
+        m0 = copy.deepcopy(self.model)
+        setattr(getattr(m0, parname), 'fixed', True)
+        objval = np.zeros_like(values)
+        self.models = np.zeros_like(values, dtype=object)
+        for i, v in enumerate(values):
+            setattr(m0, parname, v)
+            self.models[i] = self.fitter(m0, *self.data, verbose=verbose)
+            if objstr is None:
+                # search for default object string
+                obj_test = [hasattr(self.fitter, x) for x in obj_default]
+                if not any(obj_test):
+                    if hasattr(self.fitter, 'fit_info'):
+                        obj_test = [x in self.fitter.fit_info.keys()
+                                    for x in obj_default]
+                    else:
+                        obj_test = np.zeros_like(obj_default, dtype=bool)
+                if any(obj_test):
+                    objstr = obj_default[obj_test][0]
+                else:
+                    raise ValueError('Default object string not found in '
+                        'fitter.')
+            if hasattr(self.fitter, objstr):
+                objval[i] = getattr(self.fitter, objstr)
+            elif (hasattr(self.fitter, 'fit_info')
+                and objstr in self.fitter.fit_info.keys()):
+                objval[i] = self.fitter.fit_info[objstr]
+            else:
+                raise ValueError('{} not found in fitter.'.format(objstr))
+        return objval
 
 
 class PhotometricGridFitter(object):
@@ -3281,7 +3481,7 @@ class ModelGrid(object):
         if hdus['primary'].header['model'] not in {**locals(),
                 **globals()}:
             self._model_class = getattr(importlib.import_module(
-                    'jylipy.Photometry.Hapke'),
+                    'jylipy.photometry.hapke'),
                 hdus['primary'].header['model'])
         else:
             self._model_class = eval(hdus['primary'].header['model'])
