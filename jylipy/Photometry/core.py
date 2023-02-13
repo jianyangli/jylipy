@@ -3,7 +3,7 @@ Units of all angles are in degrees!!!
 
 '''
 
-import os, sys, warnings, multiprocessing, numbers, importlib, copy
+import os, sys, warnings, multiprocessing, numbers, importlib, copy, abc
 import numpy as np, matplotlib.pyplot as plt, astropy.units as u
 from scipy.interpolate import interp1d
 from collections import OrderedDict
@@ -43,7 +43,54 @@ class GeometryError(Exception):
         return repr(self.msg)
 
 
-class ScatteringGeometry(object):
+class _TableData(abc.ABC):
+    """Base class for tabulated data classes
+
+    This data class is assumed to contain data in an attribute `._data`
+    that is an `~astropy.table.Table` class.
+    """
+
+    def __str__(self):
+        return self._data.__str__()
+
+    def __repr__(self):
+        return self._data.__repr__().replace('Table', self.__class__.__name__)
+
+    def __len__(self):
+        return self._data.__len__()
+
+    def __array__(self):
+        return self._data.__array__()
+
+    def __getitem__(self, k):
+        return self._data[k]
+
+    def __iter__(self):
+        for i in range(len(self)):
+            yield self[i]
+
+    def __copy__(self):
+        return self.__class__(self)
+
+    def copy(self):
+        return self.__copy__()
+
+    def astable(self):
+        return self._data
+
+    def remove_rows(self, *args, **kwargs):
+        self._data.remove_rows(*args, **kwargs)
+
+    def remove_row(self, *args, **kwargs):
+        self._data.remove_row(*args, **kwargs)
+
+    def append(self, v):
+        if v is not None:
+            v = self.__class__(v)
+            self._data = vstack((self._data, v._data))
+
+
+class ScatteringGeometry(_TableData):
     '''Scattering geometry class.
 
     Initialize the class with one of the following four ways:
@@ -397,22 +444,6 @@ class ScatteringGeometry(object):
                 v._add_angle(c)
         self._data[k] = v._data
 
-    def __array__(self):
-        return self._data.__array__()
-
-    def __len__(self):
-        return self._data.__len__()
-
-    def __iter__(self):
-        for i in range(len(self)):
-            yield self[i]
-
-    def __str__(self):
-        return self._data.__str__()
-
-    def __repr__(self):
-        return self._data.__repr__().replace('Table', 'ScatteringGeometry')
-
     def __copy__(self):
         return ScatteringGeometry(self._data, cos=self.cos)
 
@@ -516,10 +547,6 @@ class ScatteringGeometry(object):
         coslat, coslon = ScatteringGeometry._setcos(cos, lat, lon)
         cosemi = coslat * coslon
         return cosemi if cos else np.arccos(cosemi)
-
-    def astable(self):
-        '''Return data as an astropy.table.Table instance'''
-        return self._data
 
     def argsort(self, keys=None, kind=None, **kwargs):
         '''Return the indices which would sort the geometry data
@@ -636,12 +663,6 @@ class ScatteringGeometry(object):
                     self._add_angle(c)
             self._data = vstack((self._data, v._data))
 
-    def remove_rows(self, *args, **kwargs):
-        self._data.remove_rows(*args, **kwargs)
-
-    def remove_row(self, *args, **kwargs):
-        self._data.remove_row(*args, **kwargs)
-
     def is_valid(self):
         '''Check the validity of geometry, returns a bool array'''
         return np.isfinite(self.inc) & np.isfinite(self.emi) & \
@@ -659,7 +680,7 @@ class ScatteringGeometry(object):
         return list(w)
 
 
-class LatLon(object):
+class LatLon(_TableData):
     '''Latitude-Longitude coordinate class'''
     def __init__(self, *args, **kwargs):
         copy = kwargs.pop('copy', False)
@@ -692,42 +713,8 @@ class LatLon(object):
     def lat(self):
         return self._data.getcolumn('lat')
 
-    def __str__(self):
-        return self._data.__str__()
-
-    def __repr__(self):
-        return self._data.__repr__()
-
-    def __len__(self):
-        return len(self._data)
-
-    def __getitem__(self, k):
-        return self._data[k]
-
-    def __copy__(self):
-        return LatLon(self)
-
-    def astable(self):
-        return self._data
-
-    def copy(self):
-        return self.__copy__()
-
-    def append(self, v):
-        if v is not None:
-            v = LatLon(v)
-            self._data = vstack((self._data, v._data))
-
-    def remove_row(self, *args, **kwargs):
-        self._data.remove_row(*args, **kwargs)
-
-    def remove_rows(self, *args, **kwargs):
-        self._data.remove_rows(*args, **kwargs)
-
     def merge(self, geo):
-        if geo is not None:
-            geo = LatLon(geo)
-            self._data = vstack((self._data, geo._data))
+        self.append()
 
 
 class PhotometricData(object):
