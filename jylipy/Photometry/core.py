@@ -1132,7 +1132,7 @@ class PhotometricData(object):
     def astable(self):
         if self._data is None:
             return None
-        scatbl = self.sca.astable()
+        scatbl = self.sca.astable().copy()
         tblkeys = scatbl.keys()
         if 'lon' in tblkeys:
             scatbl.rename_column('lon','pholon')
@@ -1140,7 +1140,7 @@ class PhotometricData(object):
             scatbl.rename_column('lat','pholat')
         out = hstack((scatbl, self._data))
         if self.geo is not None:
-            geotbl = self.geo.astable()
+            geotbl = self.geo.astable().copy()
             tblkeys = geotbl.keys()
             if 'lon' in tblkeys:
                 geotbl.rename_column('lon','geolon')
