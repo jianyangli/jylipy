@@ -458,7 +458,8 @@ class DARTEjectaMotion(MotionInGravity1DSolver, Didymos):
         return [r, v]
 
 
-didy_spk = os.path.join('..', '..', 'spice', 'spk',
+didy_spk = os.path.join(os.path.sep, 'Users', 'jyli', 'Work', 'Dart',
+                        'spice', 'spk',
                         'didymos_19500101-20501231_20220926_horizons.bsp')
 
 
