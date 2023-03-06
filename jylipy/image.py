@@ -660,8 +660,11 @@ class Stack(Centroid):
         shapes = np.array([x.shape for x in self._1d['image']])
         ys = np.max([self._1d['_yc'], shapes[:, 0] - self._1d['_yc']])
         xs = np.max([self._1d['_xc'], shapes[:, 1] - self._1d['_xc']])
-        center = np.ceil([ys, xs]).astype(int)
-        maxshape = center * 2 + 1  # make sure they are odd numbers
+        #center = np.ceil([ys, xs]).astype(int)
+        #maxshape = center * 2 + 1  # make sure they are odd numbers
+        maxdist = np.ceil(np.sqrt(ys * ys + xs * xs)).astype(int)
+        maxshape = np.array([maxdist, maxdist]).astype(int) * 2 + 1
+        center = maxshape // 2
         # integer center of original images
         int_yc = np.round(self._1d['_yc']).astype(int)
         int_xc = np.round(self._1d['_xc']).astype(int)
