@@ -1,3 +1,5 @@
+import numpy as np
+from astropy.io import fits
 from astropy.nddata import CCDData
 import ccdproc as ccdp
 
@@ -17,7 +19,7 @@ class CRRej():
         self.cleantype = cleantype
         self.niter = niter
         self.masks = masks
-        
+
     def clean(self, infile, verbose=True):
         # load image
         im = CCDData.read(infile)
@@ -33,8 +35,12 @@ class CRRej():
 
         # remove cosmic ray
         self.cleaned = ccdp.cosmicray_lacosmic(im, readnoise=rn,
-            sigclip=sigclip, cleantype=cleantype, niter=niter,
+            sigclip=self.sigclip, cleantype=self.cleantype, niter=self.niter,
             verbose=verbose)
+        # save cosmic ray mask
+        crmask = self.cleaned.mask
+        crmask[mask > 0] = False
+        self.cleaned.crmask = crmask
 
     def write(self, outfile, infile=None, overwrite=False):
         """
@@ -46,7 +52,7 @@ class CRRej():
         The 'dq' mask marks the cosmic ray affected pixels by 4096.
         """
         if infile is not None:
-            f_ = fits.open(file)
+            f_ = fits.open(infile)
         else:
             f_ = fits.HDUList([fits.PrimaryHDU()])
             f_.append(fits.ImageHDU(np.zeros_like(self.cleaned.data,
@@ -54,9 +60,6 @@ class CRRej():
             f_.append(fits.ImageHDU(np.zeros_like(self.cleaned.data,
                         dtype='int16'), name='dq'))
         f_['sci'].data = self.cleaned.data.astype('float32')
-        crmask = self.cleaned.mask
-        crmask[mask > 0] = False
-        f_['dq'].data = (f_['dq'].data | crmask.astype(int) * 4096).astype(
-            'int16')
+        f_['dq'].data = (f_['dq'].data |
+                    self.cleaned.crmask.astype(int) * 4096).astype('int16')
         f_.writeto(outfile, overwrite=overwrite)
-
