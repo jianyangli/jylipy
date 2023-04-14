@@ -129,8 +129,12 @@ class Photometry():
         info = table.vstack(info)
         info.sort('utc-mid')
         self.info = info
-        self.fields = []
+        self._fields = []
     
+    @property
+    def fields(self):
+        return self._fields
+
     @property
     def _aperture_in_pix(self):
         """Convert aperture size as scalors in pixels
@@ -205,7 +209,7 @@ class Photometry():
         self.info.add_column(table.Column(max_r, name='max_apt'))
         self.counts = u.Quantity(phos, u.electron).T
         self.ct_err = u.Quantity(errs, u.electron).T
-        self.fields.extend(['counts', 'ct_err'])
+        self._fields.extend(['counts', 'ct_err'])
     
     def photometric_cal(self):
         """Photometric calibration
@@ -249,14 +253,14 @@ class Photometry():
         self.magapc_err =u.Quantity( -2.5 * np.log10(self.ctapc_err /
                     self.counts + 1).value, u.mag)
         
-        self.fields.extend(['flux', 'flux_err', 'mag', 'mag_err',
+        self._fields.extend(['flux', 'flux_err', 'mag', 'mag_err',
                             'counts_apc', 'ctapc_err', 'flux_apc',
                             'fluxapc_err', 'mag_apc', 'magapc_err'])
 
     def write(self, outfile, overwrite=False):
         """Save photometry to fits file"""
         hdu = fits.PrimaryHDU()
-        hdu.header['datapath'] = self.datapath
+        hdu.header['datapath'] = getattr(self, 'datapath', '')
         hdulist = fits.HDUList([hdu])
         for k in self.fields + ['aperture']:
             self._add_attr(k, hdulist)
