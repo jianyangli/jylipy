@@ -4,7 +4,9 @@ from astropy.nddata import CCDData
 import ccdproc as ccdp
 
 class CRRej():
-    """Cosmic ray rejection from HST images"""
+    """Cosmic ray rejection for HST images.  This class only works
+    for '_flt' or '_flc' images.
+    """
     
     def __init__(self, sigclip=4, cleantype='medmask', niter=10,
                  masks=[4, 256, 512]):
