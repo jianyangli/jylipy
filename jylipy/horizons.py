@@ -1,7 +1,10 @@
-import numpy as np
-import telnetlib
-from jylipy import Time, Table, is_iterable
+import numpy as np, telnetlib, requests, astropy.units as u
+from astropy.table import Table, QTable
+from astropy.time import Time
+from astropy.io import ascii
+from astropy.utils.data import get_pkg_data_filename
 from astroquery.jplhorizons import Horizons, conf
+from .core import is_iterable
 
 
 class JPLHorizons(telnetlib.Telnet):
@@ -315,3 +318,148 @@ def geteph(*args, **kwargs):
         return Table(out)
     except:
         raise HorizonsError('Horizons Error')
+
+
+
+class SBDBCloseApproach():
+    """Implementation of JPL SBDB Close-Approach Data API
+    https://ssd-api.jpl.nasa.gov/doc/cad.html
+    """
+    # close approach data api url
+    _api_url = "https://ssd-api.jpl.nasa.gov/cad.api"
+    # input parameter table
+    _parfile = 'cad_par.csv'
+    # input parameter type look up table
+    _type_lut = {'string': str,
+                 'number': float,
+                 'boolean': bool,
+                 'int': int
+                 }
+    # output data field formats and units
+    _output_types = {'des': (str, ''),
+                     'orbit_id': (int, ''),
+                     'jd': (float, ''),
+                     'cd': (str, ''),
+                     'dist': (float, 'au'),
+                     'dist_min': (float, 'au'),
+                     'dist_max': (float, 'au'),
+                     'v_rel': (float, 'km/s'),
+                     'v_inf': (float, 'km/s'),
+                     't_sigma_f': (str, ''),
+                     'body': (str, ''),
+                     'h': (float, 'mag'),
+                     'diameter': (float, 'km'),
+                     'diameter_sigma': (float, 'km'),
+                     'fullname': (str, '')
+                    }
+
+    def __init__(self):
+        # set up query parameters
+        fn = get_pkg_data_filename(self._parfile)
+        self.parinfo = ascii.read(fn)
+        tp = [self._type_lut[k] for k in self.parinfo['Type']]
+        self.parinfo.remove_column('Type')
+        self.parinfo.add_column(Column(tp, name='Type'), index=1)
+
+    def __call__(self, **kwargs):
+        self.query(**kwargs)
+        if self.status_code == 200:
+            return self.to_table()
+        else:
+            return None
+
+    def query(self, **kwargs):
+        """Query the SBDB Close-Approach Data
+
+        Attributes added
+        ----------------
+        .query_par : dict
+            Query parameters
+        .status_code : int
+            Status code of query
+        .response : dict
+            The JSON deserialized response from query, typically the output
+            from `.query`.
+        .count : int
+            Number of objects found
+        .signature : str
+            Signature of query
+        """
+        # adjust key names
+        kwargs_ = {}
+        for k, v in kwargs.items():
+            kwargs_[k if '_' not in k else k.replace('_', '-')] = v
+        self.query_par = kwargs_
+        # parse parameters
+        pars = []
+        for k, v in kwargs_.items():
+            # check parameter name
+            if k not in self.parinfo['Parameter']:
+                raise ValueError('parameter {} undefined.'.format(k))
+            # check parameter value
+            row_index = np.where(self.parinfo['Parameter'] == k.lower())[0][0]
+            if not isinstance(v, self.parinfo[row_index]['Type']):
+                raise ValueError('parameter {} is of type {}, {} is required.'.
+                    format(k, type(v), self.parinfo[row_index]['Type']))
+            pars.append('{}={}'.format(k, v))
+        url = '?'.join([self._api_url, '&'.join(pars)])
+        resp = requests.get(url)
+        out = resp.json()
+        self.status_code = resp.status_code
+        if resp.status_code == 200:
+            # success
+            self.response = out
+            self.count = self.response['count']
+            self.signature = self.response['signature']
+        else:
+            # bad request
+            print('Query failed with status code {}\n{}\nSee {} for more'
+                  ' information.'.format(out['code'], out['message'],
+                                         out['moreInfo']))
+
+    def to_table(self):
+        """Parse the query results into a table
+
+        Returns
+        -------
+        `astropy.table.QTable`, the query results
+        """
+        if self.count > 0:
+            dtypes = [self._output_types[k][0] for k in
+                            self.response['fields']]
+            meta = self.signature.copy()
+            meta.update(self.query_par)
+            out = QTable(names=self.response['fields'], dtype=dtypes,
+                    meta=meta)
+            for row in self.response['data']:
+                out.add_row(row)
+            for k in self.response['fields']:
+                if (self._output_types[k][0] != str and
+                    self._output_types[k][1] != ''):
+                    out[k].unit = u.Unit(self._output_types[k][1])
+            return out
+        else:
+            return None
+
+    def write(self, outfile, **kwargs):
+        """Write query results to file.
+
+        The data can be saved in either ascii format or fits binary table.
+        The output format is either specified by the file name extension,
+        or by keywords.
+
+        Parameters
+        ----------
+        outfile : str
+            Name of output file
+        kwargs : dict
+            Keyword parameters accepted by `astropy.table.Table.write()`
+        """
+        if getattr(self, 'status_code', None) is None:
+            print('No query has been made.  No file is written.')
+            return
+        if getattr(self, 'count', 0) == 0:
+            print('No entry is returned from query.  No file is written.')
+            return
+        tbl = self.to_table()
+        tbl.write(outfile, **kwargs)

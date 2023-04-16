@@ -1,0 +1,29 @@
+Parameter,Type,Default,Function,Description
+date-min,string,“now”,filter,exclude data earlier than this date YYYY-MM-DD or date/time YYYY-MM-DDThh:mm:ss or now for the current date
+date-max,string,“+60”,filter,exclude data later than this date YYYY-MM-DD or date/time YYYY-MM-DDThh:mm:ss or now for the current date or +D for “D” days after now (“D” must not be greater than 36525; be sure to URL-encode the plus sign + as %2B)
+dist-min,string,none,filter,"exclude data with an approach distance less than this, e.g., 0.05, 10LD (default units: au)"
+dist-max,string,“0.05”,filter,exclude data with an approach distance greater than this (see dist-min)
+min-dist-min,string,none,filter,"exclude data with an approach minimum-distance less than this, e.g., 0.05, 10LD (default units: au)"
+min-dist-max,string,none,filter,exclude data with an approach minimum-distance greater than this (see min-dist-min)
+h-min,number,none,filter,"exclude data from objects with H-values less than this (e.g., 22 meaning objects smaller than this)"
+h-max,number,none,filter,"exclude data from objects with H-value greater than this (e.g., 17.75 meaning objects larger than this)"
+v-inf-min,number,none,filter,"exclude data with V-infinity less than this positive value in km/s (e.g., 18.5)"
+v-inf-max,number,none,filter,"exclude data with V-infinity greater than this positive value in km/s (e.g., 20)"
+v-rel-min,number,none,filter,"exclude data with V-relative less than this positive value in km/s (e.g., 11.2)"
+v-rel-max,number,none,filter,"exclude data with V-relative greater than this positive value in km/s (e.g., 19)"
+class,string,none,filter,"limit data to objects with the specified orbit-class (e.g., ATE; see list of valid class values below)"
+pha,boolean,FALSE,filter,limit data to PHAs
+nea,boolean,FALSE,filter,limit data to NEAs
+comet,boolean,FALSE,filter,limit data to comets
+nea-comet,boolean,FALSE,filter,limit data to NEAs and comets
+neo,boolean,TRUE,filter,limit data to NEOs
+kind,string,none,filter,"limit data to objects of the specified kind (a=asteriod, an=numbered-asteroids, au=unnumbered-asteroids, c=comets, cn=numbered-comets, cu=unnumbered-comets, n=numbered-objects, and u=unnumbered-objects)"
+spk,int,none,selector,"only data for the object matching this SPK-ID (e.g., 2000433 )"
+des,string,none,selector,"only data for the object matching this designation (e.g., 2015 AB or 141P or 433) [NOTE: when submitting a des containing a space in your query string, you must replace the space with %20, for example 2015%20AB]"
+body,string,“Earth”,selector,"limit data to close-approaches to the specified body (e.g., Earth) or allow all bodies with ALL or * (see Close Approach Bodies section below)"
+sort,string,“date”,sorter,"sort data on the specified field: “date”, “dist”, “dist-min”, “v-inf”, “v-rel”, “h”, or “object” (default sort order is ascending: prepend “-“ for descending)"
+limit,number,none,filter,limit data to the first N results (where N is the specified number and must be an integer value greater than zero); also output total available matching records
+limit-from,number,none,filter,limit data to limit results starting from result record N (where N must be an integer greater than zero); limit must be specified
+total-only,boolean,FALSE,output,output the total number of records matching the specified filter ignoring limit and limit-from; do not output any data
+diameter,boolean,FALSE,output,include known diameter and diameter_sigma values
+fullname,boolean,FALSE,output,include the full-format object name/designation
