@@ -1,5 +1,5 @@
 import numpy as np, telnetlib, requests, astropy.units as u
-from astropy.table import Table, QTable
+from astropy.table import Table, QTable, Column
 from astropy.time import Time
 from astropy.io import ascii
 from astropy.utils.data import get_pkg_data_filename
@@ -320,11 +320,37 @@ def geteph(*args, **kwargs):
         raise HorizonsError('Horizons Error')
 
 
-
 class SBDBCloseApproach():
     """Implementation of JPL SBDB Close-Approach Data API
     https://ssd-api.jpl.nasa.gov/doc/cad.html
+
+    Examples
+    --------
+    Query close encounters between 2020-01-01 and 2020-12-31 with minimum
+    H = 15.
+
+    >>> from jylipy.horizons import SBDBCloseApproach
+    >>> cad = SBDBCloseApproach()
+    >>> out = cad(date_min='2020-01-01', date_max='2020-12-31', h_min=15.)
+
+    The results are returned in an astropy.table.QTable object `out`.  One can
+    also call `.query()` method directly to query the data, and then call
+    `.write()` method to save the results to a file.
+
+    >>> from jylipy.horizons import SBDBCloseApproach
+    >>> cad = SBDBCloseApproach()
+    >>> cad.query(date_min='2020-01-01', date_max='2020-12-31', h_min=15.)
+    >>> cad.write('output.ecsv')
+
+    The query parameters are listed in `.parinfo` attribute, which is an
+    `astropy.table.Table`.
+
+    The query parameters can be directly passed to `.__call__()` or `.query()`
+    methods as keyword parameters.  Note that the hyphen (-) in the query
+    parameter names has to be replaced by underscore (_) to make legal
+    keyword parameter names in the call.  See examples above.
     """
+
     # close approach data api url
     _api_url = "https://ssd-api.jpl.nasa.gov/cad.api"
     # input parameter table
