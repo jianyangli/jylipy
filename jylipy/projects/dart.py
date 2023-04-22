@@ -3,6 +3,7 @@ from scipy.signal import savgol_filter
 from astropy.time import Time
 from astropy.modeling import Fittable2DModel, Parameter
 from astropy.io import ascii
+from astropy.table import Table, vstack
 from sbpy.bib import cite
 import spiceypy as spice
 import matplotlib.pyplot as plt
@@ -801,7 +802,7 @@ def angular_distance(delta=None):
     return equiv
 
 
-class TailProfile():
+class BrightnessProfile():
     """Class to process tail brightness profile"""
 
     def __init__(self, prof, x=None, info=None):
@@ -833,7 +834,10 @@ class TailProfile():
 
     def x_in(self, unit):
         """Return x in the specified unit"""
-        return self.x.to(unit, angular_distance(self.info['range'] * u.au))
+        if self.info is not None:
+            return self.x.to(unit, angular_distance(self.info['range'] * u.au))
+        else:
+            return self.x.to(unit, angular_distance())
 
     def smooth(self, size, x=None, method='savgol', log=True, polyorder=3,
                 **kwargs):
@@ -890,4 +894,22 @@ class TailProfile():
         else:
             return y
 
-
+    def to_hdu(self, save_x=False, primary=False):
+        """Convert data to a fits HDU and return"""
+        if save_x:
+            data = np.stack([self.data.value, self.x.value])
+        else:
+            data = self.data.value
+        if primary:
+            hdu = fits.PrimaryHDU(data)
+        else:
+            hdu = fits.ImageHDU(data)
+        if info is not None:
+            excluded_keys = set(hdu.header.keys()).union({'EXTEND'})
+            for k in self.info.keys():
+                if k not in excluded_keys:
+                    hdu.header[k] = self.info[k]
+        hdu.header['bunit'] = str(self.data.unit)
+        if save_x:
+            hdu.header['xunit'] = str(self.x.unit)
+        return hdu
