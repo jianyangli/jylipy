@@ -913,3 +913,94 @@ class BrightnessProfile():
         if save_x:
             hdu.header['xunit'] = str(self.x.unit)
         return hdu
+
+
+class BrightnessProfileSet(list):
+    """Class to process a set of tail brightness profile"""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for i, m in enumerate(self):
+            if not isinstance(m, BrightnessProfile):
+                if i == 1:
+                    suffix = 'st'
+                elif i == 2:
+                    suffix = 'nd'
+                elif i == 3:
+                    suffix = 'rd'
+                else:
+                    suffix = 'th'
+                raise ValueError('Incompatible type {} in the {}{} '
+                    'elements.'.format(type(m), i, suffix))
+
+    @classmethod
+    def read(cls, infile):
+        """Read from input file"""
+        obj = []
+        with fits.open(infile) as f_:
+            for hdu in f_[1:]:
+                if hdu.data.ndim == 1:
+                    data = hdu.data * u.Unit(hdu.header['bunit']) \
+                            if 'bunit' in hdu.header else 1.
+                    obj.append(BrightnessProfile(data, info=hdu.header))
+                else:
+                    data = hdu.data[0] * u.Unit(hdu.header['bunit']) \
+                            if 'bunit' in hdu.header else 1.
+                    x = hdu.data[1] * u.Unit(hdu.header['xunit']) \
+                            if 'xunit' in hdu.header else u.pix
+                    obj.append(BrightnessProfile(data, x, info=hdu.header))
+        return cls(obj)
+
+    def to_hdulist(self, save_x=False):
+        """Convert to an HDUList class object
+
+        save_x : bool, optional
+            Save x-axis.  If not, then the default x-axis will start from
+            0 with 1 pixel increment.
+        """
+        hdulist = [p.to_hdu(save_x=save_x) for p in self]
+        hdulist.insert(0, fits.PrimaryHDU())
+        return fits.HDUList(hdulist)
+
+    def write(self, outfile, overwrite=False, **kwargs):
+        """Write to output file.
+
+        Parameters
+        ----------
+        outfile : str
+            Output file name.
+        overwrite : bool, optional
+            Overwrite existing file.
+        """
+        self.to_hdulist(**kwargs).writeto(outfile, overwrite=overwrite)
+
+    @property
+    def info(self):
+        """Information table"""
+        tables = []
+        for i, p in enumerate(self):
+            if p.info is not None:
+                row = {'index': [i]}
+                for k, v in p.info.items():
+                    row[k.lower()] = [v]
+                #print(row)
+                tables.append(Table(row))
+            else:
+                tables.append(Table({'index': [i]}))
+        return vstack(tables)
+        table = tables[0]
+        for t in tables[1:]:
+            table = join(table, t, join_type='outer')
+        return table
+
+    def sort(self, key='utc-mid', reverse=False):
+        """Sort the profile set in place
+
+        key : str, optional
+            Sorting key
+        reverse : bool, optional
+            Reverse sorting
+        """
+        def get_key(x):
+            return getattr(x, 'info').__getitem__(key)
+        super().sort(key=get_key, reverse=reverse)
