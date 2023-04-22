@@ -1,4 +1,5 @@
 import os, numpy as np, astropy.units as u, astropy.constants as const
+from scipy.signal import savgol_filter
 from astropy.time import Time
 from astropy.modeling import Fittable2DModel, Parameter
 from astropy.io import ascii
@@ -6,7 +7,7 @@ from sbpy.bib import cite
 import spiceypy as spice
 import matplotlib.pyplot as plt
 from ..geometry import load_generic_kernels
-from ..core import syncsynd
+from ..core import syncsynd, rebin
 from .dart_display import *
 from .dart_photometry import *
 from .dart_data import *
@@ -776,4 +777,117 @@ def mean_angle(angles, axis=None):
         return ((out + 360 * u.deg) % (360 * u.deg)).to(angles.unit)
     else:
         return (out.to_value('deg') + 360) % 360
+
+
+@u.quantity_input(delta=u.km)
+def angular_distance(delta=None):
+    """Equivalencies to convert between UVIS pixels, arcsec, and physical
+    distances.
+
+    delta : u.Quantity, optional
+        Distance of target.  If not supplied, then only equivalency between
+        UVIS pixels and angular size is provided.
+    """
+    equiv = uvis_pix()
+    if delta is not None:
+        equiv.append((u.arcsec,
+                 u.km,
+                 lambda angle: angle / 206265 * delta.to_value('km'),
+                 lambda dist: dist / delta.to_value('km') * 206265))
+        equiv.append((u.pix,
+                  u.km,
+                  lambda pix: pix * 0.04 / 206265 * delta.to_value('km'),
+                  lambda dist: dist / delta.to_value('km') * 206265 / 0.04))
+    return equiv
+
+
+class TailProfile():
+    """Class to process tail brightness profile"""
+
+    def __init__(self, prof, x=None, info=None):
+        """
+        prof : 1d u.Quantity array
+            Tail brightness profile.
+        x : 1d array of numbers or u.Quantities, optional
+            The x-axis value of the tail profile.  Default is a squence
+            of the same length of `prof`, starting from 0 with an incremental
+            of 1 pixel.
+        info : dict, optional
+            Information dictionary.
+        """
+        self._data = prof
+        if x is None:
+            x = np.arange(len(self._data))
+        if not isinstance(x, u.Quantity):
+            x = u.Quantity(x, u.pix)
+        self._x = x
+        self.info = info
+
+    @property
+    def data(self):
+        return self._data
+
+    @property
+    def x(self):
+        return self._x
+
+    def x_in(self, unit):
+        """Return x in the specified unit"""
+        return self.x.to(unit, angular_distance(self.info['range'] * u.au))
+
+    def smooth(self, size, x=None, method='savgol', log=True, polyorder=3,
+                **kwargs):
+        """Return smoothed profile
+
+        Parameters
+        ----------
+        size : number
+            Smooth size
+        x : reference
+            Returns the x corresponding to the smoothed profile.  Useful
+            when x changes during the smooth for, e.g., binning method.
+        method : ['moving', 'savgol', 'binning'], optional
+            The method to smooth the data.
+            'moving' : Moving average
+            'binning' : Simple binning
+            'savgol' : Savitzky-Golay filter
+        log : bool, optional
+            Smooth in log scale.
+        polyorder : number, optional
+            Polynomial order for Savitzky-Golay filter.  No effect for
+            other methods.
+        kwargs : dict
+            Other keyword parameters to pass to the smooth algorithm
+        """
+        # strip out unit
+        y = getattr(self.data, 'value', self.data)
+        unit = getattr(self.data, 'unit', '')
+        # take logrithm if needed
+        if log:
+            y = np.log10(y)
+        # smooth
+        if method == 'moving':
+            box = np.ones(size) / size
+            y = np.convolve(y, box, mode='same')
+        elif method == 'savgol':
+            y = savgol_filter(y, size, polyorder=polyorder, **kwargs)
+        elif method == 'binning':
+            x = self.x.value
+            xu = self.x.unit
+            x = rebin(x, size, mean=True) * xu
+            y = rebin(y, size, mean=True)
+        else:
+            raise ValueError('Method {} not recognized.'.format(method))
+        # apply exponential if needed
+        if log:
+            y = 10**y
+        # apply unit
+        if unit != '':
+            y = u.Quantity(y, unit)
+        # return
+        if method == 'binning':
+            return y, x
+        else:
+            return y
+
 
