@@ -293,11 +293,14 @@ class Photometry():
         if not np.allclose(self.aperture, pho.aperture):
             raise PhotometryError('Input `Photometry` object cannot be '
                 'merged: Different aperture sizes.')
+        # merge fields and sort by time
         self.info = table.join(self.info, pho.info, join_type='left')
-        self.info.sort('utc-mid')
+        st = np.argsort(self.info['utc-mid'])
+        self.info = self.info[sort]
         for k in self.fields:
             setattr(self, k, np.concatenate([getattr(self, k),
                     getattr(pho, k)], axis=1))
+            setattr(self, k, self[k][:, sort])
             
     @classmethod
     def read(cls, infile):
