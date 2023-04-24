@@ -911,6 +911,17 @@ class BrightnessProfile():
             hdu.header['xunit'] = str(self.x.unit)
         return hdu
 
+    def plot(self, ax=None, **kwargs):
+        """Plot profile.
+
+        ax : matplotlib.axes.Axes
+            Axis to plot.
+        kwargs : Keyword argument to pass to matplotlib.pyplot.plot()
+        """
+        if ax is None:
+            ax = plt.gca()
+        ax.plot(self.x, self.data, **kwargs)
+
 
 class BrightnessProfileSet(list):
     """Class to process a set of tail brightness profile"""
