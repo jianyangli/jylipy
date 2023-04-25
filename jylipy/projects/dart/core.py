@@ -806,18 +806,16 @@ class BrightnessProfile():
         """
         prof : 1d u.Quantity array
             Tail brightness profile.
-        x : 1d array of numbers or u.Quantities, optional
+        x : 1d array of numbers or u.Quantity, optional
             The x-axis value of the tail profile.  Default is a squence
             of the same length of `prof`, starting from 0 with an incremental
-            of 1 pixel.
+            of 1.
         info : dict, optional
             Information dictionary.
         """
         self._data = prof
         if x is None:
             x = np.arange(len(self._data))
-        if not isinstance(x, u.Quantity):
-            x = u.Quantity(x, u.pix)
         self._x = x
         self.info = info
 
@@ -831,6 +829,8 @@ class BrightnessProfile():
 
     def x_in(self, unit):
         """Return x in the specified unit"""
+        if not isinstance(self.x, u.Quantity):
+            raise ValueError('x is not a `u.Quantity`.')
         if self.info is not None:
             return self.x.to(unit, angular_distance(self.info['range'] * u.au))
         else:
@@ -1012,3 +1012,71 @@ class BrightnessProfileSet(list):
         def get_key(x):
             return getattr(x, 'info').__getitem__(key)
         super().sort(key=get_key, reverse=reverse)
+
+
+class AzimuthalProfile(BrightnessProfile):
+    """Azimuthal profile"""
+
+    def peak(self, x0, width, order=3, tol=0.5, maxiter=10):
+        """Find the peak position in the profile
+
+        x0 : number, u.Quantity
+            Initial value of the peak.
+        width : number, u.Quantity
+            Wdith within which the peak is searched.
+        tol : number, u.Quantity
+            Tolerance of peak position.  In whatever unit the x-axis is in.
+        maxiter : int
+            Maximum number of iteration.
+        """
+        if isinstance(self.x, u.Quantity):
+            quantity = True
+            xunit = self.x.unit
+            if not (isinstance(x0, u.Quantity) and
+                    isinstance(width, u.Quantity)):
+                raise ValueError('u.Quantity required for `x0` and `width`')
+            if not (xunit.is_equivalent(x0.unit) and
+                    xunit.is_equivalent(width.unit)):
+                raise u.UnitsError(
+                    'Incompatible units between `x0`, `width` and x-axis.')
+            if isinstance(tol, u.Quantity):
+                if not xunit.is_equivalent(tol.unit):
+                    raise u.UnitsError('Incompatible unit provided for `tol`.')
+            else:
+                tol = u.Quantity(tol, xunit)
+        else:
+            quantity = False
+
+        dx = 100
+        if quantity:
+            dx = u.Quantity(dx, xunit)
+        n = 0
+        while dx > tol and n < maxiter:
+            x1 = x0 - width / 2
+            x2 = x0 + width / 2
+            s1 = np.abs(self.x - x1).argmin()
+            s2 = np.abs(self.x - x2).argmin()
+            x = getattr(self.x[s1:s2+1], 'value', self.x[s1:s2+1])
+            y = getattr(self.data[s1:s2+1], 'value', self.data[s1:s2+1])
+
+            #if s1 < 0:
+            #    seg = np.concatenate([scan[s1:], scan[:s2]])
+            #    w = np.concatenate([error[s1:], error[:s2]])
+            #elif s2 >= len(scan):
+            #    seg = np.concatenate([scan[s1:], scan[:s2-len(scan)]])
+            #    w = np.concatenate([error[s1:], scan[:s2-len(scan)]])
+            #else:
+            #    seg = scan[s1:s2]
+            #    w = error[s1:s2]
+            #ang = np.linspace(s1, s2, len(seg)) * ddeg
+
+            pp = np.polyfit(x, y, order)
+            xx = np.linspace(x.min(), x.max(), 1000)
+            x_fit = xx[np.poly1d(pp)(xx).argmax()]
+            if quantity:
+                x_fit = u.Quantity(x_fit, xunit)
+            dx = abs(x_fit - x0)
+            x0 = x_fit
+            n += 1
+
+        return x_fit
