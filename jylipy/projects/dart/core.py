@@ -1070,6 +1070,9 @@ class AzimuthalProfile(BrightnessProfile):
             #    w = error[s1:s2]
             #ang = np.linspace(s1, s2, len(seg)) * ddeg
 
+            if not np.all(np.isfinite(y)):
+                x_fit = np.nan * xunit if quantity else 1
+                break
             pp = np.polyfit(x, y, order)
             xx = np.linspace(x.min(), x.max(), 1000)
             x_fit = xx[np.poly1d(pp)(xx).argmax()]
