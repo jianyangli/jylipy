@@ -2,7 +2,7 @@ import os, numpy as np, astropy.units as u, astropy.constants as const
 from scipy.signal import savgol_filter
 from astropy.time import Time
 from astropy.modeling import Fittable2DModel, Parameter
-from astropy.io import ascii
+from astropy.io import ascii, fits
 from astropy.table import Table, vstack
 from sbpy.bib import cite
 import spiceypy as spice
@@ -901,7 +901,7 @@ class BrightnessProfile():
             hdu = fits.PrimaryHDU(data)
         else:
             hdu = fits.ImageHDU(data)
-        if info is not None:
+        if self.info is not None:
             excluded_keys = set(hdu.header.keys()).union({'EXTEND'})
             for k in self.info.keys():
                 if k not in excluded_keys:
