@@ -172,13 +172,16 @@ class ScaleBar(Vector):
 class Annotation(dict):
     """Annotations to be added to DS9
     
-    The object needs to be intialized with any keyword parameters.  The keys are the names
-    of annotations, and the parameters are provided by the values of parameters.  The value
-    of each dictionary item is array-like: [RegionClass, p1, p2, p3, ..., kwargs], where
+    The object needs to be intialized with any keyword parameters.  The
+    keys are the names of annotations, and the parameters are provided
+    by the values of parameters.  The value of each dictionary item is
+    array-like: [RegionClass, p1, p2, p3, ..., kwargs], where
     
-        RegionClass : Class of a DS9 Region, must be the first element of the array
-        p1, p2, p3, ... : region parameters to initialize RegionClass
-        kwargs : dict, additional keyword parameters for RegionClass, must be the last element of the array
+        RegionClass : Class of a DS9 Region
+            Must be the first element of the array p1, p2, p3, ... ,
+            region parameters to initialize
+        RegionClass kwargs : dict, additional keyword parameters
+            for RegionClass, must be the last element of the array
     
     Examples
     --------
@@ -191,16 +194,22 @@ class Annotation(dict):
     >>> vel = 48
     >>> 
     >>> anno = Annotation(text=[Text, xc, yc, text,
-    ...                         {'dx': -35, 'dy': 75, 'rotate': orientat, 'color': 'white',
+    ...                         {'dx': -35, 'dy': 75, 'rotate': orientat,
+    ...                          'color': 'white',
     ...                          'font': 'helvetica 14 normal roman'}],
     ...                   impact=[ImpactVector, xc, yc, 20, dart, 
-    ...                           {'rotate': orientat, 'slide': -30, 'color': 'red', 'width': 2, 'text': 'DART'}],
+    ...                           {'rotate': orientat, 'slide': -30,
+    ...                            'color': 'red', 'width': 2,
+    ...                            'text': 'DART'}],
     ...                   sun=[Vector, xc, yc, 20, sun,
-    ...                        {'dx': -60, 'dy': 45, 'rotate': orientat, 'color': 'yellow', 'width': 2, 'text': 'Sun'}],
+    ...                        {'dx': -60, 'dy': 45, 'rotate': orientat,
+    ...                         'color': 'yellow', 'width': 2, 'text': 'Sun'}],
     ...                   vel=[Vector, xc, yc, 20, vel,
-    ...                        {'dx': -60, 'dy': 45, 'rotate': orientat, 'color': 'cyan', 'width': 2, 'text': '+V'}],
+    ...                        {'dx': -60, 'dy': 45, 'rotate': orientat,
+    ...                         'color': 'cyan', 'width': 2, 'text': '+V'}],
     ...                   scalebar=[ScaleBar, xc, yc, 25,
-    ...                             {'dx': -80, 'dy': 20, 'rotate': orientat, 'color': 'green', 'width': 4,
+    ...                             {'dx': -80, 'dy': 20, 'rotate': orientat,
+    ...                              'color': 'green', 'width': 4,
     ...                              'text': 'scale bar'}]
     ...                  )
     """
