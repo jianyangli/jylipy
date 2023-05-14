@@ -1,4 +1,5 @@
 import os, numpy as np, astropy.units as u, astropy.constants as const
+from warnings import warn
 from scipy.signal import savgol_filter
 from astropy.time import Time
 from astropy.modeling import Fittable2DModel, Parameter
@@ -9,6 +10,7 @@ import spiceypy as spice
 import matplotlib.pyplot as plt
 from ...geometry import load_generic_kernels
 from ...core import syncsynd, rebin
+from ...hst.wfc3 import uvis_pix
 
 # crater size model scaling clases
 
@@ -807,9 +809,9 @@ class BrightnessProfile():
         prof : 1d u.Quantity array
             Tail brightness profile.
         x : 1d array of numbers or u.Quantity, optional
-            The x-axis value of the tail profile.  Default is a squence
+            The x-axis value of the tail profile.  Default is a sequence
             of the same length of `prof`, starting from 0 with an incremental
-            of 1.
+            of 1, with a unit of pixels
         info : dict, optional
             Information dictionary.
         """
@@ -830,11 +832,14 @@ class BrightnessProfile():
     def x_in(self, unit):
         """Return x in the specified unit"""
         if not isinstance(self.x, u.Quantity):
-            raise ValueError('x is not a `u.Quantity`.')
-        if self.info is not None:
-            return self.x.to(unit, angular_distance(self.info['range'] * u.au))
+            warn('x is not a `u.Quantity`, default to unit of pixels.')
+            x = self.x * u.pix
         else:
-            return self.x.to(unit, angular_distance())
+            x = self.x
+        if self.info is not None:
+            return x.to(unit, angular_distance(self.info['range'] * u.au))
+        else:
+            return x.to(unit, angular_distance())
 
     def smooth(self, size, x=None, method='savgol', log=True, polyorder=3,
                 **kwargs):
@@ -863,7 +868,7 @@ class BrightnessProfile():
         # strip out unit
         y = getattr(self.data, 'value', self.data)
         unit = getattr(self.data, 'unit', '')
-        # take logrithm if needed
+        # take logarithm if needed
         if log:
             y = np.log10(y)
         # smooth
@@ -1075,11 +1080,15 @@ class AzimuthalProfile(BrightnessProfile):
                 break
             pp = np.polyfit(x, y, order)
             xx = np.linspace(x.min(), x.max(), 1000)
-            x_fit = xx[np.poly1d(pp)(xx).argmax()]
+            model = np.poly1d(pp)(xx)
+            x_fit = xx[model.argmax()]
             if quantity:
                 x_fit = u.Quantity(x_fit, xunit)
             dx = abs(x_fit - x0)
             x0 = x_fit
             n += 1
+
+        self.modelpar = pp
+        self.fit = [xx, model]
 
         return x_fit
