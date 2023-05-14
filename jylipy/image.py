@@ -570,7 +570,7 @@ class Centroid(ImageSet):
             self._status = np.zeros(self._shape, dtype=bool)
             self._status[:] = status
 
-    def show(self, index=None, ds9=None):
+    def show(self, index=None, ds9=None, circle_only=False):
         """Show centroid in DS9
 
         Parameters
@@ -597,11 +597,13 @@ class Centroid(ImageSet):
             ds9.set(['pan to {} {}'.format(xc, yc),
                       'zoom to 2'])
             r = CircularRegion(xc, yc, 3)
-            c = CrossPointRegion(xc, yc)
-            t = TextRegion(xc, yc+ds9.height/2/2-10,
-                    text='{}: {}'.format(i, self._1d['file'][i]),
-                    color='white', font='helvetica 15 bold roman')
-            RegionList([r, c, t]).show(ds9=ds9)
+            r.show(ds9=ds9)
+            if not circle_only:
+                c = CrossPointRegion(xc, yc)
+                t = TextRegion(xc, yc+ds9.height/2/2-10,
+                        text='{}: {}'.format(i, self._1d['file'][i]),
+                        color='white', font='helvetica 15 bold roman')
+                RegionList([c, t]).show(ds9=ds9)
 
 
 class Stack(Centroid):
