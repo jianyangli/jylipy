@@ -1088,7 +1088,7 @@ class AzimuthalProfile(BrightnessProfile):
             x0 = x_fit
             n += 1
 
-        self.modelpar = pp
-        self.fit = [xx, model]
+            self.modelpar = pp
+            self.fit = [xx, model]
 
         return x_fit
