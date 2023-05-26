@@ -112,23 +112,28 @@ class Photometry():
                  aspfile='meta/aspect_{}.ecsv'):
 
         self.datapath = datapath
-        info = []
-        for v in visits:
-            asp = ascii.read(os.path.join(datapath, aspfile.format(v)))
-            bg = ascii.read(os.path.join(datapath, bgfile.format(v)))
-            if 'ext' in bg.colnames:
-                bg.remove_column('ext')
-            ct = ascii.read(os.path.join(datapath, ctfile.format(v)))
-            for k in ['ext', 'status']:
-                if k in ct.colnames:
-                    ct.remove_column(k)
-            
-            info.append(table.join(table.join(asp, bg, keys='file'), ct,
-                                   keys='file'))
+        if (os.path.isfile(ctfile) and
+            os.path.isfile(bgfile) and
+            os.path.isfile(aspfile)):
+            info = []
+            for v in visits:
+                asp = ascii.read(os.path.join(datapath, aspfile.format(v)))
+                bg = ascii.read(os.path.join(datapath, bgfile.format(v)))
+                if 'ext' in bg.colnames:
+                    bg.remove_column('ext')
+                ct = ascii.read(os.path.join(datapath, ctfile.format(v)))
+                for k in ['ext', 'status']:
+                    if k in ct.colnames:
+                        ct.remove_column(k)
 
-        info = table.vstack(info)
-        info.sort('utc-mid')
-        self.info = info
+                info.append(table.join(table.join(asp, bg, keys='file'), ct,
+                                       keys='file'))
+
+            info = table.vstack(info)
+            info.sort('utc-mid')
+            self.info = info
+        else:
+            self.info = None
         self._fields = []
     
     @property
@@ -305,7 +310,7 @@ class Photometry():
     @classmethod
     def read(cls, infile):
         obj = cls()
-        obj.fields = []
+        obj._fields = []
         with fits.open(infile) as f_:
             obj.datapath = f_[0].header['datapath']
             for n in range(len(f_) - 1):
