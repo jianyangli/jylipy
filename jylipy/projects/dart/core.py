@@ -946,6 +946,13 @@ class BrightnessProfileSet(list):
                 raise ValueError('Incompatible type {} in the {}{} '
                     'elements.'.format(type(m), i, suffix))
 
+    def __getitem__(self, k):
+        out = super().__getitem__(k)
+        if hasattr(out, '__iter__'):
+            return self.__class__(out)
+        else:
+            return out
+
     @classmethod
     def read(cls, infile):
         """Read from input file"""
