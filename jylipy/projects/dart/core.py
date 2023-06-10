@@ -3,7 +3,7 @@ from warnings import warn
 from scipy.signal import savgol_filter
 from astropy.time import Time
 from astropy.modeling import Fittable2DModel, Parameter
-from astropy.modeling.models import Gaussian1D, Lorentz1D, Moffat1D, Voigt1D
+from astropy.modeling import models
 from astropy.modeling.fitting import LevMarLSQFitter
 from astropy.io import ascii, fits
 from astropy.table import Table, vstack
@@ -1029,7 +1029,20 @@ class BrightnessProfileSet(list):
         super().sort(key=get_key, reverse=reverse)
 
 
-class Voigt1D_enh(Voigt1D):
+class Moffat1D(models.Moffat1D):
+    """Enhanced Moffat1D model
+
+    .fwhm returns quantity when appropriate
+    """
+    @property
+    def fwhm(self):
+        w = super().fwhm
+        if hasattr(self.gamma, 'unit'):
+            w = u.Quantity(w, self.gamma.unit)
+        return w
+
+
+class Voigt1D(models.Voigt1D):
     """Enhanced Voigt1D model.
 
     Add attribute `.fwhm` and `.amplitude`
@@ -1156,13 +1169,13 @@ class AzimuthalProfile(BrightnessProfile):
             if model in [4, 'voigt']:
                 par = [x0, amp, width / 4, width / 4]
         if model in [1, 'gaussian']:
-            m0 = Gaussian1D(*par)
+            m0 = models.Gaussian1D(*par)
         elif model in [2, 'lorentz']:
-            m0 = Lorentz1D(*par)
+            m0 = models.Lorentz1D(*par)
         elif model in [3, 'moffat']:
             m0 = Moffat1D(*par)
         elif model in [4, 'voigt']:
-            m0 = Voigt1D_enh(*par)
+            m0 = Voigt1D(*par)
         elif model in [5, 'poly']:
             pass
         else:
