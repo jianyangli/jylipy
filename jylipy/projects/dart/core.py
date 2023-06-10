@@ -3,8 +3,11 @@ from warnings import warn
 from scipy.signal import savgol_filter
 from astropy.time import Time
 from astropy.modeling import Fittable2DModel, Parameter
+from astropy.modeling.models import Gaussian1D, Lorentz1D, Moffat1D, Voigt1D
+from astropy.modeling.fitting import LevMarLSQFitter
 from astropy.io import ascii, fits
 from astropy.table import Table, vstack
+from scipy.optimize import brentq
 from sbpy.bib import cite
 import spiceypy as spice
 import matplotlib.pyplot as plt
@@ -1026,20 +1029,98 @@ class BrightnessProfileSet(list):
         super().sort(key=get_key, reverse=reverse)
 
 
+class Voigt1D_enh(Voigt1D):
+    """Enhanced Voigt1D model.
+
+    Add attribute `.fwhm` and `.amplitude`
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        #self.fwhm_L.bounds = [0, None]
+        self.fwhm_G.bounds = [0, None]
+
+    @property
+    def fwhm(self):
+        dx = np.max([self.fwhm_G.value, self.fwhm_L.value])
+        if hasattr(dx, 'unit'):
+            dx = dx.value
+        half_max = self.amplitude / 2
+        if hasattr(half_max, 'unit'):
+            half_max = half_max.value
+
+        # Find the points where y crosses half_max
+        x0 = self.x_0.value if hasattr(self.x_0, 'unit') else self.x_0
+        fwhm_points = brentq(lambda x: self.evaluate(x, *self.parameters)
+                                        - half_max,
+                             x0 + dx * 0, x0 + dx * 3,
+                             full_output=True)
+        if fwhm_points[1].converged:
+            fwhm = (fwhm_points[0] - x0) * 2
+            return fwhm if not hasattr(self.x_0, 'unit') \
+                        else u.Quantity(fwhm, self.x_0.unit)
+        else:
+            return None
+
+    @property
+    def amplitude(self):
+        dx = np.max([self.fwhm_G.value, self.fwhm_L.value])
+        if hasattr(self.x_0, 'unit'):
+            dx = u.Quantity(dx, self.x_0.unit)
+        x = np.linspace(self.x_0 - dx, self.x_0 + dx, 1000)
+        return self(x).max()
+
+
 class AzimuthalProfile(BrightnessProfile):
     """Azimuthal profile"""
 
-    def peak(self, x0, width, order=3, tol=0.5, maxiter=10):
+    def peak(self, x0, width, model='moffat', par=None, order=3,
+                fitter=LevMarLSQFitter, tol=0.5, maxiter=10):
         """Find the peak position in the profile
 
         x0 : number, u.Quantity
             Initial value of the peak.
         width : number, u.Quantity
             Wdith within which the peak is searched.
-        tol : number, u.Quantity
+        model : str, int, optional
+            Model to be used to fit peak.  Values can be
+                1, 'gaussian' : Gaussian function
+                2, 'lorenz' : Lorenz function
+                3, 'moffat' : Moffat function
+                4, 'voigt' : Voigt function
+                5, 'poly' : polynomial model
+        par : sequence of float, optional
+            The initial parameters of model.  If `None`, then the parameters
+            will be automatically determined from `x0` and `width` parameters.
+        order : int, optional
+            Order of polynomial fit.  Only useful when polynomial model
+            is used.
+        fitter : astropy-type fitter class
+            The fitter to be used.  Only useful when polynomial model is
+            not used.
+        tol : number, u.Quantity, optional
             Tolerance of peak position.  In whatever unit the x-axis is in.
-        maxiter : int
+        maxiter : int, optional
             Maximum number of iteration.
+
+        Returns
+        -------
+        float or Quantity : The peak position.
+
+        Attributes
+        ----------
+        This method will add the following attributes to the class
+        `.par` : dict
+            The parameters of the profile peak.  Depending on the model
+            used, this dict could contain the following keys:
+            'peak' : the peak position
+            'amplitude' : the amplitude of the profile
+            'fwhm' : the full-width-half-max of the profile
+        `.model` : astropy model class object or numpy array
+            The best-fit model or model parameters for the case of polynomial.
+        `.fit` : list
+            [x, y], where x is the independent variable and y is the best-fit
+            value of the profile.
         """
         if isinstance(self.x, u.Quantity):
             quantity = True
@@ -1059,6 +1140,38 @@ class AzimuthalProfile(BrightnessProfile):
         else:
             quantity = False
 
+        self.par = {}
+
+        # initialize model
+        if par is None:
+            x1 = x0 - width / 2
+            x2 = x0 + width / 2
+            s1 = np.abs(self.x - x1).argmin()
+            s2 = np.abs(self.x - x2).argmin()
+            amp = self.data[s1:s2+1].max()
+            if model in [1, 'gaussian', 2, 'lorentz', 3, 'moffat']:
+                par = [amp, x0, width / 4]
+            if model in [3, 'moffat']:
+                par.append(1)
+            if model in [4, 'voigt']:
+                par = [x0, amp, width / 4, width / 4]
+        if model in [1, 'gaussian']:
+            m0 = Gaussian1D(*par)
+        elif model in [2, 'lorentz']:
+            m0 = Lorentz1D(*par)
+        elif model in [3, 'moffat']:
+            m0 = Moffat1D(*par)
+        elif model in [4, 'voigt']:
+            m0 = Voigt1D_enh(*par)
+        elif model in [5, 'poly']:
+            pass
+        else:
+            raise ValueError('unrecoganized model {}'.format(model))
+
+        if model not in [5, 'poly']:
+            fit = fitter()
+
+        # iteration
         dx = 100
         if quantity:
             dx = u.Quantity(dx, xunit)
@@ -1068,9 +1181,10 @@ class AzimuthalProfile(BrightnessProfile):
             x2 = x0 + width / 2
             s1 = np.abs(self.x - x1).argmin()
             s2 = np.abs(self.x - x2).argmin()
-            x = getattr(self.x[s1:s2+1], 'value', self.x[s1:s2+1])
-            y = getattr(self.data[s1:s2+1], 'value', self.data[s1:s2+1])
+            x = self.x[s1:s2+1]
+            y = self.data[s1:s2+1]
 
+            # fix angle wrapping, TBD
             #if s1 < 0:
             #    seg = np.concatenate([scan[s1:], scan[:s2]])
             #    w = np.concatenate([error[s1:], error[:s2]])
@@ -1082,20 +1196,49 @@ class AzimuthalProfile(BrightnessProfile):
             #    w = error[s1:s2]
             #ang = np.linspace(s1, s2, len(seg)) * ddeg
 
-            if not np.all(np.isfinite(y)):
+            # fix np.inf
+            if np.any(~np.isfinite(y)):
                 x_fit = np.nan * xunit if quantity else 1
-                break
-            pp = np.polyfit(x, y, order)
+
+            # fit model
             xx = np.linspace(x.min(), x.max(), 1000)
-            model = np.poly1d(pp)(xx)
-            x_fit = xx[model.argmax()]
             if quantity:
-                x_fit = u.Quantity(x_fit, xunit)
-            dx = abs(x_fit - x0)
-            x0 = x_fit
+                xx = u.Quantity(xx, xunit)
+            if model in [5, 'poly']:
+                pp = np.polyfit(getattr(x, 'value', x),
+                                getattr(y, 'value', y),
+                                order)
+                m = np.poly1d(pp)(getattr(xx, 'value', xx))
+                if hasattr(y, 'unit'):
+                    m = u.Quantity(m, y.unit)
+                x_peak = xx[m.argmax()]
+            else:
+                m = fit(m0, x, y)
+                if model in [1, 'gaussian']:
+                    x_peak = getattr(m, 'mean')
+                else:
+                    x_peak = getattr(m, 'x_0')
+            if quantity:
+                x_peak = u.Quantity(x_peak, xunit)
+            dx = abs(x_peak - x0)
+            x0 = x_peak
             n += 1
 
-            self.modelpar = pp
-            self.fit = [xx, model]
+        # save results
+        if model in [5, 'poly']:
+            self.model = pp
+            self.fit = [xx, m]
+        else:
+            self.model = m
+            self.fit = [xx, m(xx)]
 
-        return x_fit
+        self.par['peak'] = x_peak
+        if model not in [5, 'poly']:
+            amp = self.model.amplitude
+            self.par['amplitude'] = u.Quantity(amp) if hasattr(amp, 'unit') \
+                                                    else amp
+            fwhm = self.model.fwhm
+            self.par['fwhm'] = u.Quantity(fwhm) if hasattr(fwhm, 'unit') \
+                                                    else fwhm
+
+        return x_peak
