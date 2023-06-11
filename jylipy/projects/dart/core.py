@@ -1040,18 +1040,6 @@ class BrightnessProfile():
             x = self.x[s1:s2+1]
             y = self.data[s1:s2+1]
 
-            # fix angle wrapping, TBD
-            #if s1 < 0:
-            #    seg = np.concatenate([scan[s1:], scan[:s2]])
-            #    w = np.concatenate([error[s1:], error[:s2]])
-            #elif s2 >= len(scan):
-            #    seg = np.concatenate([scan[s1:], scan[:s2-len(scan)]])
-            #    w = np.concatenate([error[s1:], scan[:s2-len(scan)]])
-            #else:
-            #    seg = scan[s1:s2]
-            #    w = error[s1:s2]
-            #ang = np.linspace(s1, s2, len(seg)) * ddeg
-
             # fix np.inf
             if np.any(~np.isfinite(y)):
                 x_fit = np.nan * xunit if quantity else 1
@@ -1255,4 +1243,21 @@ class Voigt1D(models.Voigt1D):
 
 class AzimuthalProfile(BrightnessProfile):
     """Azimuthal profile"""
-    pass
+
+    def peak(self, x0, width, model='moffat', par=None, order=3,
+                fitter=LevMarLSQFitter, tol=0.5, maxiter=10):
+
+        # fix angle wrapping, TBD
+        #if s1 < 0:
+        #    seg = np.concatenate([scan[s1:], scan[:s2]])
+        #    w = np.concatenate([error[s1:], error[:s2]])
+        #elif s2 >= len(scan):
+        #    seg = np.concatenate([scan[s1:], scan[:s2-len(scan)]])
+        #    w = np.concatenate([error[s1:], scan[:s2-len(scan)]])
+        #else:
+        #    seg = scan[s1:s2]
+        #    w = error[s1:s2]
+        #ang = np.linspace(s1, s2, len(seg)) * ddeg
+
+        return super().peak(x0, width, model=model, par=None, order=3,
+                fitter=LevMarLSQFitter, tol=0.5, maxiter=10)
