@@ -1,5 +1,6 @@
 # tools to study the tail
 
+import warnings
 from ...saoimage import getds9
 from .core import BrightnessProfile, BrightnessProfileSet
 
@@ -18,6 +19,7 @@ class FeatureModel(BrightnessProfile):
         """
         self.image = image
         self.unwrapped = unwrapped
+        self.center = center
 
     def imdisp(self, ds9=None, unwrapped=False, ds9par=[]):
         """Display images"""
@@ -36,7 +38,7 @@ class FeatureModel(BrightnessProfile):
         for p in ds9par:
             ds9.set(p)
 
-    def extract_profs(self, dist=None, width=1, type='az'):
+    def extract_profs(self, dist=None, width=1, kind='az'):
         """Extract profiles
 
         dist : iterable of int
@@ -47,14 +49,63 @@ class FeatureModel(BrightnessProfile):
         width : odd int
             Width along the `dist` direction to be averaged.  If not odd,
             then the next odd number is used, and a warning is issued.
-        type : str, ['az', 'x', 'y']
+        kind : str, ['az', 'x', 'y']
             The type of profiles to be extracted.
 
         The extracted profiles will be stored in attribute `._azprofs`,
         `.xprofs`, or `.yprofs`, depending on the value of `type`, and
         then returned.
         """
-        pass
+        if width % 2 == 0:
+            warnings.warn('width is even number: {}, use an odd number: {}'.
+                format(width, width + 1))
+            width += 1
+        w2 = width // 2
+        if kind in ['az']:
+            if not hasattr(self, 'unwrapped'):
+                raise ValueError('unwrapped image unavailable.')
+            if dist is None:
+                nr = self.unwrapped.shape[0]  # number of radial pixels
+                dist = np.arange(nr)
+            naz = self.unwrapped.shape[1]  # number of azimuthal angles
+            daz = 360 / naz  # azimuthal step size
+            az = np.linspace(0, (n_az - 1) * daz, naz)
+            meta = {'dist': dist,
+                    'width': width}
+            self._azprofs = BrightnessProfileSet(
+                [AzimuthalProfile(
+                    self.unwrapped[i-w2:i+w2+1].mean(axis=0),
+                    x=u.Quantity(az, u.deg)
+                    )
+                for i in dist],
+                meta=meta)
+            return self._azprofs
+        elif kind in ['x']:
+            if not hasattr(self, 'image'):
+                raise ValueError('image unavailable.')
+            if dist is None:
+                dist = self.image.shape[0]
+            meta = {'dist': dist,
+                    'width': width}
+            self._xprofs = BrightnessProfileSet(
+                [BrightnessProfile(self.image[y-w2:y+w2+1].mean(axis=0))
+                for y in dist],
+                meta=meta)
+            return self._xprofs
+        elif kind in ['y']:
+            if not hasattr(self, 'image'):
+                raise ValueError('image unavailable.')
+            if dist is None:
+                dist = self.image.shape[1]
+            meta = {'dist': dist,
+                    'width': width}
+            self._yprofs = BrightnessProfileSet(
+                [BrightnessProfile(self.image[:, x-w2:x+w2+1].mean(axis=1))
+                for x in dist],
+                meta=meta)
+            return self._yprofs
+        else:
+            raise ValueError('unrecognized profile type: {}'.format(kind))
 
     @property
     def azprofs(self):
