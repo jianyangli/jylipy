@@ -1092,6 +1092,11 @@ class BrightnessProfileSet(list):
     """Class to process a set of tail brightness profile"""
 
     def __init__(self, *args, **kwargs):
+        """
+        meta : dict
+            Meta data.
+        """
+        meta = kwargs.pop('meta', {})
         super().__init__(*args, **kwargs)
         for i, m in enumerate(self):
             if not isinstance(m, BrightnessProfile):
@@ -1105,11 +1110,12 @@ class BrightnessProfileSet(list):
                     suffix = 'th'
                 raise ValueError('Incompatible type {} in the {}{} '
                     'elements.'.format(type(m), i, suffix))
+        self.meta = meta
 
     def __getitem__(self, k):
         out = super().__getitem__(k)
         if hasattr(out, '__iter__'):
-            return self.__class__(out)
+            return self.__class__(out, meta=self.meta)
         else:
             return out
 
@@ -1118,6 +1124,10 @@ class BrightnessProfileSet(list):
         """Read from input file"""
         obj = []
         with fits.open(infile) as f_:
+            meta = {}
+            for i in range(f_[0].header['meta']):
+                k = f_[0].header['meta_{}'.format(i)]
+                meta[k] = f_[0].header[k]
             for hdu in f_[1:]:
                 if hdu.data.ndim == 1:
                     data = hdu.data * u.Unit(hdu.header['bunit']) \
@@ -1129,7 +1139,7 @@ class BrightnessProfileSet(list):
                     x = hdu.data[1] * u.Unit(hdu.header['xunit']) \
                             if 'xunit' in hdu.header else u.pix
                     obj.append(BrightnessProfile(data, x, info=hdu.header))
-        return cls(obj)
+        return cls(obj, meta=meta)
 
     def to_hdulist(self, save_x=False):
         """Convert to an HDUList class object
@@ -1139,7 +1149,14 @@ class BrightnessProfileSet(list):
             0 with 1 pixel increment.
         """
         hdulist = [p.to_hdu(save_x=save_x) for p in self]
-        hdulist.insert(0, fits.PrimaryHDU())
+        hdu0 = fits.PrimaryHDU()
+        hdu0.header['meta'] = len(self.meta), 'number of meta data keys'
+        if hdu0.header['meta'] > 0:
+            for i, k in enumerate(self.meta.keys()):
+                hdu0.header['meta_{}'.format(i)] = k
+            for k, v in self.meta.items():
+                hdu0.header[k] = v
+        hdulist.insert(0, hdu0)
         return fits.HDUList(hdulist)
 
     def write(self, outfile, overwrite=False, **kwargs):
