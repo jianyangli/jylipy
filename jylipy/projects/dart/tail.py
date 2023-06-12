@@ -1,8 +1,10 @@
 # tools to study the tail
 
 import warnings
+import numpy as np
+import astropy.units as u
 from ...saoimage import getds9
-from .core import BrightnessProfile, BrightnessProfileSet
+from .core import BrightnessProfile, BrightnessProfileSet, AzimuthalProfile
 
 
 class FeatureModel(BrightnessProfile):
@@ -69,7 +71,7 @@ class FeatureModel(BrightnessProfile):
                 dist = np.arange(nr)
             naz = self.unwrapped.shape[1]  # number of azimuthal angles
             daz = 360 / naz  # azimuthal step size
-            az = np.linspace(0, (n_az - 1) * daz, naz)
+            az = np.linspace(0, (naz - 1) * daz, naz)
             meta = {'dist': dist,
                     'width': width}
             self._azprofs = BrightnessProfileSet(
@@ -84,7 +86,7 @@ class FeatureModel(BrightnessProfile):
             if not hasattr(self, 'image'):
                 raise ValueError('image unavailable.')
             if dist is None:
-                dist = self.image.shape[0]
+                dist = range(self.image.shape[0])
             meta = {'dist': dist,
                     'width': width}
             self._xprofs = BrightnessProfileSet(
@@ -96,7 +98,7 @@ class FeatureModel(BrightnessProfile):
             if not hasattr(self, 'image'):
                 raise ValueError('image unavailable.')
             if dist is None:
-                dist = self.image.shape[1]
+                dist = range(self.image.shape[1])
             meta = {'dist': dist,
                     'width': width}
             self._yprofs = BrightnessProfileSet(
