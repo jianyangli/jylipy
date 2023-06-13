@@ -951,6 +951,7 @@ class BrightnessProfile():
                 'none' : No background handling
                 'const' : Constant background.
                 'linear' : Linear background.
+                'data' : Estimate a constant background from data
             For the case of 'const' and 'linear', the background model
             can either be specified via the `background_par` parameter
             or be fitted and stored in `.par` attribute.
@@ -1065,6 +1066,9 @@ class BrightnessProfile():
                 slope, intercept = background_par[:2]
                 bg = models.Linear1D(slope, intercept,
                                      fixed={'slope': True, 'intercept': True})
+        elif background in ['data']:
+            const = np.median(self.data)
+            bg = models.Const1D(const, fixed={'amplitude': True})
         else:
             raise ValueError('unrecognized background model')
 
