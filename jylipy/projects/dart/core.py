@@ -873,7 +873,7 @@ class BrightnessProfile():
         unit = getattr(self.data, 'unit', '')
         # take logarithm if needed
         if log:
-            y = np.log10(y)
+            y = np.log10(np.clip(y, 1e-20, None))
         # smooth
         if method == 'moving':
             box = np.ones(size) / size
@@ -1125,9 +1125,10 @@ class BrightnessProfileSet(list):
         obj = []
         with fits.open(infile) as f_:
             meta = {}
-            for i in range(f_[0].header['meta']):
-                k = f_[0].header['meta_{}'.format(i)]
-                meta[k] = f_[0].header[k]
+            if 'meta' in f_[0].header:
+                for i in range(f_[0].header['meta']):
+                    k = f_[0].header['meta_{}'.format(i)]
+                    meta[k] = f_[0].header[k]
             for hdu in f_[1:]:
                 if hdu.data.ndim == 1:
                     data = hdu.data * u.Unit(hdu.header['bunit']) \
