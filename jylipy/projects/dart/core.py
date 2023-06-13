@@ -930,7 +930,8 @@ class BrightnessProfile():
             ax = plt.gca()
         ax.plot(self.x, self.data, **kwargs)
 
-    def peak(self, x0, width, model='moffat', par=None, order=3,
+    def peak(self, x0, width, model='moffat', background='none',
+                par=None, background_par=None, order=3,
                 fitter=LevMarLSQFitter, tol=0.5, maxiter=10):
         """Find the peak position in the profile
 
@@ -945,9 +946,26 @@ class BrightnessProfile():
                 3, 'moffat' : Moffat function
                 4, 'voigt' : Voigt function
                 5, 'poly' : polynomial model
+        background : str, optional
+            Specify how background is handled.  Values can be
+                'none' : No background handling
+                'const' : Constant background.
+                'linear' : Linear background.
+            For the case of 'const' and 'linear', the background model
+            can either be specified via the `background_par` parameter
+            or be fitted and stored in `.par` attribute.
         par : sequence of float, optional
             The initial parameters of model.  If `None`, then the parameters
             will be automatically determined from `x0` and `width` parameters.
+        background_par : float or sequence of float, optional
+            The background parameters to be held fixed.  If `None`, then
+            the background model will be fitted.  The treatment of this
+            parameter depends on the value of `background` parameter:
+                `none` : Ignore this parameter.
+                `const` : Use the value or the first value if sequence
+                    as the constant background.
+                `linear` : Use the first two values as (slope, intercept)
+                    parameters of the linear background.
         order : int, optional
             Order of polynomial fit.  Only useful when polynomial model
             is used.
@@ -978,6 +996,7 @@ class BrightnessProfile():
             [x, y], where x is the independent variable and y is the best-fit
             value of the profile.
         """
+        # preprocess and check parameters
         if isinstance(self.x, u.Quantity):
             quantity = True
             xunit = self.x.unit
@@ -995,8 +1014,6 @@ class BrightnessProfile():
                 tol = u.Quantity(tol, xunit)
         else:
             quantity = False
-
-        self.par = {}
 
         # initialize model
         if par is None:
@@ -1022,10 +1039,41 @@ class BrightnessProfile():
         elif model in [5, 'poly']:
             pass
         else:
-            raise ValueError('unrecoganized model {}'.format(model))
+            raise ValueError('unrecognized model {}'.format(model))
+
+        # prepare background model
+        if background in ['none']:
+            pass
+        elif background in ['const']:
+            if background_par is None:
+                const = u.Quantity(0., m0.amplitude.unit) \
+                         if hasattr(m0.amplitude, 'unit') else 0.
+                bg = models.Const1D(const)
+            else:
+                const = background_par[0] if (hasattr(background_par,
+                        '__iter__') and len(background_par.shape) > 0) else background_par
+                bg = models.Const1D(const, fixed={'amplitude': True})
+        elif background in ['linear']:
+            if background_par is None:
+                slp_ = m0.amplitude / m0.fwhm
+                slope = u.Quantity(0., slp_.unit) if hasattr(slp_, 'unit') \
+                        else 0.
+                intercept = u.Quantity(0., m0.amplitude.unit) \
+                        if hasattr(m0.amplitude, 'unit') else 0.
+                bg = models.Linear1D(slope, intercept)
+            else:
+                slope, intercept = background_par[:2]
+                bg = models.Linear1D(slope, intercept,
+                                     fixed={'slope': True, 'intercept': True})
+        else:
+            raise ValueError('unrecognized background model')
 
         if model not in [5, 'poly']:
+            # initialize fitter
             fit = fitter()
+            # add background
+            if background != 'none':
+                m0 = m0 + bg
 
         # iteration
         dx = 100
@@ -1059,16 +1107,18 @@ class BrightnessProfile():
             else:
                 m = fit(m0, x, y)
                 if model in [1, 'gaussian']:
-                    x_peak = getattr(m, 'mean')
+                    x_peak = getattr(m, 'mean') if background == 'none' \
+                                                else getattr(m[0], 'mean')
                 else:
-                    x_peak = getattr(m, 'x_0')
+                    x_peak = getattr(m, 'x_0') if background == 'none' \
+                                                else getattr(m[0], 'x_0')
             if quantity:
                 x_peak = u.Quantity(x_peak, xunit)
             dx = abs(x_peak - x0)
             x0 = x_peak
             n += 1
 
-        # save results
+        # save best-fit results
         if model in [5, 'poly']:
             self.model = pp
             self.fit = [xx, m]
@@ -1076,12 +1126,15 @@ class BrightnessProfile():
             self.model = m
             self.fit = [xx, m(xx)]
 
-        self.par['peak'] = x_peak
+        # save best-fit parameters
+        self.par = {'peak': x_peak}
         if model not in [5, 'poly']:
-            amp = self.model.amplitude
+            amp = self.model.amplitude if background == 'none' \
+                                       else self.model[0].amplitude
             self.par['amplitude'] = u.Quantity(amp) if hasattr(amp, 'unit') \
                                                     else amp
-            fwhm = self.model.fwhm
+            fwhm = self.model.fwhm if background == 'none' \
+                                   else self.model[0].fwhm
             self.par['fwhm'] = u.Quantity(fwhm) if hasattr(fwhm, 'unit') \
                                                     else fwhm
 
@@ -1262,8 +1315,7 @@ class Voigt1D(models.Voigt1D):
 class AzimuthalProfile(BrightnessProfile):
     """Azimuthal profile"""
 
-    def peak(self, x0, width, model='moffat', par=None, order=3,
-                fitter=LevMarLSQFitter, tol=0.5, maxiter=10):
+    def peak(self, *args, **kwargs):
 
         # fix angle wrapping, TBD
         #if s1 < 0:
@@ -1277,5 +1329,4 @@ class AzimuthalProfile(BrightnessProfile):
         #    w = error[s1:s2]
         #ang = np.linspace(s1, s2, len(seg)) * ddeg
 
-        return super().peak(x0, width, model=model, par=None, order=3,
-                fitter=LevMarLSQFitter, tol=0.5, maxiter=10)
+        return super().peak(*args, **kwargs)
