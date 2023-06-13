@@ -8,9 +8,27 @@ from .core import BrightnessProfile, BrightnessProfileSet, AzimuthalProfile
 
 
 class FeatureModel(BrightnessProfile):
-    """Model a feature in the image"""
+    """Model a feature in the image
 
-    def __init__(self, image=None, unwrapped=None, center=None):
+    Attributes
+    ----------
+    .image : 2d array or u.Quantity
+        Image to be processed
+    .unwrapped : 2d array or u.Quantity
+        Unwrapped image in (r, theta)
+    .center : 2-element sequence of int
+        Centroid pixel coordinate [y, x]
+    .info : dict or any object that has the form of info['key'] = value
+        Information data
+    .azprofs : `BrightnessProfileSet` object
+        Azimuthal profiles
+    .xprofs : `BrightnessProfileSet` object
+        Profiles in x-direction
+    .yprofs : `BrightnessProfileSet` object
+        Profiles in y-direction
+    """
+
+    def __init__(self, image=None, unwrapped=None, center=None, info=None):
         """
         image : 2d array
             Image to be processed
@@ -18,10 +36,13 @@ class FeatureModel(BrightnessProfile):
             Unwrapped image in (r, theta)
         center : 2-element sequence of int
             Centroid pixel coordinate [y, x].  Default is image center.
+        info : dict, or any object that has the form of info['key'] = value
+            Information data
         """
         self.image = image
         self.unwrapped = unwrapped
         self.center = center
+        self.info = info
 
     def imdisp(self, ds9=None, unwrapped=False, ds9par=[]):
         """Display images"""
@@ -77,7 +98,8 @@ class FeatureModel(BrightnessProfile):
             self._azprofs = BrightnessProfileSet(
                 [AzimuthalProfile(
                     self.unwrapped[i-w2:i+w2+1].mean(axis=0),
-                    x=u.Quantity(az, u.deg)
+                    x=u.Quantity(az, u.deg),
+                    info=self.info,
                     )
                 for i in dist],
                 meta=meta)
@@ -90,7 +112,8 @@ class FeatureModel(BrightnessProfile):
             meta = {'dist': dist,
                     'width': width}
             self._xprofs = BrightnessProfileSet(
-                [BrightnessProfile(self.image[y-w2:y+w2+1].mean(axis=0))
+                [BrightnessProfile(self.image[y-w2:y+w2+1].mean(axis=0),
+                    info=self.info)
                 for y in dist],
                 meta=meta)
             return self._xprofs
@@ -102,7 +125,8 @@ class FeatureModel(BrightnessProfile):
             meta = {'dist': dist,
                     'width': width}
             self._yprofs = BrightnessProfileSet(
-                [BrightnessProfile(self.image[:, x-w2:x+w2+1].mean(axis=1))
+                [BrightnessProfile(self.image[:, x-w2:x+w2+1].mean(axis=1),
+                    info=self.info)
                 for x in dist],
                 meta=meta)
             return self._yprofs
