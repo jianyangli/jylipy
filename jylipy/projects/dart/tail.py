@@ -44,7 +44,7 @@ class FeatureModel(BrightnessProfile):
         self.image = image
         self.unwrapped = unwrapped
         self.center = center if (center is not None) or (image is None) \
-                      else np.array(image.shape) / 2
+                      else u.Quantity(image.shape, u.pix) / 2
         self.info = info
 
     def imdisp(self, ds9=None, unwrapped=False, ds9par=[]):
@@ -183,7 +183,6 @@ class FeatureModel(BrightnessProfile):
         par = {k: [] for k in keys}
         # fit peaks for all profiles
         for i, p in enumerate(profs[fit_index]):
-            #print(i)
             p.peak(*args, **kwargs)
             for k, v in p.par.items():
                 par[k].append(v)
@@ -192,21 +191,25 @@ class FeatureModel(BrightnessProfile):
             par[k] = u.Quantity(v)
         if kind in ['az']:
             # add peak position pixel coordinate
-            par['peak_az'] = par.pop('peak')
+            par['peak_pa'] = par.pop('peak')
             par['peak_x'] = (profs.meta['dist'][fit_index]
-                            * np.cos(par['peak_az']) + self.center[1]) * u.pix
+                            * np.cos(par['peak_pa']) + self.center[1])
             par['peak_y'] = (profs.meta['dist'][fit_index]
-                            * np.sin(par['peak_az']) + self.center[0]) * u.pix
-        elif kind in ['y']:
-            par['peak_y'] = par.pop('peak')
-            par['peak_x'] = profs.meta['dist'][fit_index] * u.pix
-            par['peak_az'] = (np.arctan2(par['peak_y'], par['peak_x'])
-                            + 2 * np.pi * u.rad) % (2 * np.pi * u.rad)
-        elif kind in ['x']:
-            par['peak_x'] = par.pop('peak')
-            par['peak_y'] = profs.meta['dist'][fit_index] * u.pix
-            par['peak_az'] = (np.arctan2(par['peak_y'], par['peak_x'])
-                            + 2 * np.pi * u.rad) % (2 * np.pi * u.rad)
+                            * np.sin(par['peak_pa']) + self.center[0])
+        else:
+            if kind in ['y']:
+                par['peak_y'] = par.pop('peak')
+                par['peak_x'] = profs.meta['dist'][fit_index] * u.pix
+            elif kind in ['x']:
+                par['peak_x'] = par.pop('peak')
+                par['peak_y'] = profs.meta['dist'][fit_index] * u.pix
+            else:
+                raise ValueError('unrecognized profile type {}.'.format(kind))
+            y_ = par['peak_y'] - self.center[0]
+            x_ = par['peak_x'] - self.center[1]
+            par['peak_pa'] = (np.arctan2(y_, x_) + 1.5 * np.pi * u.rad) % (
+                                2 * np.pi * u.rad)
+
         self.par = par
 
     def plot_feature(self):
