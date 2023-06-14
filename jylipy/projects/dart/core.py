@@ -4,9 +4,10 @@ from scipy.signal import savgol_filter
 from astropy.time import Time
 from astropy.modeling import Fittable2DModel, Parameter
 from astropy.modeling import models
-from astropy.modeling.fitting import LevMarLSQFitter
+from astropy.modeling.fitting import LevMarLSQFitter, FittingWithOutlierRemoval
 from astropy.io import ascii, fits
 from astropy.table import Table, vstack
+from astropy.stats import sigma_clip
 from scipy.optimize import brentq
 from sbpy.bib import cite
 import spiceypy as spice
@@ -999,30 +1000,35 @@ class BrightnessProfile():
         """
         # preprocess and check parameters
         if isinstance(self.x, u.Quantity):
-            quantity = True
-            xunit = self.x.unit
+            x_value = self.x.value
+            x_unit = self.x.unit
             if not (isinstance(x0, u.Quantity) and
                     isinstance(width, u.Quantity)):
-                raise ValueError('u.Quantity required for `x0` and `width`')
-            if not (xunit.is_equivalent(x0.unit) and
-                    xunit.is_equivalent(width.unit)):
+                raise ValueError('u.Quantity required for `x0` and `width`.')
+            if not (x0.unit.is_equivalent(x_unit) and
+                    width.unit.is_equivalent(x_unit)):
                 raise u.UnitsError(
                     'Incompatible units between `x0`, `width` and x-axis.')
             if isinstance(tol, u.Quantity):
-                if not xunit.is_equivalent(tol.unit):
+                if not tol.unit.is_equivalent(x_unit):
                     raise u.UnitsError('Incompatible unit provided for `tol`.')
-            else:
-                tol = u.Quantity(tol, xunit)
+                tol = tol.to_value(x_unit)
+            x0 = x0.to_value(x_unit)
+            width = width.to_value(x_unit)
         else:
-            quantity = False
+            x_value = self.x
+            if isinstance(x0, u.Quantity) or isinstance(width, u.Quantity):
+                raise ValueError('`x0` or `width` cannot be u.Quantity.')
+
+        data_value = getattr(self.data, 'value', self.data)
 
         # initialize model
         if par is None:
             x1 = x0 - width / 2
             x2 = x0 + width / 2
-            s1 = np.abs(self.x - x1).argmin()
-            s2 = np.abs(self.x - x2).argmin()
-            amp = self.data[s1:s2+1].max()
+            s1 = np.abs(x_value - x1).argmin()
+            s2 = np.abs(x_value - x2).argmin()
+            amp = data_value[s1:s2+1].max()
             if model in [1, 'gaussian', 2, 'lorentz', 3, 'moffat']:
                 par = [amp, x0, width / 4]
             if model in [3, 'moffat']:
@@ -1047,9 +1053,7 @@ class BrightnessProfile():
             pass
         elif background in ['const']:
             if background_par is None:
-                const = u.Quantity(0., m0.amplitude.unit) \
-                         if hasattr(m0.amplitude, 'unit') else 0.
-                bg = models.Const1D(const)
+                bg = models.Const1D(0.)
             else:
                 const = background_par[0] if (hasattr(background_par,
                         '__iter__') and len(background_par.shape) > 0) \
@@ -1057,18 +1061,12 @@ class BrightnessProfile():
                 bg = models.Const1D(const, fixed={'amplitude': True})
         elif background in ['linear']:
             if background_par is None:
-                slp_ = m0.amplitude / m0.fwhm
-                slope = u.Quantity(0., slp_.unit) if hasattr(slp_, 'unit') \
-                        else 0.
-                intercept = u.Quantity(0., m0.amplitude.unit) \
-                        if hasattr(m0.amplitude, 'unit') else 0.
-                bg = models.Linear1D(slope, intercept)
+                bg = models.Linear1D(0., 0.)
             else:
-                slope, intercept = background_par[:2]
-                bg = models.Linear1D(slope, intercept,
+                bg = models.Linear1D(*background_par[:2],
                                      fixed={'slope': True, 'intercept': True})
         elif background in ['data']:
-            const = np.median(self.data)
+            const = np.nanmedian(data_value)
             bg = models.Const1D(const, fixed={'amplitude': True})
         else:
             raise ValueError('unrecognized background model')
@@ -1082,8 +1080,6 @@ class BrightnessProfile():
 
         # iteration
         dx = 100
-        if quantity:
-            dx = u.Quantity(dx, xunit)
         n = 0
         x00 = x0
         while dx > tol and n < maxiter:
@@ -1095,37 +1091,25 @@ class BrightnessProfile():
                 x_peak = x0
                 m = m0
                 continue
-            s1 = np.abs(self.x - x1).argmin()
-            s2 = np.abs(self.x - x2).argmin()
-            x = self.x[s1:s2+1]
-            y = self.data[s1:s2+1]
-
-            # fix np.inf
-            if np.any(~np.isfinite(y)):
-                x_fit = np.nan * xunit if quantity else 1
+            s1 = np.abs(x_value - x1).argmin()
+            s2 = np.abs(x_value - x2).argmin()
+            x = x_value[s1:s2+1]
+            y = data_value[s1:s2+1]
 
             # fit model
             xx = np.linspace(x.min(), x.max(), 1000)
-            if quantity:
-                xx = u.Quantity(xx, xunit)
             if model in [5, 'poly']:
-                pp = np.polyfit(getattr(x, 'value', x),
-                                getattr(y, 'value', y),
-                                order)
-                m = np.poly1d(pp)(getattr(xx, 'value', xx))
-                if hasattr(y, 'unit'):
-                    m = u.Quantity(m, y.unit)
+                pp = np.polyfit(x, y, order)
+                m = np.poly1d(pp)(xx)
                 x_peak = xx[m.argmax()]
             else:
                 m = fit(m0, x, y)
                 if model in [1, 'gaussian']:
                     x_peak = getattr(m, 'mean') if background == 'none' \
-                                                else getattr(m[0], 'mean')
+                                else getattr(m[0], 'mean')
                 else:
                     x_peak = getattr(m, 'x_0') if background == 'none' \
-                                                else getattr(m[0], 'x_0')
-            if quantity:
-                x_peak = u.Quantity(x_peak, xunit)
+                                else getattr(m[0], 'x_0')
             dx = abs(x_peak - x0)
             x0 = x_peak
             n += 1
@@ -1141,14 +1125,20 @@ class BrightnessProfile():
         # save best-fit parameters
         self.par = {'peak': x_peak}
         if model not in [5, 'poly']:
-            amp = self.model.amplitude if background == 'none' \
-                                       else self.model[0].amplitude
-            self.par['amplitude'] = u.Quantity(amp) if hasattr(amp, 'unit') \
-                                                    else amp
-            fwhm = self.model.fwhm if background == 'none' \
-                                   else self.model[0].fwhm
-            self.par['fwhm'] = u.Quantity(fwhm) if hasattr(fwhm, 'unit') \
-                                                    else fwhm
+            amp = self.model.amplitude \
+                    if background == 'none' else self.model[0].amplitude
+            self.par['amplitude'] = getattr(amp, 'value', amp)
+            fwhm = self.model.fwhm \
+                     if background == 'none' else self.model[0].fwhm
+            self.par['fwhm'] = getattr(fwhm, 'value', fwhm)
+
+        # apply units if needed
+        xunit = getattr(self.x, 'unit', 1.)
+        dunit = getattr(self.data, 'unit', 1.)
+        self.par['peak'] *= xunit
+        self.par['amplitude'] *= dunit
+        self.par['fwhm'] *= xunit
+        x_peak *= xunit
 
         return x_peak
 
