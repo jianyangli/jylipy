@@ -933,7 +933,8 @@ class BrightnessProfile():
 
     def peak(self, x0, width, model='moffat', background='none',
                 par=None, background_par=None, order=3,
-                fitter=LevMarLSQFitter, tol=0.5, maxiter=10):
+                fitter=LevMarLSQFitter, tol=0.5, maxiter=5,
+                sigma=None):
         """Find the peak position in the profile
 
         x0 : number, u.Quantity
@@ -978,6 +979,10 @@ class BrightnessProfile():
             Tolerance of peak position.  In whatever unit the x-axis is in.
         maxiter : int, optional
             Maximum number of iteration.
+        sigma : int or None, optional
+            If not `None`, then specify the outlier removal threshold.
+            In this case, attribute `.fit` dict contains a boolean array
+            'outlier' to identify the outliers (True).
 
         Returns
         -------
@@ -994,9 +999,11 @@ class BrightnessProfile():
             'fwhm' : the full-width-half-max of the profile
         `.model` : astropy model class object or numpy array
             The best-fit model or model parameters for the case of polynomial.
-        `.fit` : list
-            [x, y], where x is the independent variable and y is the best-fit
-            value of the profile.
+        `.fit` : dict
+            'x_data', 'y_data' : the data used to fit the peak
+            'x', 'y' : more continuous data and the best-fit model
+            'outlier' : a boolean array masking out the outliers, if `sigma`
+                is not `None`.
         """
         # preprocess and check parameters
         if isinstance(self.x, u.Quantity):
@@ -1073,7 +1080,11 @@ class BrightnessProfile():
 
         if model not in [5, 'poly']:
             # initialize fitter
-            fit = fitter()
+            if sigma is None:
+                fit = fitter()
+            else:
+                fit = FittingWithOutlierRemoval(fitter(), sigma_clip,
+                            sigma=sigma)
             # add background
             if background != 'none':
                 m0 = m0 + bg
@@ -1104,6 +1115,8 @@ class BrightnessProfile():
                 x_peak = xx[m.argmax()]
             else:
                 m = fit(m0, x, y)
+                if sigma is not None:
+                    m, mask = m
                 if model in [1, 'gaussian']:
                     x_peak = getattr(m, 'mean') if background == 'none' \
                                 else getattr(m[0], 'mean')
@@ -1115,12 +1128,15 @@ class BrightnessProfile():
             n += 1
 
         # save best-fit results
+        self.fit = {'x': xx, 'x_data': x, 'y_data': y}
         if model in [5, 'poly']:
             self.model = pp
-            self.fit = [xx, m]
+            self.fit['y'] = m
         else:
             self.model = m
-            self.fit = [xx, m(xx)]
+            self.fit['y']= m(xx)
+        if sigma is not None:
+            self.fit['outlier'] = mask
 
         # save best-fit parameters
         self.par = {'peak': x_peak}
