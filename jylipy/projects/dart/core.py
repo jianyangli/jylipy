@@ -1052,7 +1052,8 @@ class BrightnessProfile():
                 bg = models.Const1D(const)
             else:
                 const = background_par[0] if (hasattr(background_par,
-                        '__iter__') and len(background_par.shape) > 0) else background_par
+                        '__iter__') and len(background_par.shape) > 0) \
+                        else background_par
                 bg = models.Const1D(const, fixed={'amplitude': True})
         elif background in ['linear']:
             if background_par is None:
@@ -1084,9 +1085,16 @@ class BrightnessProfile():
         if quantity:
             dx = u.Quantity(dx, xunit)
         n = 0
+        x00 = x0
         while dx > tol and n < maxiter:
             x1 = x0 - width / 2
             x2 = x0 + width / 2
+            # if solution out of range, then put it back to the initial value
+            if (x0 < x00 - width) or (x0 > x00 + width):
+                x0 = x00
+                x_peak = x0
+                m = m0
+                continue
             s1 = np.abs(self.x - x1).argmin()
             s2 = np.abs(self.x - x2).argmin()
             x = self.x[s1:s2+1]
