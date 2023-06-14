@@ -871,7 +871,7 @@ class BrightnessProfile():
         """
         # strip out unit
         y = getattr(self.data, 'value', self.data)
-        unit = getattr(self.data, 'unit', '')
+        unit = getattr(self.data, 'unit', 1)
         # take logarithm if needed
         if log:
             y = np.log10(np.clip(y, 1e-20, None))
@@ -892,8 +892,7 @@ class BrightnessProfile():
         if log:
             y = 10**y
         # apply unit
-        if unit != '':
-            y = u.Quantity(y, unit)
+        y *= unit
         # return
         if method == 'binning':
             return y, x
@@ -1139,7 +1138,9 @@ class BrightnessProfile():
             self.fit['outlier'] = mask
 
         # save best-fit parameters
-        self.par = {'peak': x_peak}
+        xunit = getattr(self.x, 'unit', 1.)
+        dunit = getattr(self.data, 'unit', 1.)
+        self.par = {'peak': x_peak * xunit}
         if model not in [5, 'poly']:
             amp = self.model.amplitude \
                     if background == 'none' else self.model[0].amplitude
@@ -1147,16 +1148,11 @@ class BrightnessProfile():
             fwhm = self.model.fwhm \
                      if background == 'none' else self.model[0].fwhm
             self.par['fwhm'] = getattr(fwhm, 'value', fwhm)
+            # apply units if needed
+            self.par['amplitude'] *= dunit
+            self.par['fwhm'] *= xunit
 
-        # apply units if needed
-        xunit = getattr(self.x, 'unit', 1.)
-        dunit = getattr(self.data, 'unit', 1.)
-        self.par['peak'] *= xunit
-        self.par['amplitude'] *= dunit
-        self.par['fwhm'] *= xunit
-        x_peak *= xunit
-
-        return x_peak
+        return x_peak * getattr(self.x, 'unit', 1.)
 
 
 class BrightnessProfileSet(list):
