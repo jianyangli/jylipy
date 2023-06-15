@@ -68,19 +68,21 @@ class FeatureModel(BrightnessProfile):
         """Extract profiles
 
         dist : iterable of int
-            Distances at which the profiles will be extracted.  This can
-            be the distance along radial direction, or x or y directions
-            of the image.  Default is from 0 to the largest possible in
-            the image, with an incremental of 1.
+            Pixel distances at which the profiles will be extracted.
+            This can be the distance along radial direction, or x or
+            y directions of the image.  Default is from 0 to the largest possible in the image, with an incremental of 1.
         width : odd int
-            Width along the `dist` direction to be averaged.  If not odd,
-            then the next odd number is used, and a warning is issued.
+            Width in pixels along the `dist` direction to be averaged.
+            If not odd, then the next odd number is used, and a warning
+            is issued.
         kind : str, ['az', 'x', 'y']
             The type of profiles to be extracted.
 
         The extracted profiles will be stored in attribute `._azprofs`,
         `.xprofs`, or `.yprofs`, depending on the value of `type`, and
         then returned.
+
+        TBD: change to quantity input for `dist` and `width`
         """
         if width % 2 == 0:
             warnings.warn('width is even number: {}, use an odd number: {}'.
@@ -225,9 +227,9 @@ class FeatureModel(BrightnessProfile):
             # add peak position pixel coordinate
             par['peak_pa'] = par.pop('peak')
             par['peak_x'] = (profs.meta['dist'][fit_index]
-                            * np.cos(par['peak_pa']) + self.center[1])
+                            * np.cos(par['peak_pa']) * u.pix + self.center[1])
             par['peak_y'] = (profs.meta['dist'][fit_index]
-                            * np.sin(par['peak_pa']) + self.center[0])
+                            * np.sin(par['peak_pa']) * u.pix + self.center[0])
         else:
             if kind in ['y']:
                 par['peak_y'] = par.pop('peak')
