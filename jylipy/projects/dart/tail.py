@@ -151,7 +151,8 @@ class FeatureModel(BrightnessProfile):
     def xprofs(self):
         return getattr(self, '_xprofs', None)
 
-    def parameterize(self, *args, kind='az', fit_index=slice(None), **kwargs):
+    def parameterize(self, p0, width, kind='az', fit_index=slice(None),
+            **kwargs):
         """Parameterize the feature from modeling.
 
         This method will fit the extracted profiles to characterize the
@@ -163,13 +164,18 @@ class FeatureModel(BrightnessProfile):
 
         Parameters
         ----------
-        *args : See `BrightnessProfile.peak()`
+        p0 : number, u.Quantity or sequence of them
+            Initial peak positions
+        width : number, u.Quantity or sequence of them
+            Width along the profile to search for peak
         kind : str, ('az', 'x', 'y')
             Use which profiles to parameterize
         fit_index : int or slice
             The indexes of profiles to be fitted
-        **kwargs : See `BrightnessProfile.peak()`
+        kwargs : dict
+            Keyword parameters for `BrightnessProfile.peak()`
         """
+        # initial process: `kind`
         if kind in ['az']:
             profs = self.azprofs
         elif kind in ['x']:
@@ -178,12 +184,38 @@ class FeatureModel(BrightnessProfile):
             profs = self.yprofs
         else:
             raise ValueError('unrecognized profile type.')
+
+        # initial process: `p0`
+        nprofs = len(profs[fit_index])
+        if isinstance(p0, u.Quantity):
+            if len(p0.shape) == 0:
+                p0 = u.Quantity([p0] * nprofs)
+        else:
+            if not hasattr(p0, '__iter__'):
+                p0 = np.full(nprofs, p0)
+        if len(p0) != nprofs:
+            raise ValueError('the length of initial peak position p0 '
+                '{} is differnet from the length of profiles {}'.format(
+                    len(p0), nprofs))
+
+        # initial process: `width`
+        if isinstance(width, u.Quantity):
+            if len(width.shape) == 0:
+                width = u.Quantity([width] * nprofs)
+        else:
+            if not hasattr(width, '__iter__'):
+                width = np.full(nprofs, width)
+        if len(width) != nprofs:
+            raise ValueError('the length of initial peak position p0 '
+                '{} is differnet from the length of profiles {}'.format(
+                    len(width), nprofs))
+
         # prepare output
         keys = ['peak', 'amplitude', 'fwhm']
         par = {k: [] for k in keys}
         # fit peaks for all profiles
         for i, p in enumerate(profs[fit_index]):
-            p.peak(*args, **kwargs)
+            p.peak(p0[i], width[i], **kwargs)
             for k, v in p.par.items():
                 par[k].append(v)
         # post processing
