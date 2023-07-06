@@ -1017,12 +1017,10 @@ def syncsynd(comet, utc, beta, dt, observer='Earth', frame='J2000', kernel=None,
     et = spice.str2et(utc)
     # state and lighttime of comet from `observer` in output frame
     st_c, lt_c = spice.spkezr(comet, et, frame, 'lt+s', observer)
-    # state and lighttime of comet in eclipj2000 w/r to the Sun
-    st, lt = spice.spkezr(comet, et-lt_c, 'eclipj2000', 'none', 'sun')
-    # position of observer in eclipj2000 frame w/r to the Sun
-    posobs, lt = spice.spkpos(observer, et-lt_c, 'eclipj2000', 'none', 'sun')
-    # transformation matrix from eclipj2000 to output frame
-    m = np.array(spice.pxform('eclipj2000', frame, et-lt_c))
+    # state and lighttime of comet w/r to the Sun
+    st, lt = spice.spkezr(comet, et-lt_c, frame, 'none', 'sun')
+    # position of observer w/r to the Sun
+    posobs, lt = spice.spkpos(observer, et-lt_c, frame, 'none', 'sun')
     # initial velocity
     if vinit is not None:
         vinit = np.concatenate((np.zeros(3),vinit))
@@ -1040,8 +1038,8 @@ def syncsynd(comet, utc, beta, dt, observer='Earth', frame='J2000', kernel=None,
                 syn[i,j] = st0[:3]+dt[j]*86400.*st0[3:]
             else:
                 syn[i,j] = np.array(spice.prop2b(gm*(1-beta[i]), st0, dt[j]*86400.)[:3])
-            # convert to output `frame`
-            syn[i,j] = m.dot(syn[i,j]-posobs)
+    # convert to vectors in observer centered frame
+    syn -= posobs
 
     if kernel is not None:
         spice.unload(kernel)
@@ -1260,8 +1258,8 @@ def azavg(im, ext=0, center=None, centroid=False):
         sz = img.shape
         ct = np.asarray(ct)
         rmax = int(np.ceil(np.linalg.norm([np.asarray([0,0])-ct, np.asarray([0,sz[1]-1])-ct, np.asarray([sz[0]-1,0])-ct, np.asarray([sz[0]-1,sz[1]-1])-ct],axis=1).max()/2))
-        azimg = xy2rt(img, center=ct, ramax=rmax, rastep=0.5, azstep=0.5, method='splinef2d')
-        radprof = interp1d(np.linspace(0,rmax,rmax*2+1), np.median(azimg,axis=1), bounds_error=False, fill_value=1)
+        azimg = xy2rt(img, center=ct, ramax=rmax, rastep=0.5, azstep=0.5, method='linear')
+        radprof = interp1d(np.linspace(0,rmax,rmax*2+1), np.nanmedian(azimg,axis=1), bounds_error=False, fill_value=1)
         dst = dist(-ct[0], sz[0]-ct[0]-1, sz[0], -ct[1], sz[1]-ct[1]-1, sz[1])
         avgim = radprof(dst.reshape(-1)).reshape(sz)
 

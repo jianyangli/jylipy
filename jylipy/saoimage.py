@@ -114,6 +114,7 @@ class Region(object):
         propstr = ''
         for k, v in self.specs.items():
             vstr = '"'+str(v)+'"' if isinstance(v, (str, bytes)) else str(v)
+            #vstr = str(v)
             propstr = propstr + ' {}={}'.format(k, vstr)
         propstr = '#'+propstr
         cmdstr = 'image; {} {} {}'.format(self.shape,
@@ -319,6 +320,61 @@ class LineRegion(Region):
         return vect
 
 
+class SegmentRegion(Region):
+    """Segment region
+    """
+    _shape = ''
+
+    def __init__(self, points, **kwargs):
+        """
+        points : 2D array of shape (2, N)
+            Points along the segment line.  the x- and y-coordinates are
+            in points[0, :], points[1, :], respectively.  N is the number
+            of points on the sement line.
+        """
+        super().__init__(0, 0, **kwargs)
+        self.parname = None
+        self.points = np.asarray(points)
+
+    @property
+    def zerobased(self):
+        return self._zerobased
+
+    @zerobased.setter
+    def zerobased(self, v):
+        if self.zerobased ^ v:
+            self._zerobased = v
+            offset = -1 if v else 1
+            self.points += offset
+
+    def show(self, ds9=None, frame=None, print_cmd=False):
+        if ds9 is None:
+            ds9 = self.ds9
+        if ds9 is None:
+            raise ValueError('DS9 window is not specificed')
+        ds9 = getds9(ds9)
+        if frame is None:
+            frame = self.frame
+        if frame is None:
+            frame = ds9.get('frame')
+        ds9.set('frame '+frame)
+
+        par = self.points.T.flatten()
+        if self.zerobased:
+            par += 1
+        parstr = '# segment(' + ', '.join([str(x) for x in par]) + ') '
+        propstr = ''
+        for k, v in self.specs.items():
+            vstr = '"'+str(v)+'"' if isinstance(v, (str, bytes)) else str(v)
+            #vstr = str(v)
+            propstr = propstr + ' {}={}'.format(k, vstr)
+        cmdstr = 'image; ' + parstr + propstr
+        if print_cmd:
+            print("ds9.set('regions', '{}')".format(cmdstr))
+        else:
+            ds9.set('regions', cmdstr)
+
+
 class PointRegion(Region):
     """DS9 point region group"""
     def __init__(self, *args, **kwargs):
@@ -374,7 +430,7 @@ class RegionList(list):
                 'boxcircle_point': BoxCirclePointRegion}
 
     @classmethod
-    def from_ds9(cls, d, frame=None, system='image'):
+    def from_ds9(cls, d, frame=None, system='image', zerobased=False):
         """Return a list of region objects from DS9 window
 
         d : `DS9`
@@ -432,6 +488,9 @@ class RegionList(list):
                     elif s.find('line') != -1:
                         w = s.find('line')
                         s = '_'.join([s[:w+6], s[w+7:]])
+                        w1 = s.rfind('line')
+                        if (w1 != -1) and (w1 != w):
+                            s = '_'.join([s[:w1+6], s[w1+7:]])
                         s = s.split(' ')
                     else:
                         s = s.split(' ')
@@ -451,6 +510,9 @@ class RegionList(list):
                 else:
                     obj.append('{} {} {}'.format(shape, str(par), str(spec)))
                 #print()
+            if zerobased:
+                for r in obj:
+                    r.zerobased = True
         return obj
 
     def show(self, **kwargs):

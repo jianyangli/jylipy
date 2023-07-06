@@ -399,6 +399,23 @@ class Vector(np.ndarray):
             psi = np.deg2rad(psi)
         return VectRot(eularm(phi, theta, psi).T) * self
 
+    def transform(self, m, center=[0, 0, 0]):
+        """Transformation of vectors
+
+        Parameters
+        ----------
+        m : 3x3 array
+            The transformation matrix from the current frame to the new frame
+        center : Vector or 3-element array, optional
+            The center of the new reference frame expressed in the current
+            frame.  Default is the reference center.
+
+        Returns
+        -------
+        Vector : Transformed vectors in the new frame
+        """
+        return Vector(m.dot(np.array(self - Vector(center)).reshape(-1, 3).T).T.reshape(self.shape + (3,)))
+
     def astable(self, type=0):
         typecode = self._choose_type(type)
         names = self._types[typecode]['colnames']

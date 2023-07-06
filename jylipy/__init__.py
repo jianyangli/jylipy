@@ -29,6 +29,7 @@ from . import mpc
 from . import alma
 from . import polaranalysis
 from . import image
+from . import jwst
 #from . import spiceypy1
 
 # In testing

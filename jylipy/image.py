@@ -570,7 +570,7 @@ class Centroid(ImageSet):
             self._status = np.zeros(self._shape, dtype=bool)
             self._status[:] = status
 
-    def show(self, index=None, ds9=None):
+    def show(self, index=None, ds9=None, circle_only=False):
         """Show centroid in DS9
 
         Parameters
@@ -597,11 +597,13 @@ class Centroid(ImageSet):
             ds9.set(['pan to {} {}'.format(xc, yc),
                       'zoom to 2'])
             r = CircularRegion(xc, yc, 3)
-            c = CrossPointRegion(xc, yc)
-            t = TextRegion(xc, yc+ds9.height/2/2-10,
-                    text='{}: {}'.format(i, self._1d['file'][i]),
-                    color='white', font='helvetica 15 bold roman')
-            RegionList([r, c, t]).show(ds9=ds9)
+            r.show(ds9=ds9)
+            if not circle_only:
+                c = CrossPointRegion(xc, yc)
+                t = TextRegion(xc, yc+ds9.height/2/2-10,
+                        text='{}: {}'.format(i, self._1d['file'][i]),
+                        color='white', font='helvetica 15 bold roman')
+                RegionList([c, t]).show(ds9=ds9)
 
 
 class Stack(Centroid):
@@ -631,7 +633,8 @@ class Stack(Centroid):
             out = np.moveaxis(out, 0, axis)
         return out
 
-    def stack(self, shape=None, cval=np.nan, order=1, method='mean'):
+    def stack(self, shape=None, cval=np.nan, order=1, method='median',
+              fast=False, **kwargs):
         """Stack images
 
         Parameters
@@ -644,6 +647,12 @@ class Stack(Centroid):
             Order of spline interpolation in shift and rotation
         method : ['mean', 'median'], optional
             Method of stacking
+        fast : bool, optional
+            Fast stacking.  In this mode, cosmic ray rejection for two
+            images is not possible, and the effect of cosmic ray rejection
+            with three images may not be optimal.
+        kwargs : dict
+            Other keyword parameters accepted by `self._robust_stack`
         """
         for i in range(self.size):
             self._load_image(i)
@@ -653,8 +662,11 @@ class Stack(Centroid):
         shapes = np.array([x.shape for x in self._1d['image']])
         ys = np.max([self._1d['_yc'], shapes[:, 0] - self._1d['_yc']])
         xs = np.max([self._1d['_xc'], shapes[:, 1] - self._1d['_xc']])
-        center = np.ceil([ys, xs]).astype(int)
-        maxshape = center * 2 + 1  # make sure they are odd numbers
+        #center = np.ceil([ys, xs]).astype(int)
+        #maxshape = center * 2 + 1  # make sure they are odd numbers
+        maxdist = np.ceil(np.sqrt(ys * ys + xs * xs)).astype(int)
+        maxshape = np.array([maxdist, maxdist]).astype(int) * 2 + 1
+        center = maxshape // 2
         # integer center of original images
         int_yc = np.round(self._1d['_yc']).astype(int)
         int_xc = np.round(self._1d['_xc']).astype(int)
@@ -692,12 +704,8 @@ class Stack(Centroid):
         self.image_cube = np.array(ims)
 
         # stack images
-        if method == 'mean':
-            stack = np.nanmean(self.image_cube, axis=0)
-        elif method == 'median':
-            stack = np.nanmedian(self.image_cube, axis=0)
-        else:
-            raise ValueError('Unknown stacking method {}'.format(method))
+        stack = self._robust_stack(self.image_cube, method=method,
+                                   fast=fast, **kwargs)
 
         # final adjustment of size
         if shape is not None:
@@ -722,6 +730,99 @@ class Stack(Centroid):
                                        constant_values=cval)
                 stack = np.moveaxis(stack, 0, i)
         self.image_stacked = stack
+
+    @staticmethod
+    def _robust_stack(cube, method='median', fast=False, sigma_threshold=3,
+        relative_threshold=0.3, sigma_clipped=False):
+        """Stack an image cube in a robust way
+
+        This function stack an image cube and robustly reject cosmic rays
+        or with as few as two images.
+
+        If there are two images available to stack, then the areas with
+        pixel values above specified sigma threshold and greater than
+        a specified relative threshold will be considered cosmic rays.
+        In this case, the image with a lower pixel value is considered
+        clean and used in the final stack.
+
+        If there are three images available to stack, then the cosmic
+        ray affected areas are identified the same way as for the case
+        of two images, but the average of the two images without cosmic
+        rays will be used in the final stack.
+
+        When four and more images, a simple mean or median, depending on
+        keyword parameter ``method`` at each pixel location will be used
+        to produce final stack.  Cosmic rays are automatically rejected
+        in this process.
+
+        Function also provides an option to use
+        `astropy.stats.sigma_clipped_stats` in the stacking, although
+        this option is about 50x slower than using `numpy.nanmean` or
+        `numpy.nanmedian`.
+
+        Parameters
+        ----------
+        cube : 3D array
+            Images to be stacked.  Stacking will be along the first axis
+        method : ['mean', 'median'], optional
+            Stack method.  Default is mean
+        fast : bool, optional
+            Fast stacking.  In this mode, cosmic ray rejection for two
+            images is not possible, and the effect of cosmic ray rejection
+            with three images may not be optimal.
+        sigma_threshold : float, optional
+            Sigma threshold above which is considered cosmic rays
+        relative_threshold : float, optional
+            Relative difference threshold, below which is considered good
+        sigma_clipped : bool, int, optional
+            If int, then make use of astropy.stats.sigma_clip is used
+            to clip out outliers.  The sigma threshold is specified by
+            `sigma_clipped`.
+        Returns
+        -------
+        2D array, stacked image
+        """
+        if method not in ['mean', 'median']:
+            raise ValueError('Unknown stack method {}.'.format(method))
+        # if use sigma clip
+        if sigma_clipped:
+            cube_clipped = stats.sigma_clip(cube, axis=0, sigma=sigma_clipped)
+            if method == 'mean':
+                return np.nanmean(cube_clipped, axis=0)
+            elif method == 'median':
+                return np.nanmedian(cube_clipped, axis=0)
+        # use the general algorithm
+        # initial stacking
+        if method == 'mean':
+            stack = np.nanmean(cube, axis=0)
+        elif method == 'median':
+            stack = np.nanmedian(cube, axis=0)
+        if fast:
+            return stack
+        # characteristic cubes
+        absdiff = np.abs(cube - stack)
+        reldiff = absdiff / np.abs(stack)
+        std = np.nanstd(stats.sigma_clip(cube))
+        # cosmic ray mask
+        raymask = ((absdiff > sigma_threshold * std) &
+                   (reldiff > relative_threshold)).sum(axis=0).astype(bool)
+        # number of valid layers
+        number_mask = np.isfinite(cube).astype(int).sum(axis=0)
+
+        # process two layer case
+        replace_mask = raymask & (number_mask == 2)
+        stack[replace_mask] = np.nanmin(cube[:, replace_mask], axis=0)
+
+        # process three layer case
+        # the maximum of the three are rejected, and the average of the
+        # rest two are used as final
+        replace_mask = raymask & (number_mask == 3)
+        subcube = cube[:, replace_mask]
+        stack[replace_mask] = (np.nansum(subcube, axis=0) -
+                               np.nanmax(subcube, axis=0)) / 2
+
+        return stack
+
 
 class Background(ImageSet):
     """Image background
