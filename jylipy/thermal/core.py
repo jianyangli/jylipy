@@ -3,7 +3,7 @@
 import abc
 import astropy.units as u
 
-class ThermalModel(abs.ABC):
+class ThermalModel(abc.ABC):
     """Abstract base class for thermal models.
 
     This class implements the basic calculation for thermal models,
