@@ -8,9 +8,9 @@ import numpy as np
 import astropy.units as u
 import astropy.constants as const
 from sbpy.bib import cite
+from .core import ThermalModel
 
-
-class STM():
+class STM(ThermalModel):
     """Standard thermal model"""
 
     @cite({'method': '1986Icar...68..239L'})
@@ -60,4 +60,4 @@ class STM():
         phase : u.Quantity
             Phase angle of observations
         """
-        pass
+        return super().flux(wave_freq, delta, phase, 0 * u.deg)
