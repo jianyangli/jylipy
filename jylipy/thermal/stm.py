@@ -43,10 +43,16 @@ class STM(ThermalModelABC):
         return (((1 - self.albedo) * f_sun / (self.beaming * self.emissivity
             * const.sigma_sb)) ** 0.25).decompose()
 
-    @u.quantity_input(lat=u.deg, lon=u.deg)
-    def T(self, lat, lon):
+    @u.quantity_input(lon=u.deg, lat=u.deg)
+    def T(self, lon, lat):
         """Surface temperature at specific lat, lon"""
-        return self.Tss * (np.cos(lat) * np.cos(lon))**0.25
+        coslon = np.cos(lon)
+        coslat = np.cos(lat)
+        prec = np.finfo(coslat.value).resolution
+        if (abs(coslon) < prec) or (abs(coslat) < prec) or (coslon < 0):
+            return 0 * u.K
+        else:
+            return self.Tss * (coslon * coslat)**0.25
 
     def fluxd(self, wave_freq, delta):
         sublon = 0. * u.deg
