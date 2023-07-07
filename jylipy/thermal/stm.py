@@ -14,9 +14,7 @@ class STM(ThermalModelABC):
     """Standard thermal model"""
 
     @cite({'method': '1986Icar...68..239L'})
-    @u.quantity_input(rh=u.km, R=u.km, albedo=u.dimensionless_unscaled,
-        emissivity=u.dimensionless_unscaled, beaming=u.dimensionless_unscaled)
-    def __init__(self, rh, R, albedo=0.1, emissivity=1., beaming=1.):
+    def __init__(self, rh, R, albedo=0.1, emissivity=1.):
         """Initialization
 
         rh : u.Quantity
@@ -30,6 +28,8 @@ class STM(ThermalModelABC):
         beaming : float, u.Quantity
             Beaming parameter
         """
+        beaming = 0.756
+        super().__init__(rh, R, albedo, emissivity, beaming)
         self.rh = rh
         self.R = R
         self.albedo = albedo
@@ -48,16 +48,7 @@ class STM(ThermalModelABC):
         """Surface temperature at specific lat, lon"""
         return self.Tss * (np.cos(lat) * np.cos(lon))**0.25
 
-    @u.quantity_input(wave_freq=u.m, delta=u.km, phase=u.deg,
-        equivalencies=u.spectral())
-    def flux(self, wave_freq, delta, phase=0.*u.deg):
-        """Total observed thermal flux
-
-        wave_freq : u.Quantity
-            Wavelength or frequency of observations
-        delta : u.Quantity
-            Observer range
-        phase : u.Quantity
-            Phase angle of observations
-        """
-        return super().flux(wave_freq, delta, phase, 0 * u.deg)
+    def fluxd(self, wave_freq, delta):
+        sublon = 0. * u.deg
+        sublat = 0. * u.deg
+        return super().fluxd(wave_freq, delta, sublon, sublat)
