@@ -52,6 +52,33 @@ class ThermalModelABC(abc.ABC):
         """
         pass
 
+    def _int_func(self, lon, lat, m, unit, wave_freq):
+        # The integration is performed in a frame where the sub-observer
+        # point is at lon = 0, lat = 0.  So the [lon, lat] passed to this
+        # function needs to be converted to the body-fixed frame first via
+        # coordinate transformation matrix `m` passed to the function:
+        #     m.dot(v)
+        # in order to calculate the temperature with `self.T()` and then
+        # the integral function.
+        #
+        # Default unit of `lon` and `lat` is radiance
+        #
+        # All input parameters and returned values should be float point.
+        # Parameter `unit` is used to specify the unit of the integrated
+        # quantity.
+        _, lon1, lat1 = xyz2sph(
+            m.dot(sph2xyz([np.rad2deg(lon), np.rad2deg(lat)]))
+            )
+        lon1 *= u.deg
+        lat1 *= u.deg
+        T = self.T(lon1, lat1)
+        #print(np.rad2deg(lon1), np.rad2deg(lat1), T)
+        if np.isclose(T, 0 * u.K):
+            return 0.
+        else:
+            f = BlackBody(T)(wave_freq) * np.cos(lat)
+            return f.to_value(unit)
+
     @u.quantity_input(wave_freq=u.m, delta=u.m, lon=u.deg, lat=u.deg,
                       equivalencies=u.spectral())
     def fluxd(self, wave_freq, delta, sublon, sublat):
@@ -72,35 +99,24 @@ class ThermalModelABC(abc.ABC):
         -------
         u.Quantity : Integrated flux
         """
-        def int_func(lon, lat, m, unit):
-            # The integration is performed in a frame where the sub-observer
-            # point is at lon = 0, lat = 0.  So the [lon, lat] passed to this
-            # function needs to be converted to the body-fixed frame first via
-            # coordinate transformation matrix `m` passed to the function:
-            #     m.dot(v)
-            # in order to calculate the temperature and then flux.
-            #
-            # Default unit of `lon` and `lat` is radiance
-            #
-            # All input parameters and returned values should be float point.
-            # Parameter `unit` is used to specify the unit of the integrated
-            # quantity.
-            _, lon1, lat1 = xyz2sph(
-                m.dot(sph2xyz([np.rad2deg(lon), np.rad2deg(lat)]))
-                )
-            lon1 *= u.deg
-            lat1 *= u.deg
-            f = BlackBody(self.T(lon1, lat1))(wave_freq) * np.cos(lat)
-            return f.to_value(unit)
 
         unit = 'W m-2 Hz-1 sr-1'
-        m = twovec([sublon.to_value('deg'), sublat.to_value('deg')], 0,
+        coslat = np.cos(sublat).value
+        if abs(coslat) < np.finfo(type(coslat)).resolution:
+            if sublat.value > 0:
+                m = np.array([[0, 0, -1], [0, 1, 0], [1, 0, 0]])
+            else:
+                m = np.array([[0, 0, 1], [0, 1, 0], [-1, 0, 0]])
+        else:
+            m = twovec([sublon.to_value('deg'), sublat.to_value('deg')], 0,
                        [0, 90], 2).T
-        f, _ = dblquad(int_func,
+        #print(m)
+
+        f, _ = dblquad(self._int_func,
                        -np.pi/2,
                        np.pi/2,
                        lambda x: -np.pi/2,
                        lambda x: np.pi/2,
-                       args=(m, unit))
+                       args=(m, unit, wave_freq))
         return u.Quantity(f, unit) * ((self.R / delta)**2).to('sr',
             u.dimensionless_angles()) * self.beaming * self.emissivity
