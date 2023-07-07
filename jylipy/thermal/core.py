@@ -6,7 +6,7 @@ import astropy.units as u
 from astropy.modeling.models import BlackBody
 from ..vector import twovec, xyz2sph, sph2xyz
 
-class ThermalModel(abc.ABC):
+class ThermalModelABC(abc.ABC):
     """Abstract base class for thermal models.
 
     This class implements the basic calculation for thermal models,
