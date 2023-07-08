@@ -18,11 +18,11 @@ class ThermalModelABC(abc.ABC):
     such as integration of total flux based on a temperature distribution.
     """
 
-    @u.quantity_input(rh=u.km, R=u.km, albedo=u.dimensionless_unscaled,
-        emissivity=u.dimensionless_unscaled, beaming=u.dimensionless_unscaled)
+    @u.quantity_input()
     def __init__(self, rh, R, albedo=0.1, emissivity=1., beaming=1.):
-        """Initialization
-
+        """
+        Parameters
+        ----------
         rh : u.Quantity
             Heliocentric distance
         R : u.Quantity
@@ -147,7 +147,6 @@ class ThermalModelABC(abc.ABC):
             u.dimensionless_angles()) * self.beaming * self.emissivity
 
 
-
 class InstEquiTempDist():
     """Instantaneous temperature distribution class.
 
@@ -160,11 +159,14 @@ class InstEquiTempDist():
 
     @u.quantity_input(rh=u.km, albedo=u.dimensionless_unscaled,
         emissivity=u.dimensionless_unscaled, beaming=u.dimensionless_unscaled)
-    def __init__(self, rh, albedo, emissivity=1., beaming=1.):
-        """Initialization
-
+    def __init__(self, rh, R, albedo=0.1, emissivity=1., beaming=1.):
+        """
+        Parameters
+        ----------
         rh : u.Quantity
             Heliocentric distance
+        R : u.Quantity
+            Radius of asteroid
         albedo : float, u.Quantity
             Bolometric Bond albedo
         emissivity : float, u.Quantity
@@ -173,6 +175,7 @@ class InstEquiTempDist():
             Beaming parameter
         """
         self.rh = rh
+        self.R = R
         self.albedo = albedo
         self.emissivity = emissivity
         self.beaming = beaming
@@ -183,6 +186,7 @@ class InstEquiTempDist():
         f_sun = const.L_sun / (4 * np.pi * self.rh**2)
         return (((1 - self.albedo) * f_sun / (self.beaming * self.emissivity
             * const.sigma_sb)) ** 0.25).decompose()
+
 
 class NonRotTempDist(InstEquiTempDist):
     """Non-rotating object temperature distribution, i.e., STM
