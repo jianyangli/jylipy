@@ -3,10 +3,10 @@
 import numpy as np
 import astropy.units as u
 from sbpy.bib import cite
-from .core import ThermalModelABC, NonRotTempDist
+from .core import ThermalModelABC, NonRotTempDist, FastRotTempDist
 
 
-__all__ = ['STM', 'NEATM']
+__all__ = ['STM', 'NEATM', 'FRM']
 
 
 class STM(NonRotTempDist, ThermalModelABC):
@@ -52,6 +52,24 @@ class STM(NonRotTempDist, ThermalModelABC):
         sublon = 0. * u.deg
         sublat = 0. * u.deg
         return super().fluxd(wave_freq, delta, sublon, sublat, **kwargs) * scl
+
+
+class FRM(FastRotTempDist, ThermalModelABC):
+    """Fast rotating model (FRM)
+
+    References
+    ----------
+    """
+
+    def __init__(self, *args, **kwargs):
+        kwargs.setdefault('beaming', 1.)
+        super().__init__(*args, **kwargs)
+
+    def fluxd(self, wave_freq, delta, **kwargs):
+        """Calculate total flux density."""
+        sublon = 0. * u.deg
+        sublat = 0. * u.deg
+        return super().fluxd(wave_freq, delta, sublon, sublat, **kwargs)
 
 
 class NEATM(NonRotTempDist, ThermalModelABC):
