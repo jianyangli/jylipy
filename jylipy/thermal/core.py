@@ -8,8 +8,10 @@ import astropy.constants as const
 from astropy.modeling.models import BlackBody
 from ..vector import twovec, xyz2sph, sph2xyz
 
+
 __all__ = ['ThermalModelABC', 'InstEquiTempDist', 'NonRotTempDist',
            'FastRotTempDist']
+
 
 class ThermalModelABC(abc.ABC):
     """Abstract base class for thermal models.
