@@ -4,10 +4,12 @@ import abc
 import numpy as np
 from scipy.integrate import dblquad
 import astropy.units as u
+import astropy.constants as const
 from astropy.modeling.models import BlackBody
 from ..vector import twovec, xyz2sph, sph2xyz
 
-__all__ = ['ThermalModelABC']
+__all__ = ['ThermalModelABC', 'InstEquiTempDist', 'NonRotTempDist',
+           'FastRotTempDist']
 
 class ThermalModelABC(abc.ABC):
     """Abstract base class for thermal models.
@@ -143,3 +145,92 @@ class ThermalModelABC(abc.ABC):
                        args=(m, unit, wave_freq))
         return u.Quantity(f, unit) * ((self.R / delta)**2).to('sr',
             u.dimensionless_angles()) * self.beaming * self.emissivity
+
+
+
+class InstEquiTempDist():
+    """Instantaneous temperature distribution class.
+
+    A number of thermal models uses instantaneous equilibrium temperature
+    distribution for asteroids, such as STM, FRM, and NEATM.  This class
+    performs some basic calculation for such a model and can be used as
+    the base class for those models.
+
+    """
+
+    @u.quantity_input(rh=u.km, albedo=u.dimensionless_unscaled,
+        emissivity=u.dimensionless_unscaled, beaming=u.dimensionless_unscaled)
+    def __init__(self, rh, albedo, emissivity=1., beaming=1.):
+        """Initialization
+
+        rh : u.Quantity
+            Heliocentric distance
+        albedo : float, u.Quantity
+            Bolometric Bond albedo
+        emissivity : float, u.Quantity
+            Emissivity of surface
+        beaming : float, u.Quantity
+            Beaming parameter
+        """
+        self.rh = rh
+        self.albedo = albedo
+        self.emissivity = emissivity
+        self.beaming = beaming
+
+    @property
+    def Tss(self):
+        """Subsolar temperature"""
+        f_sun = const.L_sun / (4 * np.pi * self.rh**2)
+        return (((1 - self.albedo) * f_sun / (self.beaming * self.emissivity
+            * const.sigma_sb)) ** 0.25).decompose()
+
+class NonRotTempDist(InstEquiTempDist):
+    """Non-rotating object temperature distribution, i.e., STM
+    """
+
+    @u.quantity_input(lon=u.deg, lat=u.deg)
+    def T(self, lon, lat):
+        """Surface temperature at specific (lat, lon)
+
+        lon : u.Quantity in units equivalent to deg
+            Longitude
+        lat : u.Quantity in units equivalent to deg
+            Latitude
+
+        Returns
+        -------
+        u.Quantity : Surface temperature.
+        """
+        coslon = np.cos(lon)
+        coslat = np.cos(lat)
+        prec = np.finfo(coslat.value).resolution
+        if (abs(coslon) < prec) or (abs(coslat) < prec) or (coslon < 0):
+            return 0 * u.K
+        else:
+            return self.Tss * (coslon * coslat)**0.25
+
+
+class FastRotTempDist(InstEquiTempDist):
+    """Fast-rotating object temperature distribution, i.e., FRM
+    """
+
+    @property
+    def Tss(self):
+        """Subsolar temperature"""
+        return super().Tss * (self.beaming / np.pi)**0.25
+
+    @u.quantity_input(lon=u.deg, lat=u.deg)
+    def T(self, lon, lat):
+        """Surface temperature at specific (lat, lon)
+
+        lon : u.Quantity in units equivalent to deg
+            Longitude
+        lat : u.Quantity in units equivalent to deg
+            Latitude
+
+        Returns
+        -------
+        u.Quantity : Surface temperature.
+        """
+        coslat = np.cos(lat)
+        return self.Tss * coslat**0.25
