@@ -10,6 +10,8 @@ import astropy.constants as const
 from sbpy.bib import cite
 from .core import ThermalModelABC
 
+__all__ = ['STM']
+
 class STM(ThermalModelABC):
     """Standard thermal model"""
 
@@ -30,11 +32,6 @@ class STM(ThermalModelABC):
         """
         beaming = 0.756
         super().__init__(rh, R, albedo, emissivity, beaming)
-        self.rh = rh
-        self.R = R
-        self.albedo = albedo
-        self.emissivity = emissivity
-        self.beaming = beaming
 
     @property
     def Tss(self):
@@ -45,7 +42,17 @@ class STM(ThermalModelABC):
 
     @u.quantity_input(lon=u.deg, lat=u.deg)
     def T(self, lon, lat):
-        """Surface temperature at specific lat, lon"""
+        """Surface temperature at specific (lat, lon)
+
+        lon : u.Quantity in units equivalent to deg
+            Longitude
+        lat : u.Quantity in units equivalent to deg
+            Latitude
+
+        Returns
+        -------
+        u.Quantity : Surface temperature.
+        """
         coslon = np.cos(lon)
         coslat = np.cos(lat)
         prec = np.finfo(coslat.value).resolution
@@ -54,7 +61,10 @@ class STM(ThermalModelABC):
         else:
             return self.Tss * (coslon * coslat)**0.25
 
-    def fluxd(self, wave_freq, delta):
+    @u.quantity_input(phase=u.deg)
+    def fluxd(self, wave_freq, delta, phase=0*u.deg, **kwargs):
+        """Calculate total flux density.
+        """
         sublon = 0. * u.deg
         sublat = 0. * u.deg
-        return super().fluxd(wave_freq, delta, sublon, sublat)
+        return super().fluxd(wave_freq, delta, sublon, sublat, **kwargs)
