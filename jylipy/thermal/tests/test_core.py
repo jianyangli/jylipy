@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from ..stm import STM
+from ..models import STM, NEATM
 from ..vector import Vector
 
 
