@@ -20,7 +20,7 @@ class ThermalModelABC(abc.ABC):
     such as integration of total flux based on a temperature distribution.
     """
 
-    @u.quantity_input()
+    @u.quantity_input(rh=u.km, R=u.km)
     def __init__(self, rh, R, albedo=0.1, emissivity=1.):
         """
         Parameters
@@ -40,8 +40,7 @@ class ThermalModelABC(abc.ABC):
         self.emissivity = emissivity
 
     @abc.abstractmethod
-    @u.quantity_input(lon=u.deg, lat=u.deg)
-    def T(self, lon, lat) -> u.T:
+    def T(self, lon, lat):
         """Temperature on the surface of an object.
 
         Needs to be overridden in subclasses.  This function needs to be able
@@ -167,7 +166,7 @@ class ThermalModelABC(abc.ABC):
             return flx[0]
 
 
-class InstEquiTempDist():
+class InstEquiTempDist(abc.ABC):
     """Instantaneous temperature distribution class.
 
     A number of thermal models uses instantaneous equilibrium temperature
@@ -200,17 +199,25 @@ class InstEquiTempDist():
         self.emissivity = emissivity
         self.beaming = beaming
 
-    @property
+    @abc.abstractproperty
     def Tss(self):
         """Subsolar temperature"""
-        f_sun = const.L_sun / (4 * np.pi * self.rh**2)
-        return (((1 - self.albedo) * f_sun / (self.beaming * self.emissivity
-            * const.sigma_sb)) ** 0.25).decompose()
+        pass
+
+    @abc.abstractmethod
+    def T(self, lon, lat):
+        pass
 
 
 class NonRotTempDist(InstEquiTempDist):
     """Non-rotating object temperature distribution, i.e., STM
     """
+
+    @property
+    def Tss(self):
+        f_sun = const.L_sun / (4 * np.pi * self.rh**2)
+        return (((1 - self.albedo) * f_sun / (self.beaming * self.emissivity
+            * const.sigma_sb)) ** 0.25).decompose()
 
     @u.quantity_input(lon=u.deg, lat=u.deg)
     def T(self, lon, lat):
@@ -240,8 +247,9 @@ class FastRotTempDist(InstEquiTempDist):
 
     @property
     def Tss(self):
-        """Subsolar temperature"""
-        return super().Tss * (self.beaming / np.pi)**0.25
+        f_sun = const.L_sun / (4 * np.pi * self.rh**2)
+        return (((1 - self.albedo) * f_sun / (np.pi * self.emissivity
+            * const.sigma_sb)) ** 0.25).decompose()
 
     @u.quantity_input(lon=u.deg, lat=u.deg)
     def T(self, lon, lat):
