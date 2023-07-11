@@ -92,8 +92,12 @@ class ThermalModelABC(abc.ABC):
         if np.isclose(T, 0 * u.K):
             return 0.
         else:
-            f = BlackBody(T)(wave_freq) * np.cos(lat)
-            return f.to_value(unit)
+            # the integral term needs to include a correction for latitude
+            # with cos(lat), and a Lambertian emission term cos(lat) + cos(lon)
+            coslat = np.cos(lat)
+            coslon = np.cos(lon)
+            f = BlackBody(T)(wave_freq) * coslat * coslat * coslon
+            return f.to_value(unit, u.spectral_density(wave_freq))
 
     @staticmethod
     @u.quantity_input(sublon=u.deg, sublat=u.deg)
@@ -119,7 +123,8 @@ class ThermalModelABC(abc.ABC):
 
     @u.quantity_input(wave_freq=u.m, delta=u.m, lon=u.deg, lat=u.deg,
                       equivalencies=u.spectral())
-    def fluxd(self, wave_freq, delta, sublon, sublat):
+    def fluxd(self, wave_freq, delta, sublon, sublat, unit='W m-2 um-1',
+        error=False, **kwargs):
         """Calculate total thermal flux density of an object.
 
         Parameters
@@ -132,21 +137,34 @@ class ThermalModelABC(abc.ABC):
             Observer longitude in target-fixed frame
         sublat : u.Quantity
             Observer latitude in target-fixed frame
+        unit : str, u.Unit, optional
+            Specify the unit of returned flux density
+        error : bool, optional
+            Return error of computed flux density
+        **kwargs : Other keywords accepted by `scipy.integrate.dblquad`
+            Including `epsabs`, `epsrel`
 
         Returns
         -------
-        u.Quantity : Integrated flux
+        u.Quantity : Integrated flux density if `error = False`,
+            or flux density and numerical error if `error = True`.
         """
-        unit = 'W m-2 Hz-1 sr-1'
+        unit = unit + ' sr-1'
         m = self._transfer_to_bodyframe(sublon, sublat)
-        f, _ = dblquad(self._int_func,
+        f, e = dblquad(self._int_func,
                        -np.pi/2,
                        np.pi/2,
                        lambda x: -np.pi/2,
                        lambda x: np.pi/2,
-                       args=(m, unit, wave_freq))
-        return u.Quantity(f, unit) * ((self.R / delta)**2).to('sr',
+                       args=(m, unit, wave_freq),
+                       **kwargs
+                       )
+        flx = u.Quantity([f, e], unit) * ((self.R / delta)**2).to('sr',
             u.dimensionless_angles()) * self.beaming * self.emissivity
+        if error:
+            return flx
+        else:
+            return flx[0]
 
 
 class InstEquiTempDist():
