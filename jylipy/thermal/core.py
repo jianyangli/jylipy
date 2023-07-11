@@ -124,7 +124,7 @@ class ThermalModelABC(abc.ABC):
     @u.quantity_input(wave_freq=u.m, delta=u.m, lon=u.deg, lat=u.deg,
                       equivalencies=u.spectral())
     def fluxd(self, wave_freq, delta, sublon, sublat, unit='W m-2 um-1',
-        error=False, **kwargs):
+            error=False, epsrel=1e-3, **kwargs):
         """Calculate total thermal flux density of an object.
 
         Parameters
@@ -141,6 +141,8 @@ class ThermalModelABC(abc.ABC):
             Specify the unit of returned flux density
         error : bool, optional
             Return error of computed flux density
+        epsrel : float, optional
+            Relative precision of the nunerical integration.
         **kwargs : Other keywords accepted by `scipy.integrate.dblquad`
             Including `epsabs`, `epsrel`
 
@@ -157,6 +159,7 @@ class ThermalModelABC(abc.ABC):
                        lambda x: -np.pi/2,
                        lambda x: np.pi/2,
                        args=(m, unit, wave_freq),
+                       epsrel=epsrel,
                        **kwargs
                        )
         flx = u.Quantity([f, e], unit) * ((self.R / delta)**2).to('sr',
