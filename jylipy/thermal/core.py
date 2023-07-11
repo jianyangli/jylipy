@@ -21,7 +21,7 @@ class ThermalModelABC(abc.ABC):
     """
 
     @u.quantity_input()
-    def __init__(self, rh, R, albedo=0.1, emissivity=1., beaming=1.):
+    def __init__(self, rh, R, albedo=0.1, emissivity=1.):
         """
         Parameters
         ----------
@@ -33,14 +33,11 @@ class ThermalModelABC(abc.ABC):
             Bolometric Bond albedo
         emissivity : float, u.Quantity
             Emissivity of surface
-        beaming : float, u.Quantity
-            Beaming parameter
         """
         self.rh = rh
         self.R = R
         self.albedo = albedo
         self.emissivity = emissivity
-        self.beaming = beaming
 
     @abc.abstractmethod
     @u.quantity_input(lon=u.deg, lat=u.deg)
@@ -153,17 +150,17 @@ class ThermalModelABC(abc.ABC):
         """
         unit = unit + ' sr-1'
         m = self._transfer_to_bodyframe(sublon, sublat)
-        f, e = dblquad(self._int_func,
-                       -np.pi/2,
-                       np.pi/2,
-                       lambda x: -np.pi/2,
-                       lambda x: np.pi/2,
-                       args=(m, unit, wave_freq),
-                       epsrel=epsrel,
-                       **kwargs
-                       )
-        flx = u.Quantity([f, e], unit) * ((self.R / delta)**2).to('sr',
-            u.dimensionless_angles()) * self.beaming * self.emissivity
+        f = dblquad(self._int_func,
+                    -np.pi/2,
+                    np.pi/2,
+                    lambda x: -np.pi/2,
+                    lambda x: np.pi/2,
+                    args=(m, unit, wave_freq),
+                    epsrel=epsrel,
+                    **kwargs
+                   )
+        flx = u.Quantity(f, unit) * ((self.R / delta)**2).to('sr',
+            u.dimensionless_angles()) * self.emissivity
         if error:
             return flx
         else:
