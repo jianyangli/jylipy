@@ -59,8 +59,11 @@ class FRM(FastRotTempDist, ThermalModelABC):
 
     References
     ----------
+    Lebofsky, L.A., Spencer, J.R., 1989.  Radiometry and thermal modeling of
+        asteroids.  In: Asteroids II, p. 128-147.
     """
 
+    @cite({'method': '1989aste.conf..128L'})
     def __init__(self, *args, **kwargs):
         kwargs.setdefault('beaming', 1.)
         super().__init__(*args, **kwargs)
