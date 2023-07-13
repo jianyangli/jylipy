@@ -9,11 +9,10 @@ from astropy.modeling.models import BlackBody
 from ..vector import twovec, xyz2sph, sph2xyz
 
 
-__all__ = ['ThermalModelABC', 'InstEquiTempDist', 'NonRotTempDist',
-           'FastRotTempDist']
+__all__ = ['ThermalModelBase', 'NonRotThermalModel', 'FastRotThermalModel']
 
 
-class ThermalModelABC(abc.ABC):
+class ThermalModelBase(abc.ABC):
     """Abstract base class for thermal models.
 
     This class implements the basic calculation for thermal models,
@@ -21,7 +20,7 @@ class ThermalModelABC(abc.ABC):
     """
 
     @u.quantity_input(rh=u.km, R=u.km)
-    def __init__(self, rh, R, albedo=0.1, emissivity=1.):
+    def __init__(self, rh, R, albedo=0.1, emissivity=1., beaming=1.):
         """
         Parameters
         ----------
@@ -33,11 +32,14 @@ class ThermalModelABC(abc.ABC):
             Bolometric Bond albedo
         emissivity : float, u.Quantity
             Emissivity of surface
+        beaming : float, u.Quantity
+            Beaming parameter
         """
         self.rh = rh
         self.R = R
         self.albedo = albedo
         self.emissivity = emissivity
+        self.beaming = beaming
 
     @abc.abstractmethod
     def T(self, lon, lat):
@@ -166,51 +168,8 @@ class ThermalModelABC(abc.ABC):
             return flx[0]
 
 
-class InstEquiTempDist(abc.ABC):
-    """Instantaneous temperature distribution class.
-
-    A number of thermal models uses instantaneous equilibrium temperature
-    distribution for asteroids, such as STM, FRM, and NEATM.  This class
-    performs some basic calculation for such a model and can be used as
-    the base class for those models.
-
-    """
-
-    @u.quantity_input(rh=u.km, albedo=u.dimensionless_unscaled,
-        emissivity=u.dimensionless_unscaled, beaming=u.dimensionless_unscaled)
-    def __init__(self, rh, R, albedo=0.1, emissivity=1., beaming=1.):
-        """
-        Parameters
-        ----------
-        rh : u.Quantity
-            Heliocentric distance
-        R : u.Quantity
-            Radius of asteroid
-        albedo : float, u.Quantity
-            Bolometric Bond albedo
-        emissivity : float, u.Quantity
-            Emissivity of surface
-        beaming : float, u.Quantity
-            Beaming parameter
-        """
-        self.rh = rh
-        self.R = R
-        self.albedo = albedo
-        self.emissivity = emissivity
-        self.beaming = beaming
-
-    @abc.abstractproperty
-    def Tss(self):
-        """Subsolar temperature"""
-        pass
-
-    @abc.abstractmethod
-    def T(self, lon, lat):
-        pass
-
-
-class NonRotTempDist(InstEquiTempDist):
-    """Non-rotating object temperature distribution, i.e., STM
+class NonRotThermalModel(ThermalModelBase):
+    """Non-rotating object temperature distribution, i.e., STM, NEATM
     """
 
     @property
@@ -241,7 +200,7 @@ class NonRotTempDist(InstEquiTempDist):
             return self.Tss * (coslon * coslat)**0.25
 
 
-class FastRotTempDist(InstEquiTempDist):
+class FastRotThermalModel(ThermalModelBase):
     """Fast-rotating object temperature distribution, i.e., FRM
     """
 
@@ -266,3 +225,4 @@ class FastRotTempDist(InstEquiTempDist):
         """
         coslat = np.cos(lat)
         return self.Tss * coslat**0.25
+

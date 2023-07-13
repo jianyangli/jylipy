@@ -3,13 +3,13 @@
 import numpy as np
 import astropy.units as u
 from sbpy.bib import cite
-from .core import ThermalModelABC, NonRotTempDist, FastRotTempDist
+from .core import NonRotThermalModel, FastRotThermalModel
 
 
 __all__ = ['STM', 'NEATM', 'FRM']
 
 
-class STM(NonRotTempDist, ThermalModelABC):
+class STM(NonRotThermalModel):
     """Standard thermal model (STM)
 
     References
@@ -54,7 +54,7 @@ class STM(NonRotTempDist, ThermalModelABC):
         return super().fluxd(wave_freq, delta, sublon, sublat, **kwargs) * scl
 
 
-class FRM(FastRotTempDist, ThermalModelABC):
+class FRM(FastRotThermalModel):
     """Fast rotating model (FRM)
 
     References
@@ -65,7 +65,6 @@ class FRM(FastRotTempDist, ThermalModelABC):
 
     @cite({'method': '1989aste.conf..128L'})
     def __init__(self, *args, **kwargs):
-        kwargs.setdefault('beaming', 1.)
         super().__init__(*args, **kwargs)
 
     def fluxd(self, wave_freq, delta, **kwargs):
@@ -75,7 +74,7 @@ class FRM(FastRotTempDist, ThermalModelABC):
         return super().fluxd(wave_freq, delta, sublon, sublat, **kwargs)
 
 
-class NEATM(NonRotTempDist, ThermalModelABC):
+class NEATM(NonRotThermalModel):
     """Near-Earth asteroid thermal model (NEATM)
 
     References
