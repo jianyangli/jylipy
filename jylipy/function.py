@@ -69,15 +69,15 @@ def _eval_func(func, *var):
         op = func[1]
         v1 = _eval_func(func[0], *var)
         v2 = _eval_func(func[2], *var)
-        if op is '+':
+        if op == '+':
             return v1+v2
-        elif op is '-':
+        elif op == '-':
             return v1-v2
-        elif op is '*':
+        elif op == '*':
             return v1*v2
-        elif op is '**':
+        elif op == '**':
             return v1**v2
-        elif op is '/':
+        elif op == '/':
             return v1/v2
         else:
             raise TypeError('{0} is not a valid operater'.format(op))
