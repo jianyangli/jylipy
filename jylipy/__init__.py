@@ -23,7 +23,7 @@ from . import hst
 from . import convenience
 from . import pds
 from . import vector
-from . import pysis_ext
+#from . import pysis_ext
 from . import astrometry
 from . import mpc
 from . import alma
