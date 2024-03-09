@@ -13,7 +13,10 @@ from astropy.modeling import FittableModel, Fittable1DModel, \
         Fittable2DModel, Parameter, mappings
 from matplotlib.colors import LogNorm
 from matplotlib.cm import ScalarMappable
-from pysis import CubeFile
+try:
+    from pysis import CubeFile
+except:
+    pass
 from ..core import ulen, rebin, Table
 from ..plotting import pplot
 from ..apext import MPFitter

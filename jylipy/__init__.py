@@ -23,7 +23,11 @@ from . import hst
 from . import convenience
 from . import pds
 from . import vector
-#from . import pysis_ext
+try:
+   import pysis
+   from . import pysis_ext
+except:
+   pass
 from . import astrometry
 from . import mpc
 from . import alma
