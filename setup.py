@@ -9,7 +9,7 @@ if __name__ == '__main__':
           author='Jian-Yang Li',
           author_email='jianyang2li@gmail.com',
           license='MIT',
-          packages=['jylipy','jylipy.constants','jylipy.HST','jylipy.mesh','jylipy.Photometry'],
+          packages=['jylipy','jylipy.constants','jylipy.hst','jylipy.mesh','jylipy.photometry'],
           requires=['numpy','scipy','astropy','matplotlib','pyds9','pysis','ccdproc'],
           zip_safe=False,
           classifiers = [
