@@ -2688,7 +2688,7 @@ class PhotometricDataGrid(object):
         ax[0, 0].set_title('# of Data Points')
         axs = ax.flatten()[2:8]
         for i, a in enumerate(axs):
-            im = a.imshow(np.reshape(info[keys[i]], sz), cmap=cmap)
+            im = a.imshow(np.reshape(info[keys[i]], sz).to_value('deg'), cmap=cmap)
             plt.colorbar(mappable=im, ax=a)
             a.set_title(titles[i])
         ax[0, 1].axis('off')
@@ -2697,9 +2697,9 @@ class PhotometricDataGrid(object):
         latmin = info0['lat'].value.min()
         latmax = info0['lat'].value.max()
         ax[0, 0].set_xticklabels(
-            (ax[0, 0].get_xticks() / sz[1]) * (lonmax - lonmin) + lonmin)
+            ['{:.2f}'.format(x) for x in (ax[0, 0].get_xticks() / sz[1]) * (lonmax - lonmin) + lonmin])
         ax[0, 0].set_yticklabels(
-            (ax[0, 0].get_yticks() / sz[0]) * (latmax - latmin) + latmin)
+            ['{:.2f}'.format(x) for x in (ax[0, 0].get_yticks() / sz[0]) * (latmax - latmin) + latmin])
         for a in ax[:, 0]:
             a.set_ylabel('Latitude (deg)')
         for a in ax[-1]:
