@@ -1636,7 +1636,7 @@ class PhotometricData(object):
         illfile = np.asarray(illfile)
         iofdata = np.asarray(iofdata)
         if iofdata.ndim == 0:
-            iofdata = np.repeat(0, len(illfile))
+            iofdata = np.repeat(iofdata, len(illfile))
 
         for illf, ioff in zip(illfile, iofdata):
             print('  Extracting from ', os.path.basename(illf))
@@ -2481,7 +2481,7 @@ class PhotometricDataGrid(object):
                 illfile = np.asarray(indata)
                 ioffile = kwargs.pop('ioffile', None)
                 if ioffile is None:
-                    ioffile = np.repeat(None, len(illfile))
+                    ioffile = np.repeat(0, len(illfile))
                 else:
                     ioffile = np.asarray(ioffile)
 
@@ -2490,7 +2490,6 @@ class PhotometricDataGrid(object):
                     if verbose:
                         print('Extracting from ', os.path.basename(illf))
                     d.extract(illf, ioff, verbose=verbose, **kwargs)
-                    sz = _memory_size(len(d))
                     if _memory_size(len(d)) > self.max_mem:
                         self.port(d, verbose=verbose)
                         d = PhotometricData()
@@ -2500,6 +2499,9 @@ class PhotometricDataGrid(object):
                 raise ValueError('input parameter error')
         else:
             raise ValueError('input parameter error')
+
+        if verbose:
+            print('Saving data')
         self.write()
 
     def info(self, infile=None):
