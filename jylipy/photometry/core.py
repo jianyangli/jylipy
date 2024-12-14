@@ -4655,7 +4655,7 @@ def extract_phodata(illfile, iofdata=0, maskdata=None, backplanes=None,
             mask = np.zeros(ill.shape[1:], dtype=bool)
     for k in ill:
         mask |= ~np.isfinite(k)
-    ndim = im.shape
+    ndim = len(im.shape)
     if ndim == 2:
         mask |= ~np.isfinite(im)
     else:
@@ -4666,7 +4666,6 @@ def extract_phodata(illfile, iofdata=0, maskdata=None, backplanes=None,
 
     # Bin data if needed
     if binsize is not None:
-        ndim = len(im.shape)
         if ndim == 2:
             im = rebin(im, [binsize, binsize], mean=True)
         else:
