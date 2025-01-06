@@ -73,7 +73,7 @@ def printoptions(*args, **kwargs):
         np.set_printoptions(**original)
 
 
-class CaseInsensitiveMapping(collections.MutableMapping):
+class CaseInsensitiveMapping(collections.abc.MutableMapping):
     '''
     A case-insensitive ``dict``-like object.
     Implements all methods and operations of
@@ -130,7 +130,7 @@ class CaseInsensitiveMapping(collections.MutableMapping):
         )
 
     def __eq__(self, other):
-        if isinstance(other, collections.Mapping):
+        if isinstance(other, collections.abc.Mapping):
             other = type(self)(type(self._store),other)
         else:
             return NotImplemented
