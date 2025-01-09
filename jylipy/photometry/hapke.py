@@ -554,7 +554,7 @@ def hfunc(w, x, version='02'):
     if version == '02':
         gamma = np.sqrt(1-wcp)
         r0 = (1-gamma)/(1+gamma)
-        xcp[xcp == 0] = np.NaN
+        xcp[xcp == 0] = np.nan
         hh = 1./(1-wcp*xcp*(r0+(1-2*r0*xcp)*np.log((1+xcp)/xcp)/2))
         hh[np.isnan(hh)] = 1.
         return hh
