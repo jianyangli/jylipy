@@ -1638,8 +1638,10 @@ class PhotometricData(object):
         if iofdata.ndim == 0:
             iofdata = np.repeat(iofdata, len(illfile))
 
+        verbose = kwargs.get('verbose', False)
         for illf, ioff in zip(illfile, iofdata):
-            print('  Extracting from ', os.path.basename(illf))
+            if verbose:
+                print('  Extracting from ', os.path.basename(illf))
             self.extract(illf, ioff, **kwargs)
 
     def bin(self, **kwargs):
