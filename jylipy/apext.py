@@ -582,7 +582,7 @@ class MPFitter(object):
         self.fit_info['chisq'] = m.fnorm
         self.fit_info['dof'] = m.dof
         self.fit_info['perror'] = m.perror
-        self.fit_info['serror'] = m.perror*np.sqrt(m.fnorm/m.dof)
+        self.fit_info['serror'] = m.perror*np.sqrt(m.fnorm/m.dof) if (m.perror is not None) and (m.fnorm is not None) else None
         self.fit_info['niter'] = m.niter
 
         if verbose:
