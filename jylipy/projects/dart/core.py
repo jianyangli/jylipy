@@ -1134,6 +1134,7 @@ class BrightnessProfile():
         else:
             self.model = m
             self.fit['y']= m(xx)
+            self.fit['fit_info'] = fit.fit_info
         if sigma is not None:
             self.fit['outlier'] = mask
 
@@ -1151,6 +1152,8 @@ class BrightnessProfile():
             # apply units if needed
             self.par['amplitude'] *= dunit
             self.par['fwhm'] *= xunit
+        if background is not 'none':
+            self.par['bg'] = self.model[1].parameters
 
         return x_peak * getattr(self.x, 'unit', 1.)
 
