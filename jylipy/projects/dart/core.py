@@ -819,10 +819,10 @@ class BrightnessProfile():
         info : dict, optional
             Information dictionary.
         """
-        self._data = prof
+        self._data = np.asanyarray(prof)
         if x is None:
             x = np.arange(len(self._data))
-        self._x = x
+        self._x = np.asanyarray(x)
         self.info = info
 
     @property
